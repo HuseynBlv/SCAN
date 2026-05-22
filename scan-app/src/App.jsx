@@ -1,4 +1,10 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 
 const ZXING_CDN_URL =
   "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
@@ -8,6 +14,37 @@ const PRIMARY_RED = "#E61C24";
 const SUCCESS_GREEN = "#19A55A";
 const BASKETS_STORAGE_KEY = "scan:baskets";
 const DEFAULT_STORE = "Store #47 — Narimanov, Baku";
+const SPLASH_SCREEN_MS = 2000;
+const SPLASH_FADE_MS = 450;
+const LIVE_FEED_INTERVAL_MS = 8000;
+const LIVE_FEED_TOAST_MS = 3000;
+
+const DEMO_SCAN_PRODUCTS = [
+  {
+    barcode: "5449000000996",
+    product: {
+      name: "Coca-Cola",
+      brand: "The Coca-Cola Company",
+      quantity: "330ml",
+    },
+  },
+  {
+    barcode: "1234500000047",
+    product: {
+      name: "Lays Original",
+      brand: "Lay's",
+      quantity: "40g",
+    },
+  },
+  {
+    barcode: "4760010011023",
+    product: {
+      name: "Azerchay Black Tea",
+      brand: "Azerchay",
+      quantity: "100g",
+    },
+  },
+];
 
 const MOCK_STORES = [
   "Store #47 — Narimanov, Baku",
@@ -312,6 +349,56 @@ function formatTransactionItems(items = []) {
   return items.join(", ");
 }
 
+function formatShortStore(store) {
+  return store.replace(" — ", ", ").replace(", Baku", "");
+}
+
+function createBasketRecord(store, items, timestamp = Date.now()) {
+  const basketTime = new Date(timestamp);
+
+  return {
+    id: timestamp,
+    store,
+    time: basketTime.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+    day: basketTime.toLocaleDateString([], { weekday: "long" }),
+    items,
+  };
+}
+
+function createLiveIncomingBasket(index) {
+  const store = MOCK_STORES[(index + 1) % MOCK_STORES.length];
+  const combo = MOCK_COMBINATIONS[index % MOCK_COMBINATIONS.length];
+
+  return createBasketRecord(store, combo.items, Date.now() + index);
+}
+
+function BarcodeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="5" width="2" height="14" rx="1" />
+      <rect x="7" y="5" width="1.5" height="14" rx="0.75" />
+      <rect x="10" y="5" width="3" height="14" rx="1" />
+      <rect x="15" y="5" width="1.5" height="14" rx="0.75" />
+      <rect x="18.5" y="5" width="2.5" height="14" rx="1" />
+    </svg>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 19.5h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="5" y="11" width="3.5" height="6.5" rx="1" />
+      <rect x="10.25" y="8" width="3.5" height="9.5" rx="1" />
+      <rect x="15.5" y="5" width="3.5" height="12.5" rx="1" />
+    </svg>
+  );
+}
+
 export default function App() {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
@@ -320,6 +407,12 @@ export default function App() {
   const pendingBarcodesRef = useRef(new Set());
   const mountedRef = useRef(false);
   const resetTimerRef = useRef(null);
+  const splashFadeTimerRef = useRef(null);
+  const splashHideTimerRef = useRef(null);
+  const liveFeedIntervalRef = useRef(null);
+  const liveFeedToastTimerRef = useRef(null);
+  const liveFeedIndexRef = useRef(0);
+  const demoTimersRef = useRef([]);
 
   const [activeTab, setActiveTab] = useState("cashier");
   const [scanStatus, setScanStatus] = useState("Starting camera...");
@@ -335,6 +428,25 @@ export default function App() {
   const [isLogging, setIsLogging] = useState(false);
   const [logMessage, setLogMessage] = useState("");
   const [showSuccessState, setShowSuccessState] = useState(false);
+  const [showSplashScreen, setShowSplashScreen] = useState(true);
+  const [isSplashFading, setIsSplashFading] = useState(false);
+  const [activeLookups, setActiveLookups] = useState(0);
+  const [liveNotification, setLiveNotification] = useState(null);
+  const [isDemoModeRunning, setIsDemoModeRunning] = useState(false);
+
+  const appendScannedProduct = (barcode, productDetails) => {
+    setProducts((currentProducts) => [
+      {
+        id: `${barcode}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        barcode,
+        customName:
+          productDetails.name === "Unknown Product" ? "" : productDetails.name,
+        isUnknown: productDetails.name === "Unknown Product",
+        ...productDetails,
+      },
+      ...currentProducts,
+    ]);
+  };
 
   const handleDetectedBarcode = useEffectEvent(async (barcode) => {
     const trimmedBarcode = barcode?.trim();
@@ -353,6 +465,7 @@ export default function App() {
     recentScansRef.current.set(trimmedBarcode, now);
     pendingBarcodesRef.current.add(trimmedBarcode);
     setScanStatus(`Detected ${trimmedBarcode}. Looking up product...`);
+    setActiveLookups((currentCount) => currentCount + 1);
 
     try {
       const response = await fetch(
@@ -372,17 +485,7 @@ export default function App() {
             quantity: "Unknown quantity",
           };
 
-      setProducts((currentProducts) => [
-        {
-          id: `${trimmedBarcode}-${Date.now()}`,
-          barcode: trimmedBarcode,
-          customName:
-            productDetails.name === "Unknown Product" ? "" : productDetails.name,
-          isUnknown: productDetails.name === "Unknown Product",
-          ...productDetails,
-        },
-        ...currentProducts,
-      ]);
+      appendScannedProduct(trimmedBarcode, productDetails);
 
       setScanStatus(
         foundProduct
@@ -390,24 +493,33 @@ export default function App() {
           : `Barcode ${trimmedBarcode} not found. Add a name manually.`
       );
     } catch {
-      setProducts((currentProducts) => [
-        {
-          id: `${trimmedBarcode}-${Date.now()}`,
-          barcode: trimmedBarcode,
-          name: "Unknown Product",
-          brand: "Lookup failed",
-          quantity: "Unknown quantity",
-          customName: "",
-          isUnknown: true,
-        },
-        ...currentProducts,
-      ]);
+      appendScannedProduct(trimmedBarcode, {
+        name: "Unknown Product",
+        brand: "Lookup failed",
+        quantity: "Unknown quantity",
+      });
 
       setScanStatus("Lookup failed. You can still add the product manually.");
     } finally {
       pendingBarcodesRef.current.delete(trimmedBarcode);
+      setActiveLookups((currentCount) => Math.max(0, currentCount - 1));
     }
   });
+
+  useEffect(() => {
+    splashFadeTimerRef.current = window.setTimeout(() => {
+      setIsSplashFading(true);
+    }, Math.max(0, SPLASH_SCREEN_MS - SPLASH_FADE_MS));
+
+    splashHideTimerRef.current = window.setTimeout(() => {
+      setShowSplashScreen(false);
+    }, SPLASH_SCREEN_MS);
+
+    return () => {
+      window.clearTimeout(splashFadeTimerRef.current);
+      window.clearTimeout(splashHideTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const handleStorageSync = (event) => {
@@ -420,9 +532,51 @@ export default function App() {
 
     return () => {
       window.clearTimeout(resetTimerRef.current);
+      window.clearTimeout(liveFeedToastTimerRef.current);
+      window.clearInterval(liveFeedIntervalRef.current);
+      demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      demoTimersRef.current = [];
       window.removeEventListener("storage", handleStorageSync);
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "dashboard" || showSplashScreen) {
+      window.clearInterval(liveFeedIntervalRef.current);
+      window.clearTimeout(liveFeedToastTimerRef.current);
+      return undefined;
+    }
+
+    const pushLiveBasketUpdate = () => {
+      const nextIndex = liveFeedIndexRef.current;
+      const liveBasket = createLiveIncomingBasket(nextIndex);
+      liveFeedIndexRef.current += 1;
+
+      const nextBaskets = [liveBasket, ...readStoredBaskets()];
+      writeStoredBaskets(nextBaskets);
+      setBaskets(nextBaskets);
+      setLiveNotification({
+        id: liveBasket.id,
+        message: `New basket logged — ${formatShortStore(liveBasket.store)}`,
+        expiresAt: Date.now() + LIVE_FEED_TOAST_MS,
+      });
+
+      window.clearTimeout(liveFeedToastTimerRef.current);
+      liveFeedToastTimerRef.current = window.setTimeout(() => {
+        setLiveNotification(null);
+      }, LIVE_FEED_TOAST_MS);
+    };
+
+    liveFeedIntervalRef.current = window.setInterval(
+      pushLiveBasketUpdate,
+      LIVE_FEED_INTERVAL_MS
+    );
+
+    return () => {
+      window.clearInterval(liveFeedIntervalRef.current);
+      window.clearTimeout(liveFeedToastTimerRef.current);
+    };
+  }, [activeTab, showSplashScreen]);
 
   useEffect(() => {
     const recentScans = recentScansRef.current;
@@ -513,6 +667,41 @@ export default function App() {
     );
   };
 
+  const handleDemoMode = () => {
+    if (isDemoModeRunning) {
+      return;
+    }
+
+    demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    demoTimersRef.current = [];
+
+    startTransition(() => {
+      setActiveTab("cashier");
+    });
+    setProducts([]);
+    setLogMessage("");
+    setShowSuccessState(false);
+    setScanStatus("Demo mode: simulating cashier activity...");
+    setIsDemoModeRunning(true);
+
+    DEMO_SCAN_PRODUCTS.forEach((entry, index) => {
+      const timerId = window.setTimeout(() => {
+        appendScannedProduct(entry.barcode, entry.product);
+        setScanStatus(
+          index === DEMO_SCAN_PRODUCTS.length - 1
+            ? `Added ${entry.product.name}. Demo basket ready to log.`
+            : `Added ${entry.product.name}. Scanning next product...`
+        );
+
+        if (index === DEMO_SCAN_PRODUCTS.length - 1) {
+          setIsDemoModeRunning(false);
+        }
+      }, 850 * (index + 1));
+
+      demoTimersRef.current.push(timerId);
+    });
+  };
+
   const handleLogBasket = async () => {
     if (!products.length) {
       return;
@@ -563,11 +752,12 @@ export default function App() {
   const topStores = buildTopStores(baskets, today);
   const recentTransactions = buildRecentTransactions(baskets);
   const peakHourMax = Math.max(1, ...peakHours.map((entry) => entry.count));
+  const isLookingUpProduct = activeLookups > 0;
 
   return (
     <div className="app-shell">
       <style>{`
-        @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&display=swap");
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
         :root {
           color-scheme: light;
@@ -593,7 +783,7 @@ export default function App() {
 
         body {
           margin: 0;
-          font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           background:
             radial-gradient(circle at top, rgba(230, 28, 36, 0.12), transparent 30%),
             linear-gradient(180deg, #f7f8fa, #eef1f4 70%);
@@ -611,6 +801,10 @@ export default function App() {
           max-width: 1180px;
           margin: 0 auto;
           padding: 20px 16px 110px;
+        }
+
+        .screen-view {
+          animation: screenFade 260ms ease-out;
         }
 
         .cashier-view {
@@ -664,8 +858,9 @@ export default function App() {
           background: var(--scan-panel);
           border: 1px solid rgba(20, 20, 20, 0.06);
           border-radius: 24px;
-          box-shadow: 0 12px 30px rgba(20, 20, 20, 0.06);
+          box-shadow: 0 16px 34px rgba(20, 20, 20, 0.08);
           overflow: hidden;
+          transition: transform 180ms ease, box-shadow 180ms ease;
         }
 
         .camera-frame {
@@ -703,6 +898,22 @@ export default function App() {
           color: var(--scan-ink);
           font-size: 0.88rem;
           line-height: 1.35;
+        }
+
+        .scanner-status-row {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .lookup-spinner {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          border: 2px solid rgba(230, 28, 36, 0.18);
+          border-top-color: var(--scan-red);
+          animation: spin 850ms linear infinite;
+          flex: 0 0 16px;
         }
 
         .target {
@@ -923,6 +1134,26 @@ export default function App() {
             var(--scan-panel);
           border: 1px solid rgba(230, 28, 36, 0.12);
           box-shadow: 0 18px 45px rgba(20, 20, 20, 0.08);
+        }
+
+        .dashboard-notification {
+          position: fixed;
+          top: 18px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 24;
+          width: min(92vw, 460px);
+          padding: 14px 16px;
+          border-radius: 18px;
+          background: rgba(18, 22, 28, 0.96);
+          color: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 18px 40px rgba(10, 14, 18, 0.28);
+          animation: toastSlide 280ms ease-out;
+        }
+
+        .dashboard-notification strong {
+          color: #ffb7bb;
         }
 
         .dashboard-eyebrow {
@@ -1243,6 +1474,7 @@ export default function App() {
           font-size: 0.82rem;
           font-weight: 700;
           letter-spacing: 0.02em;
+          transition: background 180ms ease, transform 180ms ease, color 180ms ease;
         }
 
         .nav-tab.active {
@@ -1252,7 +1484,40 @@ export default function App() {
         }
 
         .nav-icon {
-          font-size: 1.1rem;
+          width: 20px;
+          height: 20px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: currentColor;
+        }
+
+        .nav-icon svg {
+          width: 20px;
+          height: 20px;
+          display: block;
+          fill: currentColor;
+        }
+
+        .demo-mode-button {
+          position: fixed;
+          right: 18px;
+          bottom: 102px;
+          z-index: 18;
+          border: none;
+          border-radius: 999px;
+          padding: 10px 14px;
+          background: rgba(18, 22, 28, 0.94);
+          color: #fff;
+          font-size: 0.76rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          box-shadow: 0 12px 28px rgba(10, 14, 18, 0.24);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .demo-mode-button:disabled {
+          opacity: 0.7;
         }
 
         @keyframes successPop {
@@ -1266,6 +1531,34 @@ export default function App() {
           }
         }
 
+        @keyframes screenFade {
+          0% {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes toastSlide {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, -12px);
+          }
+          100% {
+            opacity: 1;
+            transform: translate(-50%, 0);
+          }
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
         @keyframes transactionSlide {
           0% {
             opacity: 0;
@@ -1275,6 +1568,63 @@ export default function App() {
             opacity: 1;
             transform: translateY(0);
           }
+        }
+
+        .splash-screen {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background:
+            radial-gradient(circle at top, rgba(230, 28, 36, 0.18), transparent 36%),
+            linear-gradient(180deg, #ffffff, #f1f4f7);
+          transition: opacity ${SPLASH_FADE_MS}ms ease;
+        }
+
+        .splash-screen.fade-out {
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .splash-card {
+          width: min(92vw, 360px);
+          padding: 34px 28px;
+          border-radius: 28px;
+          background: rgba(255, 255, 255, 0.92);
+          border: 1px solid rgba(230, 28, 36, 0.12);
+          box-shadow: 0 24px 52px rgba(20, 20, 20, 0.12);
+          text-align: center;
+        }
+
+        .cci-mark {
+          width: 84px;
+          height: 84px;
+          margin: 0 auto 18px;
+          border-radius: 50%;
+          background: linear-gradient(180deg, #ff4d57, var(--scan-red));
+          color: #fff;
+          display: grid;
+          place-items: center;
+          font-size: 1.4rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          box-shadow: 0 18px 34px rgba(230, 28, 36, 0.24);
+        }
+
+        .splash-title {
+          font-size: 2.2rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          color: #11161b;
+          margin-bottom: 8px;
+        }
+
+        .splash-tagline {
+          font-size: 0.98rem;
+          color: #66717d;
         }
 
         @media (min-width: 760px) {
@@ -1300,8 +1650,15 @@ export default function App() {
         }
       `}</style>
 
+      {activeTab === "dashboard" && liveNotification ? (
+        <div className="dashboard-notification" role="status" aria-live="polite">
+          <strong>Live update</strong>
+          <div>{liveNotification.message}</div>
+        </div>
+      ) : null}
+
       {activeTab === "cashier" ? (
-        <main className="cashier-view">
+        <main className="cashier-view screen-view">
           <section className="cashier-card">
             <header className="header">
               <div className="brand">
@@ -1315,7 +1672,14 @@ export default function App() {
               <div className="camera-frame">
                 <video ref={videoRef} muted playsInline />
                 <div className="scanner-overlay">
-                  <div className="scanner-status">{scanStatus}</div>
+                  <div className="scanner-status">
+                    <div className="scanner-status-row">
+                      {isLookingUpProduct ? (
+                        <span className="lookup-spinner" aria-hidden="true" />
+                      ) : null}
+                      <span>{scanStatus}</span>
+                    </div>
+                  </div>
                   <div className="target" />
                 </div>
               </div>
@@ -1387,7 +1751,7 @@ export default function App() {
           </section>
         </main>
       ) : (
-        <main className="dashboard-view">
+        <main className="dashboard-view screen-view">
           <header className="dashboard-header">
             <div className="brand">
               <div className="dashboard-eyebrow">CCI RED</div>
@@ -1529,15 +1893,29 @@ export default function App() {
         </main>
       )}
 
+      <button
+        className="demo-mode-button"
+        type="button"
+        onClick={handleDemoMode}
+        disabled={isDemoModeRunning}
+      >
+        {isDemoModeRunning ? "RUNNING DEMO..." : "DEMO MODE"}
+      </button>
+
       <nav className="bottom-nav" aria-label="Primary">
         <button
           className={`nav-tab ${activeTab === "cashier" ? "active" : ""}`}
           type="button"
-          onClick={() => setActiveTab("cashier")}
+          onClick={() => {
+            setLiveNotification(null);
+            setActiveTab("cashier");
+          }}
           aria-pressed={activeTab === "cashier"}
         >
-          <span className="nav-icon">⌁</span>
-          <span>Cashier</span>
+          <span className="nav-icon">
+            <BarcodeIcon />
+          </span>
+          <span>SCAN</span>
         </button>
         <button
           className={`nav-tab ${activeTab === "dashboard" ? "active" : ""}`}
@@ -1545,10 +1923,24 @@ export default function App() {
           onClick={() => setActiveTab("dashboard")}
           aria-pressed={activeTab === "dashboard"}
         >
-          <span className="nav-icon">▥</span>
-          <span>Dashboard</span>
+          <span className="nav-icon">
+            <ChartIcon />
+          </span>
+          <span>DASHBOARD</span>
         </button>
       </nav>
+
+      {showSplashScreen ? (
+        <div className={`splash-screen ${isSplashFading ? "fade-out" : ""}`}>
+          <div className="splash-card">
+            <div className="cci-mark">CCI</div>
+            <div className="splash-title">SCAN</div>
+            <div className="splash-tagline">
+              Basket Intelligence for Every Store
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
