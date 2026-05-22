@@ -63,6 +63,90 @@ const MY_STORE_TOP_PAIRS = [
   },
 ];
 
+const CURRENT_REWARD = {
+  title: "5% discount on next CCI order",
+  code: "SCAN-2024-NK47",
+  validUntil: "Valid until 30 June 2026",
+};
+
+const REWARD_HISTORY = [
+  {
+    title: "3% discount on beverage restock",
+    date: "12 May 2026",
+  },
+  {
+    title: "Free priority slot booking",
+    date: "28 April 2026",
+  },
+  {
+    title: "2% district performance bonus",
+    date: "09 April 2026",
+  },
+];
+
+const ACHIEVEMENTS = [
+  {
+    title: "First Scan",
+    subtitle: "scanned your first basket",
+    unlocked: true,
+    icon: "✅",
+  },
+  {
+    title: "Getting Started",
+    subtitle: "20 baskets",
+    unlocked: true,
+    icon: "✅",
+  },
+  {
+    title: "On Fire",
+    subtitle: "7 day streak",
+    unlocked: true,
+    icon: "✅",
+  },
+  {
+    title: "Consistent",
+    subtitle: "50 baskets",
+    unlocked: true,
+    icon: "✅",
+  },
+  {
+    title: "Silver Scanner",
+    subtitle: "100 baskets",
+    unlocked: true,
+    icon: "✅",
+  },
+  {
+    title: "Century Club",
+    subtitle: "500 baskets this month",
+    unlocked: false,
+    icon: "🔒",
+  },
+  {
+    title: "Gold Scanner",
+    subtitle: "1000 total baskets",
+    unlocked: false,
+    icon: "🔒",
+  },
+  {
+    title: "Streak Master",
+    subtitle: "30 day streak",
+    unlocked: false,
+    icon: "🔒",
+  },
+  {
+    title: "District Legend",
+    subtitle: "reach #1 in district",
+    unlocked: false,
+    icon: "🔒",
+  },
+  {
+    title: "Platinum Partner",
+    subtitle: "maintain gold for 3 months",
+    unlocked: false,
+    icon: "🔒",
+  },
+];
+
 const FALLBACK_PRODUCTS = {
   "5449000000996": {
     name: "Coca-Cola",
@@ -114,6 +198,7 @@ export default function App() {
   const [scanStatus, setScanStatus] = useState("Starting camera...");
   const [scannedItems, setScannedItems] = useState([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [hasClaimedReward, setHasClaimedReward] = useState(false);
 
   const handleDetectedBarcode = async (barcode) => {
     const trimmedBarcode = barcode?.trim();
@@ -781,6 +866,232 @@ export default function App() {
           line-height: 1.45;
         }
 
+        .rewards-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .streak-banner {
+          padding: 20px 18px;
+          border-radius: 24px;
+          background: linear-gradient(135deg, #ff5a63, var(--scan-red));
+          color: #fff;
+          box-shadow: 0 18px 38px rgba(230, 28, 36, 0.24);
+        }
+
+        .streak-emoji {
+          font-size: 2rem;
+          line-height: 1;
+          margin-bottom: 8px;
+        }
+
+        .streak-title {
+          font-size: 1.5rem;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .streak-copy,
+        .streak-countdown {
+          font-size: 0.94rem;
+          line-height: 1.45;
+        }
+
+        .streak-countdown {
+          margin-top: 10px;
+          font-weight: 700;
+          color: rgba(255, 255, 255, 0.92);
+        }
+
+        .reward-level {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .reward-level-title {
+          font-size: 1.05rem;
+          font-weight: 800;
+        }
+
+        .reward-level-chip {
+          font-size: 0.82rem;
+          font-weight: 800;
+          color: var(--scan-red);
+          background: rgba(230, 28, 36, 0.08);
+          border: 1px solid rgba(230, 28, 36, 0.12);
+          border-radius: 999px;
+          padding: 8px 10px;
+        }
+
+        .reward-progress-track {
+          width: 100%;
+          height: 12px;
+          border-radius: 999px;
+          overflow: hidden;
+          background: rgba(17, 17, 17, 0.08);
+          margin-bottom: 10px;
+        }
+
+        .reward-progress-fill {
+          width: 68.3%;
+          height: 100%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, #c6cbd3, #8e96a4);
+        }
+
+        .reward-progress-copy {
+          font-size: 0.9rem;
+          color: var(--scan-muted);
+          margin-bottom: 10px;
+        }
+
+        .reward-preview {
+          padding: 14px;
+          border-radius: 18px;
+          background: #f6f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+        }
+
+        .reward-preview-title {
+          font-size: 0.82rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 8px;
+        }
+
+        .reward-preview-copy {
+          font-size: 0.92rem;
+          line-height: 1.45;
+          color: #424242;
+        }
+
+        .claim-card {
+          background: linear-gradient(180deg, rgba(25, 165, 90, 0.1), rgba(25, 165, 90, 0.03));
+          border: 1px solid rgba(25, 165, 90, 0.2);
+        }
+
+        .claim-card-title {
+          font-size: 1rem;
+          font-weight: 800;
+          color: #0d7d42;
+          margin-bottom: 8px;
+        }
+
+        .claim-button {
+          border: none;
+          border-radius: 14px;
+          padding: 12px 14px;
+          background: #0f9c53;
+          color: #fff;
+          font-size: 0.86rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          margin-top: 14px;
+        }
+
+        .claim-code {
+          margin-top: 14px;
+          padding: 12px 14px;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.86);
+          border: 1px dashed rgba(15, 156, 83, 0.4);
+        }
+
+        .claim-code-label {
+          font-size: 0.76rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #0d7d42;
+          margin-bottom: 6px;
+        }
+
+        .claim-code-value {
+          font-size: 1.05rem;
+          font-weight: 800;
+          color: #16663e;
+          letter-spacing: 0.05em;
+        }
+
+        .claim-validity {
+          margin-top: 8px;
+          font-size: 0.84rem;
+          color: #397254;
+        }
+
+        .achievements-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .achievement-card {
+          padding: 14px;
+          border-radius: 18px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+          min-height: 120px;
+        }
+
+        .achievement-card.locked {
+          background: #f3f4f6;
+          color: #8b8f95;
+        }
+
+        .achievement-icon {
+          font-size: 1.15rem;
+          margin-bottom: 10px;
+        }
+
+        .achievement-title {
+          font-size: 0.92rem;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .achievement-subtitle {
+          font-size: 0.82rem;
+          line-height: 1.4;
+          color: inherit;
+        }
+
+        .history-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .history-item {
+          padding: 14px;
+          border-radius: 16px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .history-title {
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
+
+        .history-date {
+          font-size: 0.82rem;
+          color: var(--scan-muted);
+          white-space: nowrap;
+        }
+
         .bottom-nav {
           position: fixed;
           left: 50%;
@@ -1076,15 +1387,114 @@ export default function App() {
             ) : null}
 
             {activeCashierTab === "rewards" ? (
-              <section className="panel hq-panel">
-                <div className="hq-kicker">Cashier Feature</div>
-                <div className="hq-title">Rewards screen comes next</div>
-                <div className="hq-copy">
-                  This tab is reserved for store loyalty or incentives while
-                  keeping the current prototype focused on scanning and store
-                  performance.
-                </div>
-              </section>
+              <div className="rewards-stack">
+                <section className="streak-banner">
+                  <div className="streak-emoji">🔥</div>
+                  <div className="streak-title">7 Day Streak!</div>
+                  <div className="streak-copy">
+                    Scan at least 5 baskets today to keep it alive
+                  </div>
+                  <div className="streak-countdown">
+                    14 more baskets today to maintain streak
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Progress To Next Reward</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="reward-level">
+                      <div className="reward-level-title">Current level: SILVER 🥈</div>
+                      <div className="reward-level-chip">683/1000 baskets</div>
+                    </div>
+                    <div className="reward-progress-track">
+                      <div className="reward-progress-fill" />
+                    </div>
+                    <div className="reward-progress-copy">
+                      317 baskets until GOLD 🥇
+                    </div>
+                    <div className="reward-preview">
+                      <div className="reward-preview-title">Gold reward preview</div>
+                      <div className="reward-preview-copy">
+                        10% discount on next CCI order + Priority delivery scheduling
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel claim-card">
+                  <div className="panel-body">
+                    <div className="claim-card-title">
+                      5% discount on next CCI order
+                    </div>
+                    <div className="hq-copy">
+                      Current unlocked reward for {STORE_NAME}. Claim it when
+                      you are ready to place the next order.
+                    </div>
+                    {hasClaimedReward ? (
+                      <div className="claim-code">
+                        <div className="claim-code-label">Claim code</div>
+                        <div className="claim-code-value">{CURRENT_REWARD.code}</div>
+                        <div className="claim-validity">
+                          {CURRENT_REWARD.validUntil}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="claim-button"
+                        type="button"
+                        onClick={() => setHasClaimedReward(true)}
+                      >
+                        CLAIM DISCOUNT
+                      </button>
+                    )}
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Achievements</div>
+                    <div className="section-meta">Store progress only</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="achievements-grid">
+                      {ACHIEVEMENTS.map((achievement) => (
+                        <div
+                          className={`achievement-card ${
+                            achievement.unlocked ? "" : "locked"
+                          }`}
+                          key={achievement.title}
+                        >
+                          <div className="achievement-icon">{achievement.icon}</div>
+                          <div className="achievement-title">
+                            {achievement.title}
+                          </div>
+                          <div className="achievement-subtitle">
+                            {achievement.subtitle}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Reward History</div>
+                  </div>
+                  <div className="panel-body">
+                    <ul className="history-list">
+                      {REWARD_HISTORY.map((reward) => (
+                        <li className="history-item" key={`${reward.title}-${reward.date}`}>
+                          <div className="history-title">{reward.title}</div>
+                          <div className="history-date">{reward.date}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              </div>
             ) : null}
 
             {activeCashierTab === "rankings" ? (
