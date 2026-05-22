@@ -147,6 +147,84 @@ const ACHIEVEMENTS = [
   },
 ];
 
+const DISTRICT_RANKINGS = {
+  week: [
+    { rank: 1, store: "Store #12", baskets: 211, delta: 7, medal: "🥇" },
+    { rank: 2, store: "Store #47", baskets: 189, delta: 5, medal: "🥈", isYou: true },
+    { rank: 3, store: "Store #31", baskets: 162, delta: 3, medal: "🥉" },
+    { rank: 4, store: "Store #8", baskets: 138, delta: 2 },
+    { rank: 5, store: "Store #22", baskets: 129, delta: 4 },
+    { rank: 6, store: "Store #19", baskets: 112, delta: 1, muted: true },
+    { rank: 7, store: "Store #4", baskets: 95, delta: 2, muted: true },
+    { rank: 8, store: "Store #27", baskets: 84, delta: 1, muted: true },
+  ],
+  month: [
+    { rank: 1, store: "Store #12", baskets: 847, delta: 23, medal: "🥇" },
+    { rank: 2, store: "Store #47", baskets: 683, delta: 0, medal: "🥈", isYou: true },
+    { rank: 3, store: "Store #31", baskets: 541, delta: 8, medal: "🥉" },
+    { rank: 4, store: "Store #8", baskets: 423, delta: 5 },
+    { rank: 5, store: "Store #22", baskets: 387, delta: 11 },
+    { rank: 6, store: "Store #19", baskets: 314, delta: 3, muted: true },
+    { rank: 7, store: "Store #4", baskets: 276, delta: 2, muted: true },
+    { rank: 8, store: "Store #27", baskets: 241, delta: 4, muted: true },
+  ],
+  allTime: [
+    { rank: 1, store: "Store #12", baskets: 5821, delta: 23, medal: "🥇" },
+    { rank: 2, store: "Store #47", baskets: 5314, delta: 0, medal: "🥈", isYou: true },
+    { rank: 3, store: "Store #31", baskets: 4872, delta: 8, medal: "🥉" },
+    { rank: 4, store: "Store #8", baskets: 4317, delta: 5 },
+    { rank: 5, store: "Store #22", baskets: 4026, delta: 11 },
+    { rank: 6, store: "Store #19", baskets: 3614, delta: 3, muted: true },
+    { rank: 7, store: "Store #4", baskets: 3492, delta: 2, muted: true },
+    { rank: 8, store: "Store #27", baskets: 3276, delta: 4, muted: true },
+  ],
+};
+
+const CITY_LEADERBOARD = {
+  week: [
+    { rank: 1, store: "Store #3 — Nizami", baskets: 318, delta: 10 },
+    { rank: 2, store: "Store #15 — Yasamal", baskets: 302, delta: 7 },
+    { rank: 3, store: "Store #12 — Narimanov", baskets: 296, delta: 7 },
+    { rank: 4, store: "Store #28 — Khatai", baskets: 281, delta: 6 },
+    { rank: 5, store: "Store #6 — Sabail", baskets: 267, delta: 5 },
+    { rank: 6, store: "Store #44 — Binagadi", baskets: 259, delta: 4 },
+    { rank: 7, store: "Store #18 — Narimanov", baskets: 248, delta: 3 },
+    { rank: 8, store: "Store #31 — Khatai", baskets: 243, delta: 3 },
+    { rank: 9, store: "Store #9 — Yasamal", baskets: 231, delta: 2 },
+    { rank: 10, store: "Store #22 — Surakhani", baskets: 226, delta: 4 },
+  ],
+  month: [
+    { rank: 1, store: "Store #3 — Nizami", baskets: 1298, delta: 31 },
+    { rank: 2, store: "Store #15 — Yasamal", baskets: 1212, delta: 24 },
+    { rank: 3, store: "Store #12 — Narimanov", baskets: 1187, delta: 23 },
+    { rank: 4, store: "Store #28 — Khatai", baskets: 1108, delta: 19 },
+    { rank: 5, store: "Store #6 — Sabail", baskets: 1051, delta: 16 },
+    { rank: 6, store: "Store #44 — Binagadi", baskets: 996, delta: 12 },
+    { rank: 7, store: "Store #18 — Narimanov", baskets: 954, delta: 14 },
+    { rank: 8, store: "Store #31 — Khatai", baskets: 911, delta: 8 },
+    { rank: 9, store: "Store #9 — Yasamal", baskets: 886, delta: 10 },
+    { rank: 10, store: "Store #22 — Surakhani", baskets: 861, delta: 11 },
+  ],
+  allTime: [
+    { rank: 1, store: "Store #3 — Nizami", baskets: 9834, delta: 31 },
+    { rank: 2, store: "Store #15 — Yasamal", baskets: 9520, delta: 24 },
+    { rank: 3, store: "Store #12 — Narimanov", baskets: 9413, delta: 23 },
+    { rank: 4, store: "Store #28 — Khatai", baskets: 9118, delta: 19 },
+    { rank: 5, store: "Store #6 — Sabail", baskets: 8872, delta: 16 },
+    { rank: 6, store: "Store #44 — Binagadi", baskets: 8631, delta: 12 },
+    { rank: 7, store: "Store #18 — Narimanov", baskets: 8440, delta: 14 },
+    { rank: 8, store: "Store #31 — Khatai", baskets: 8234, delta: 8 },
+    { rank: 9, store: "Store #9 — Yasamal", baskets: 8012, delta: 10 },
+    { rank: 10, store: "Store #22 — Surakhani", baskets: 7827, delta: 11 },
+  ],
+};
+
+const CURRENT_STORE_CITY_RANK = {
+  week: { rank: 53, baskets: 189, delta: 5 },
+  month: { rank: 47, baskets: 683, delta: 0 },
+  allTime: { rank: 49, baskets: 5314, delta: 0 },
+};
+
 const FALLBACK_PRODUCTS = {
   "5449000000996": {
     name: "Coca-Cola",
@@ -195,6 +273,8 @@ export default function App() {
 
   const [activeMode, setActiveMode] = useState("cashier");
   const [activeCashierTab, setActiveCashierTab] = useState("scan");
+  const [rankingsRange, setRankingsRange] = useState("month");
+  const [rankingsScope, setRankingsScope] = useState("district");
   const [scanStatus, setScanStatus] = useState("Starting camera...");
   const [scannedItems, setScannedItems] = useState([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -358,6 +438,16 @@ export default function App() {
       )
     );
   };
+
+  const currentDistrictRows = DISTRICT_RANKINGS[rankingsRange];
+  const currentCityRows = CITY_LEADERBOARD[rankingsRange];
+  const currentCityRank = CURRENT_STORE_CITY_RANK[rankingsRange];
+  const rankingsRangeLabel =
+    rankingsRange === "week"
+      ? "This Week"
+      : rankingsRange === "month"
+        ? "This Month"
+        : "All Time";
 
   return (
     <div className="app-shell">
@@ -1092,6 +1182,209 @@ export default function App() {
           white-space: nowrap;
         }
 
+        .rankings-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .rank-card {
+          padding: 20px 18px;
+          border-radius: 24px;
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.14), rgba(230, 28, 36, 0.04));
+          border: 1px solid rgba(230, 28, 36, 0.14);
+          box-shadow: 0 18px 36px rgba(230, 28, 36, 0.08);
+        }
+
+        .rank-medal {
+          font-size: 2rem;
+          line-height: 1;
+          margin-bottom: 8px;
+        }
+
+        .rank-title {
+          font-size: 1.34rem;
+          font-weight: 800;
+          line-height: 1.25;
+          margin-bottom: 8px;
+        }
+
+        .rank-subtitle,
+        .rank-trend {
+          font-size: 0.92rem;
+          line-height: 1.45;
+        }
+
+        .rank-subtitle {
+          color: #4e4e4e;
+          margin-bottom: 6px;
+        }
+
+        .rank-trend {
+          color: #16814a;
+          font-weight: 700;
+        }
+
+        .champion-preview {
+          padding: 14px;
+          border-radius: 18px;
+          background: #fff7f7;
+          border: 1px dashed rgba(230, 28, 36, 0.24);
+        }
+
+        .champion-title {
+          font-size: 0.82rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 8px;
+        }
+
+        .champion-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #4f4f4f;
+        }
+
+        .switch-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .switch-row.scope-row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .mini-switch {
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          background: #fff;
+          color: var(--scan-muted);
+          border-radius: 14px;
+          padding: 11px 8px;
+          font-size: 0.78rem;
+          font-weight: 800;
+        }
+
+        .mini-switch.active {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.14), rgba(230, 28, 36, 0.06));
+          color: var(--scan-red);
+          border-color: rgba(230, 28, 36, 0.16);
+        }
+
+        .leaderboard-title {
+          font-size: 1rem;
+          font-weight: 800;
+        }
+
+        .leaderboard-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .leaderboard-row {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          gap: 12px;
+          align-items: center;
+          padding: 14px;
+          border-radius: 18px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+        }
+
+        .leaderboard-row.you {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.12), rgba(230, 28, 36, 0.04));
+          border-color: rgba(230, 28, 36, 0.22);
+          box-shadow: inset 0 0 0 1px rgba(230, 28, 36, 0.08);
+        }
+
+        .leaderboard-row.muted {
+          opacity: 0.5;
+          background: #f4f5f7;
+        }
+
+        .leaderboard-rank {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.95rem;
+          font-weight: 800;
+          min-width: 64px;
+        }
+
+        .leaderboard-store {
+          min-width: 0;
+        }
+
+        .leaderboard-store-name {
+          font-size: 0.92rem;
+          font-weight: 800;
+          line-height: 1.3;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .you-tag {
+          font-size: 0.7rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          background: rgba(230, 28, 36, 0.1);
+          border-radius: 999px;
+          padding: 4px 6px;
+        }
+
+        .leaderboard-delta {
+          margin-top: 4px;
+          font-size: 0.8rem;
+          color: var(--scan-muted);
+        }
+
+        .leaderboard-score {
+          text-align: right;
+        }
+
+        .leaderboard-score-value {
+          font-size: 1rem;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .leaderboard-score-label {
+          font-size: 0.76rem;
+          color: var(--scan-muted);
+        }
+
+        .city-rank-card {
+          padding: 14px;
+          border-radius: 18px;
+          background: #f7f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          margin-top: 12px;
+        }
+
+        .city-rank-title {
+          font-size: 0.88rem;
+          font-weight: 800;
+          color: var(--scan-red);
+          margin-bottom: 4px;
+        }
+
+        .city-rank-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #4b4b4b;
+        }
+
         .bottom-nav {
           position: fixed;
           left: 50%;
@@ -1498,14 +1791,201 @@ export default function App() {
             ) : null}
 
             {activeCashierTab === "rankings" ? (
-              <section className="panel hq-panel">
-                <div className="hq-kicker">Cashier Feature</div>
-                <div className="hq-title">Rankings screen comes next</div>
-                <div className="hq-copy">
-                  This tab is reserved for comparative gamification later. No
-                  external store data is shown in My Store.
-                </div>
-              </section>
+              <div className="rankings-stack">
+                <section className="rank-card">
+                  <div className="rank-medal">🥈</div>
+                  <div className="rank-title">
+                    You are #2 in Narimanov District
+                  </div>
+                  <div className="rank-subtitle">164 baskets behind #1</div>
+                  <div className="rank-trend">
+                    You moved up 2 places this week ↑
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-body">
+                    <div className="champion-preview">
+                      <div className="champion-title">District Champion Preview</div>
+                      <div className="champion-copy">
+                        Reach #1 to unlock District Champion badge + free case
+                        of Coca-Cola.
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Leaderboard Range</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="switch-row">
+                      <button
+                        className={`mini-switch ${
+                          rankingsRange === "week" ? "active" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setRankingsRange("week")}
+                      >
+                        This Week
+                      </button>
+                      <button
+                        className={`mini-switch ${
+                          rankingsRange === "month" ? "active" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setRankingsRange("month")}
+                      >
+                        This Month
+                      </button>
+                      <button
+                        className={`mini-switch ${
+                          rankingsRange === "allTime" ? "active" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setRankingsRange("allTime")}
+                      >
+                        All Time
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="leaderboard-title">
+                      {rankingsScope === "district"
+                        ? `🏆 Narimanov District — ${rankingsRangeLabel}`
+                        : "🏙️ Baku City Leaderboard"}
+                    </div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="switch-row scope-row">
+                      <button
+                        className={`mini-switch ${
+                          rankingsScope === "district" ? "active" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setRankingsScope("district")}
+                      >
+                        District
+                      </button>
+                      <button
+                        className={`mini-switch ${
+                          rankingsScope === "city" ? "active" : ""
+                        }`}
+                        type="button"
+                        onClick={() => setRankingsScope("city")}
+                      >
+                        City
+                      </button>
+                    </div>
+
+                    {rankingsScope === "district" ? (
+                      <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
+                        {currentDistrictRows.map((row) => (
+                          <li
+                            className={`leaderboard-row ${
+                              row.isYou ? "you" : ""
+                            } ${row.muted ? "muted" : ""}`}
+                            key={`${rankingsRange}-${row.store}`}
+                          >
+                            <div className="leaderboard-rank">
+                              <span>#{row.rank}</span>
+                              <span>{row.medal || ""}</span>
+                            </div>
+                            <div className="leaderboard-store">
+                              <div className="leaderboard-store-name">
+                                <span>{row.store}</span>
+                                {row.isYou ? <span className="you-tag">YOU</span> : null}
+                              </div>
+                              <div className="leaderboard-delta">
+                                (+{row.delta} today)
+                              </div>
+                            </div>
+                            <div className="leaderboard-score">
+                              <div className="leaderboard-score-value">
+                                {row.baskets}
+                              </div>
+                              <div className="leaderboard-score-label">
+                                baskets
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <>
+                        <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
+                          {currentCityRows.map((row) => (
+                            <li
+                              className="leaderboard-row"
+                              key={`${rankingsRange}-${row.store}`}
+                            >
+                              <div className="leaderboard-rank">
+                                <span>#{row.rank}</span>
+                              </div>
+                              <div className="leaderboard-store">
+                                <div className="leaderboard-store-name">
+                                  <span>{row.store}</span>
+                                </div>
+                                <div className="leaderboard-delta">
+                                  (+{row.delta} today)
+                                </div>
+                              </div>
+                              <div className="leaderboard-score">
+                                <div className="leaderboard-score-value">
+                                  {row.baskets}
+                                </div>
+                                <div className="leaderboard-score-label">
+                                  baskets
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="city-rank-card">
+                          <div className="city-rank-title">
+                            You are #{currentCityRank.rank} in Baku overall
+                          </div>
+                          <div className="city-rank-copy">
+                            {STORE_NAME} currently has {currentCityRank.baskets}{" "}
+                            baskets in this view, even though it is outside the
+                            top 10 city leaderboard.
+                          </div>
+                        </div>
+
+                        <ul className="leaderboard-list" style={{ marginTop: "12px" }}>
+                          <li className="leaderboard-row you">
+                            <div className="leaderboard-rank">
+                              <span>#{currentCityRank.rank}</span>
+                            </div>
+                            <div className="leaderboard-store">
+                              <div className="leaderboard-store-name">
+                                <span>Store #47 — Narimanov</span>
+                                <span className="you-tag">YOU</span>
+                              </div>
+                              <div className="leaderboard-delta">
+                                (+{currentCityRank.delta} today)
+                              </div>
+                            </div>
+                            <div className="leaderboard-score">
+                              <div className="leaderboard-score-value">
+                                {currentCityRank.baskets}
+                              </div>
+                              <div className="leaderboard-score-label">
+                                baskets
+                              </div>
+                            </div>
+                          </li>
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                </section>
+              </div>
             ) : null}
           </div>
         ) : (
