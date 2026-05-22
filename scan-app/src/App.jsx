@@ -1,4 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const ZXING_CDN_URL =
   "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
@@ -7,6 +18,50 @@ const DUPLICATE_SCAN_WINDOW_MS = 3000;
 const PRIMARY_RED = "#E61C24";
 const SUCCESS_GREEN = "#19A55A";
 const STORE_NAME = "Store #47 — Narimanov";
+
+const MY_STORE_STATS = [
+  { label: "Today's baskets", value: "47" },
+  { label: "This week", value: "284" },
+  { label: "This month", value: "1,203" },
+];
+
+const MY_STORE_TOP_PRODUCTS = [
+  { name: "Coca-Cola 330ml", scans: 38 },
+  { name: "Lays Original", scans: 31 },
+  { name: "Azerchay", scans: 24 },
+  { name: "Fanta 500ml", scans: 19 },
+  { name: "Sprite 330ml", scans: 14 },
+];
+
+const MY_STORE_PEAK_HOURS = [
+  { hour: "08", baskets: 2 },
+  { hour: "09", baskets: 4 },
+  { hour: "10", baskets: 5 },
+  { hour: "11", baskets: 6 },
+  { hour: "12", baskets: 10 },
+  { hour: "13", baskets: 13 },
+  { hour: "14", baskets: 11 },
+  { hour: "15", baskets: 7 },
+  { hour: "16", baskets: 6 },
+  { hour: "17", baskets: 8 },
+  { hour: "18", baskets: 12 },
+  { hour: "19", baskets: 14 },
+  { hour: "20", baskets: 11 },
+  { hour: "21", baskets: 7 },
+];
+
+const MY_STORE_TOP_PAIRS = [
+  {
+    title: "Coke + Lays",
+    subtitle: "68% of Coke transactions",
+    percentage: 68,
+  },
+  {
+    title: "Fanta + chips",
+    subtitle: "54% of Fanta transactions",
+    percentage: 54,
+  },
+];
 
 const FALLBACK_PRODUCTS = {
   "5449000000996": {
@@ -55,6 +110,7 @@ export default function App() {
   const mountedRef = useRef(false);
 
   const [activeMode, setActiveMode] = useState("cashier");
+  const [activeCashierTab, setActiveCashierTab] = useState("scan");
   const [scanStatus, setScanStatus] = useState("Starting camera...");
   const [scannedItems, setScannedItems] = useState([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -133,7 +189,7 @@ export default function App() {
     const recentScans = recentScansRef.current;
     const pendingBarcodes = pendingBarcodesRef.current;
 
-    if (activeMode !== "cashier") {
+    if (activeMode !== "cashier" || activeCashierTab !== "scan") {
       mountedRef.current = false;
       controlsRef.current?.stop?.();
       readerRef.current?.reset?.();
@@ -208,7 +264,7 @@ export default function App() {
       recentScans.clear();
       pendingBarcodes.clear();
     };
-  }, [activeMode]);
+  }, [activeMode, activeCashierTab]);
 
   const updateUnknownProductName = (id, nextName) => {
     setScannedItems((currentItems) =>
@@ -358,6 +414,10 @@ export default function App() {
           overflow: hidden;
         }
 
+        .panel-body {
+          padding: 18px;
+        }
+
         .camera-frame {
           position: relative;
           aspect-ratio: 3 / 4;
@@ -446,6 +506,12 @@ export default function App() {
         .section-meta {
           font-size: 0.82rem;
           color: var(--scan-muted);
+        }
+
+        .screen-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
         }
 
         .items-list {
@@ -597,6 +663,124 @@ export default function App() {
           font-weight: 800;
         }
 
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .stat-card {
+          padding: 14px 12px;
+          border-radius: 18px;
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.02));
+          border: 1px solid rgba(230, 28, 36, 0.12);
+        }
+
+        .stat-label {
+          font-size: 0.72rem;
+          line-height: 1.3;
+          color: var(--scan-muted);
+          margin-bottom: 10px;
+        }
+
+        .stat-value {
+          font-size: 1.3rem;
+          font-weight: 800;
+          color: var(--scan-red);
+        }
+
+        .chart-shell {
+          width: 100%;
+          height: 260px;
+        }
+
+        .chart-shell.line-shell {
+          height: 240px;
+        }
+
+        .chart-footnote {
+          margin-top: 10px;
+          font-size: 0.82rem;
+          color: var(--scan-muted);
+          line-height: 1.4;
+        }
+
+        .pairs-wrap {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .pairs-copy {
+          font-size: 0.9rem;
+          color: var(--scan-muted);
+        }
+
+        .pair-card {
+          padding: 14px;
+          border-radius: 18px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+        }
+
+        .pair-topline {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 8px;
+        }
+
+        .pair-title {
+          font-size: 0.96rem;
+          font-weight: 800;
+        }
+
+        .pair-percent {
+          font-size: 0.88rem;
+          font-weight: 800;
+          color: var(--scan-red);
+        }
+
+        .pair-subtitle {
+          font-size: 0.88rem;
+          color: var(--scan-muted);
+          margin-bottom: 10px;
+        }
+
+        .pair-progress {
+          width: 100%;
+          height: 10px;
+          border-radius: 999px;
+          background: rgba(17, 17, 17, 0.08);
+          overflow: hidden;
+        }
+
+        .pair-progress-fill {
+          height: 100%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, var(--scan-red), #ff6c74);
+        }
+
+        .alert-card {
+          border: 2px solid rgba(230, 28, 36, 0.3);
+          box-shadow: 0 16px 34px rgba(230, 28, 36, 0.08);
+        }
+
+        .alert-title {
+          font-size: 0.8rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 8px;
+        }
+
+        .alert-copy {
+          font-size: 0.96rem;
+          line-height: 1.45;
+        }
+
         .bottom-nav {
           position: fixed;
           left: 50%;
@@ -675,7 +859,9 @@ export default function App() {
         </header>
 
         {activeMode === "cashier" ? (
-          <>
+          <div className="screen-stack">
+            {activeCashierTab === "scan" ? (
+              <>
             <section className="panel">
               <div className="camera-frame">
                 <video ref={videoRef} muted playsInline />
@@ -738,7 +924,180 @@ export default function App() {
                 </button>
               </div>
             ) : null}
-          </>
+              </>
+            ) : null}
+
+            {activeCashierTab === "store" ? (
+              <>
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">My Store Snapshot</div>
+                    <div className="section-meta">Only {STORE_NAME} data</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="stats-grid">
+                      {MY_STORE_STATS.map((stat) => (
+                        <div className="stat-card" key={stat.label}>
+                          <div className="stat-label">{stat.label}</div>
+                          <div className="stat-value">{stat.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Top Products Today</div>
+                    <div className="section-meta">Most scanned in this store</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="chart-shell">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={MY_STORE_TOP_PRODUCTS}
+                          layout="vertical"
+                          margin={{ top: 4, right: 12, left: 18, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                          <XAxis type="number" tickLine={false} axisLine={false} />
+                          <YAxis
+                            type="category"
+                            dataKey="name"
+                            width={110}
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#4f4f4f" }}
+                          />
+                          <Tooltip
+                            cursor={{ fill: "rgba(230, 28, 36, 0.06)" }}
+                            contentStyle={{
+                              borderRadius: "14px",
+                              border: "1px solid rgba(17,17,17,0.08)",
+                              boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                            }}
+                          />
+                          <Bar
+                            dataKey="scans"
+                            radius={[0, 10, 10, 0]}
+                            fill={PRIMARY_RED}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Peak Hours Today</div>
+                    <div className="section-meta">08:00 - 21:00</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="chart-shell line-shell">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={MY_STORE_PEAK_HOURS}
+                          margin={{ top: 8, right: 12, left: -8, bottom: 2 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                          <XAxis
+                            dataKey="hour"
+                            tickFormatter={(value) => `${value}:00`}
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                          />
+                          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#5b5b5b" }} />
+                          <Tooltip
+                            formatter={(value) => [`${value} baskets`, "Volume"]}
+                            labelFormatter={(value) => `${value}:00`}
+                            contentStyle={{
+                              borderRadius: "14px",
+                              border: "1px solid rgba(17,17,17,0.08)",
+                              boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="baskets"
+                            stroke={PRIMARY_RED}
+                            strokeWidth={3}
+                            dot={{ r: 4, fill: PRIMARY_RED }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="chart-footnote">
+                      Lunch and evening traffic stand out as the busiest periods
+                      in this store today.
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="section-head">
+                    <div className="section-title">Top Pairs In My Store</div>
+                  </div>
+                  <div className="panel-body">
+                    <div className="pairs-wrap">
+                      <div className="pairs-copy">
+                        Your customers most often buy together:
+                      </div>
+                      {MY_STORE_TOP_PAIRS.map((pair) => (
+                        <div className="pair-card" key={pair.title}>
+                          <div className="pair-topline">
+                            <div className="pair-title">{pair.title}</div>
+                            <div className="pair-percent">{pair.percentage}%</div>
+                          </div>
+                          <div className="pair-subtitle">{pair.subtitle}</div>
+                          <div className="pair-progress">
+                            <div
+                              className="pair-progress-fill"
+                              style={{ width: `${pair.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel alert-card">
+                  <div className="panel-body">
+                    <div className="alert-title">Restock Alert</div>
+                    <div className="alert-copy">
+                      Coca-Cola 330ml selling fast — consider restocking soon
+                    </div>
+                  </div>
+                </section>
+              </>
+            ) : null}
+
+            {activeCashierTab === "rewards" ? (
+              <section className="panel hq-panel">
+                <div className="hq-kicker">Cashier Feature</div>
+                <div className="hq-title">Rewards screen comes next</div>
+                <div className="hq-copy">
+                  This tab is reserved for store loyalty or incentives while
+                  keeping the current prototype focused on scanning and store
+                  performance.
+                </div>
+              </section>
+            ) : null}
+
+            {activeCashierTab === "rankings" ? (
+              <section className="panel hq-panel">
+                <div className="hq-kicker">Cashier Feature</div>
+                <div className="hq-title">Rankings screen comes next</div>
+                <div className="hq-copy">
+                  This tab is reserved for comparative gamification later. No
+                  external store data is shown in My Store.
+                </div>
+              </section>
+            ) : null}
+          </div>
         ) : (
           <section className="panel hq-panel">
             <div className="hq-kicker">CCI Headquarters View</div>
@@ -764,16 +1123,32 @@ export default function App() {
       </main>
 
       <nav className="bottom-nav" aria-label="Primary">
-        <button className="nav-item active" type="button">
+        <button
+          className={`nav-item ${activeCashierTab === "scan" ? "active" : ""}`}
+          type="button"
+          onClick={() => setActiveCashierTab("scan")}
+        >
           Scan
         </button>
-        <button className="nav-item" type="button">
+        <button
+          className={`nav-item ${activeCashierTab === "store" ? "active" : ""}`}
+          type="button"
+          onClick={() => setActiveCashierTab("store")}
+        >
           My Store
         </button>
-        <button className="nav-item" type="button">
+        <button
+          className={`nav-item ${activeCashierTab === "rewards" ? "active" : ""}`}
+          type="button"
+          onClick={() => setActiveCashierTab("rewards")}
+        >
           Rewards
         </button>
-        <button className="nav-item" type="button">
+        <button
+          className={`nav-item ${activeCashierTab === "rankings" ? "active" : ""}`}
+          type="button"
+          onClick={() => setActiveCashierTab("rankings")}
+        >
           Rankings
         </button>
       </nav>
