@@ -225,6 +225,58 @@ const CURRENT_STORE_CITY_RANK = {
   allTime: { rank: 49, baskets: 5314, delta: 0 },
 };
 
+const HQ_METRICS = [
+  { label: "Total baskets today", value: "2,847" },
+  { label: "Active stores today", value: "134" },
+  { label: "Most common basket pair", value: "Coke + Lays (68%)" },
+  { label: "Fastest growing district", value: "Yasamal (+34%)" },
+];
+
+const HQ_PAIR_ANALYSIS = [
+  { label: "Coca-Cola 330ml + Lays Original", percentage: 68 },
+  { label: "Fanta 500ml + Chips", percentage: 57 },
+  { label: "Coca-Cola + Azerchay Tea", percentage: 41 },
+  { label: "Sprite + Sandwich", percentage: 38 },
+  { label: "Coca-Cola 2L + Bread", percentage: 35 },
+  { label: "Energy Drink (alone)", percentage: 89, suffix: "alone" },
+  { label: "Fanta + Azerchay", percentage: 28 },
+  { label: "Sprite + Lays", percentage: 24 },
+];
+
+const HQ_DISTRICT_BREAKDOWN = [
+  { district: "Narimanov", baskets: 847, topPair: "Coke + Lays", trend: "↑" },
+  { district: "Yasamal", baskets: 634, topPair: "Fanta + Chips", trend: "↑↑" },
+  { district: "Khatai", baskets: 521, topPair: "Coke + Tea", trend: "→" },
+  { district: "Sabunchu", baskets: 423, topPair: "Sprite + Sandwich", trend: "↓" },
+  { district: "Surakhani", baskets: 387, topPair: "Coke + Bread", trend: "↑" },
+];
+
+const HQ_PEAK_HOURS = [
+  { hour: "08:00", baskets: 112 },
+  { hour: "09:00", baskets: 164 },
+  { hour: "10:00", baskets: 208 },
+  { hour: "11:00", baskets: 257 },
+  { hour: "12:00", baskets: 391 },
+  { hour: "13:00", baskets: 428 },
+  { hour: "14:00", baskets: 316 },
+  { hour: "15:00", baskets: 272 },
+  { hour: "16:00", baskets: 301 },
+  { hour: "17:00", baskets: 412 },
+  { hour: "18:00", baskets: 447 },
+  { hour: "19:00", baskets: 433 },
+  { hour: "20:00", baskets: 288 },
+  { hour: "21:00", baskets: 196 },
+];
+
+const HQ_LIVE_TRANSACTIONS = [
+  { district: "Narimanov", items: "Coke + Lays + Tea" },
+  { district: "Yasamal", items: "Fanta + Chips" },
+  { district: "Khatai", items: "Sprite + Sandwich" },
+  { district: "Sabunchu", items: "Coke + Bread" },
+  { district: "Surakhani", items: "Energy Drink" },
+  { district: "Narimanov", items: "Coke + Azerchay Tea" },
+];
+
 const FALLBACK_PRODUCTS = {
   "5449000000996": {
     name: "Coca-Cola",
@@ -270,6 +322,7 @@ export default function App() {
   const recentScansRef = useRef(new Map());
   const pendingBarcodesRef = useRef(new Set());
   const mountedRef = useRef(false);
+  const hqFeedIndexRef = useRef(0);
 
   const [activeMode, setActiveMode] = useState("cashier");
   const [activeCashierTab, setActiveCashierTab] = useState("scan");
@@ -279,6 +332,14 @@ export default function App() {
   const [scannedItems, setScannedItems] = useState([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [hasClaimedReward, setHasClaimedReward] = useState(false);
+  const [hqLiveFeed, setHqLiveFeed] = useState(() =>
+    HQ_LIVE_TRANSACTIONS.slice(0, 4).map((entry, index) => ({
+      id: `seed-${index}`,
+      time: `14:3${index}`,
+      district: entry.district,
+      items: entry.items,
+    }))
+  );
 
   const handleDetectedBarcode = async (barcode) => {
     const trimmedBarcode = barcode?.trim();
@@ -431,6 +492,35 @@ export default function App() {
     };
   }, [activeMode, activeCashierTab]);
 
+  useEffect(() => {
+    if (activeMode !== "hq") {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const nextIndex = hqFeedIndexRef.current % HQ_LIVE_TRANSACTIONS.length;
+      const nextTemplate = HQ_LIVE_TRANSACTIONS[nextIndex];
+      const now = new Date();
+      const feedItem = {
+        id: `${Date.now()}-${nextIndex}`,
+        time: now.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }),
+        district: nextTemplate.district,
+        items: nextTemplate.items,
+      };
+
+      hqFeedIndexRef.current += 1;
+      setHqLiveFeed((currentFeed) => [feedItem, ...currentFeed].slice(0, 10));
+    }, 6000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeMode]);
+
   const updateUnknownProductName = (id, nextName) => {
     setScannedItems((currentItems) =>
       currentItems.map((item) =>
@@ -497,6 +587,10 @@ export default function App() {
           gap: 16px;
         }
 
+        .screen.hq-screen {
+          max-width: 1320px;
+        }
+
         .topbar {
           display: flex;
           flex-direction: column;
@@ -550,6 +644,12 @@ export default function App() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+
+        .store-pill.hq-pill {
+          max-width: none;
+          color: var(--scan-red);
+          font-weight: 700;
         }
 
         .mode-switch {
@@ -1385,6 +1485,207 @@ export default function App() {
           color: #4b4b4b;
         }
 
+        .hq-shell {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 18px;
+        }
+
+        .hq-main {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+          background: #ffffff;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          border-radius: 28px;
+          padding: 22px;
+          box-shadow: 0 18px 40px rgba(17, 17, 17, 0.08);
+        }
+
+        .hq-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          background: linear-gradient(180deg, #14181f, #1c222b);
+          color: #fff;
+          border-radius: 28px;
+          padding: 22px;
+          box-shadow: 0 18px 40px rgba(17, 17, 17, 0.16);
+        }
+
+        .hq-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+        }
+
+        .hq-header-copy {
+          max-width: 700px;
+        }
+
+        .hq-label {
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 10px;
+        }
+
+        .hq-heading {
+          font-size: 2rem;
+          font-weight: 800;
+          line-height: 1.1;
+          margin-bottom: 8px;
+        }
+
+        .hq-subcopy {
+          font-size: 0.98rem;
+          line-height: 1.55;
+          color: #5f6570;
+        }
+
+        .hq-metrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .hq-metric-card {
+          padding: 18px 16px;
+          border-radius: 20px;
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.02));
+          border: 1px solid rgba(230, 28, 36, 0.12);
+        }
+
+        .hq-metric-label {
+          font-size: 0.78rem;
+          color: #6b7079;
+          margin-bottom: 10px;
+        }
+
+        .hq-metric-value {
+          font-size: 1.48rem;
+          font-weight: 800;
+          line-height: 1.2;
+          color: #15191f;
+        }
+
+        .hq-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+          gap: 18px;
+        }
+
+        .hq-card {
+          border-radius: 22px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+          padding: 18px;
+        }
+
+        .hq-card-title {
+          font-size: 1rem;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .hq-card-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #666c76;
+          margin-bottom: 16px;
+        }
+
+        .hq-chart-shell {
+          width: 100%;
+          height: 330px;
+        }
+
+        .hq-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .hq-table th,
+        .hq-table td {
+          padding: 12px 10px;
+          text-align: left;
+          border-bottom: 1px solid rgba(17, 17, 17, 0.06);
+          font-size: 0.9rem;
+        }
+
+        .hq-table th {
+          font-size: 0.78rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #7b818d;
+        }
+
+        .hq-trend-up {
+          color: #1d8e53;
+          font-weight: 800;
+        }
+
+        .hq-trend-neutral {
+          color: #75808f;
+          font-weight: 800;
+        }
+
+        .hq-trend-down {
+          color: #b85a46;
+          font-weight: 800;
+        }
+
+        .hq-sidebar-title {
+          font-size: 1rem;
+          font-weight: 800;
+          margin-bottom: 4px;
+        }
+
+        .hq-sidebar-copy {
+          font-size: 0.88rem;
+          line-height: 1.45;
+          color: rgba(255, 255, 255, 0.7);
+          margin-bottom: 14px;
+        }
+
+        .hq-feed {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .hq-feed-item {
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          animation: feedSlide 320ms ease-out;
+        }
+
+        .hq-feed-time {
+          font-size: 0.78rem;
+          font-weight: 800;
+          color: #ffb6bb;
+          margin-bottom: 6px;
+        }
+
+        .hq-feed-line {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #f5f7fa;
+        }
+
+        .hq-sidebar-note {
+          margin-top: auto;
+          padding-top: 6px;
+          font-size: 0.8rem;
+          line-height: 1.45;
+          color: rgba(255, 255, 255, 0.56);
+        }
+
         .bottom-nav {
           position: fixed;
           left: 50%;
@@ -1432,16 +1733,40 @@ export default function App() {
             transform: translateY(1px);
           }
         }
+
+        @keyframes feedSlide {
+          0% {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @media (max-width: 1120px) {
+          .hq-metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .hq-grid,
+          .hq-shell {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
       `}</style>
 
-      <main className="screen">
+      <main className={`screen ${activeMode === "hq" ? "hq-screen" : ""}`}>
         <header className="topbar">
           <div className="topbar-row">
             <div className="logo">
               <div className="logo-mark">S</div>
               <div className="logo-copy">SCAN</div>
             </div>
-            <div className="store-pill">{STORE_NAME}</div>
+            <div className={`store-pill ${activeMode === "hq" ? "hq-pill" : ""}`}>
+              {activeMode === "hq" ? "CCI HQ — Baku Region" : STORE_NAME}
+            </div>
           </div>
 
           <div className="mode-switch">
@@ -1989,30 +2314,204 @@ export default function App() {
             ) : null}
           </div>
         ) : (
-          <section className="panel hq-panel">
-            <div className="hq-kicker">CCI Headquarters View</div>
-            <div className="hq-title">HQ Mode ready for the next step</div>
-            <div className="hq-copy">
-              The app shell now supports two separate modes behind a header switch.
-              Cashier Mode is fully wired first, and HQ Mode is reserved for the
-              laptop dashboard we can build next.
+          <section className="hq-shell">
+            <div className="hq-main">
+              <div className="hq-header">
+                <div className="hq-header-copy">
+                  <div className="hq-label">CCI Headquarters Intelligence</div>
+                  <div className="hq-heading">SCAN Network Dashboard</div>
+                  <div className="hq-subcopy">
+                    Live basket intelligence across all active stores in Baku,
+                    focused on what customers buy with CCI products.
+                  </div>
+                </div>
+              </div>
+
+              <div className="hq-metrics">
+                {HQ_METRICS.map((metric) => (
+                  <div className="hq-metric-card" key={metric.label}>
+                    <div className="hq-metric-label">{metric.label}</div>
+                    <div className="hq-metric-value">{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hq-grid">
+                <div className="hq-card">
+                  <div className="hq-card-title">
+                    What do customers buy with CCI products?
+                  </div>
+                  <div className="hq-card-copy">
+                    Basket pair analysis across the full network of anonymized
+                    stores.
+                  </div>
+                  <div className="hq-chart-shell">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={HQ_PAIR_ANALYSIS}
+                        layout="vertical"
+                        margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="rgba(17,17,17,0.08)"
+                        />
+                        <XAxis
+                          type="number"
+                          tickLine={false}
+                          axisLine={false}
+                          domain={[0, 100]}
+                          tickFormatter={(value) => `${value}%`}
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="label"
+                          width={170}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fontSize: 12, fill: "#4d545f" }}
+                        />
+                        <Tooltip
+                          formatter={(value, _name, item) => {
+                            const suffix = item.payload.suffix
+                              ? ` ${item.payload.suffix}`
+                              : "";
+                            return [`${value}%${suffix}`, "Share"];
+                          }}
+                          contentStyle={{
+                            borderRadius: "14px",
+                            border: "1px solid rgba(17,17,17,0.08)",
+                            boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                          }}
+                        />
+                        <Bar
+                          dataKey="percentage"
+                          radius={[0, 10, 10, 0]}
+                          fill={PRIMARY_RED}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="hq-card">
+                  <div className="hq-card-title">Geographic Breakdown</div>
+                  <div className="hq-card-copy">
+                    District comparison across all anonymized stores.
+                  </div>
+                  <table className="hq-table">
+                    <thead>
+                      <tr>
+                        <th>District</th>
+                        <th>Baskets</th>
+                        <th>Top Pair</th>
+                        <th>Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {HQ_DISTRICT_BREAKDOWN.map((row) => (
+                        <tr key={row.district}>
+                          <td>{row.district}</td>
+                          <td>{row.baskets}</td>
+                          <td>{row.topPair}</td>
+                          <td
+                            className={
+                              row.trend === "↓"
+                                ? "hq-trend-down"
+                                : row.trend === "→"
+                                  ? "hq-trend-neutral"
+                                  : "hq-trend-up"
+                            }
+                          >
+                            {row.trend}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="hq-card">
+                <div className="hq-card-title">Peak Hours</div>
+                <div className="hq-card-copy">
+                  Aggregated basket volume across all stores combined, with
+                  clear lunch and evening surges.
+                </div>
+                <div className="hq-chart-shell" style={{ height: "280px" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={HQ_PEAK_HOURS}
+                      margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="rgba(17,17,17,0.08)"
+                      />
+                      <XAxis
+                        dataKey="hour"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: "#5c6370" }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: "#5c6370" }}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`${value} baskets`, "Volume"]}
+                        contentStyle={{
+                          borderRadius: "14px",
+                          border: "1px solid rgba(17,17,17,0.08)",
+                          boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="baskets"
+                        stroke={PRIMARY_RED}
+                        strokeWidth={3}
+                        dot={{ r: 4, fill: PRIMARY_RED }}
+                        activeDot={{ r: 6 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
 
-            <div className="hq-mock">
-              <div className="hq-mock-card">
-                <div className="hq-mock-label">Region</div>
-                <div className="hq-mock-value">Baku Live Network</div>
+            <aside className="hq-sidebar">
+              <div>
+                <div className="hq-sidebar-title">Live Transaction Feed</div>
+                <div className="hq-sidebar-copy">
+                  New anonymized baskets stream in every few seconds from the
+                  active network.
+                </div>
               </div>
-              <div className="hq-mock-card">
-                <div className="hq-mock-label">Next Build Step</div>
-                <div className="hq-mock-value">Analytics Dashboard</div>
+
+              <div className="hq-feed">
+                {hqLiveFeed.map((entry) => (
+                  <div className="hq-feed-item" key={entry.id}>
+                    <div className="hq-feed-time">{entry.time}</div>
+                    <div className="hq-feed-line">
+                      District: {entry.district} — {entry.items}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+
+              <div className="hq-sidebar-note">
+                Privacy mode is enabled. Headquarters sees district-level
+                activity and anonymized store performance only.
+              </div>
+            </aside>
           </section>
         )}
       </main>
 
-      <nav className="bottom-nav" aria-label="Primary">
+      {activeMode === "cashier" ? (
+        <nav className="bottom-nav" aria-label="Primary">
         <button
           className={`nav-item ${activeCashierTab === "scan" ? "active" : ""}`}
           type="button"
@@ -2041,7 +2540,8 @@ export default function App() {
         >
           Rankings
         </button>
-      </nav>
+        </nav>
+      ) : null}
     </div>
   );
 }
