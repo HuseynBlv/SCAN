@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import { BarcodeFormat, BrowserMultiFormatOneDReader } from "@zxing/browser";
+import { DecodeHintType } from "@zxing/library";
 import {
   Bar,
   BarChart,
@@ -11,21 +13,55 @@ import {
   YAxis,
 } from "recharts";
 
-const ZXING_CDN_URL =
-  "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm";
 const OPEN_FOOD_FACTS_API = "https://world.openfoodfacts.org/api/v2/product";
 const DUPLICATE_SCAN_WINDOW_MS = 3000;
+const SPLASH_DURATION_MS = 2000;
+const SPLASH_FADE_MS = 420;
+const DEMO_STEP_DELAY_MS = 1500;
+const LOG_RESET_DELAY_MS = 1200;
+const ACHIEVEMENT_DURATION_MS = 3000;
+const HQ_FEED_INTERVAL_MS = 6000;
+const SCAN_FEEDBACK_DURATION_MS = 950;
+
 const PRIMARY_RED = "#E61C24";
 const SUCCESS_GREEN = "#19A55A";
 const STORE_NAME = "Store #47 — Narimanov";
+const HQ_REGION_NAME = "CCI HQ — Baku Region";
 
-const MY_STORE_STATS = [
-  { label: "Today's baskets", value: "47" },
-  { label: "This week", value: "284" },
-  { label: "This month", value: "1,203" },
+const DEMO_SEQUENCE = [
+  {
+    barcode: "5449000000996",
+    product: {
+      name: "Coca-Cola",
+      brand: "The Coca-Cola Company",
+      quantity: "330ml",
+    },
+  },
+  {
+    barcode: "5053990109332",
+    product: {
+      name: "Lays Original",
+      brand: "Lay's",
+      quantity: "40g",
+    },
+  },
+  {
+    barcode: "4760062100018",
+    product: {
+      name: "Azerchay",
+      brand: "Azerchay",
+      quantity: "Black Tea",
+    },
+  },
 ];
 
-const MY_STORE_TOP_PRODUCTS = [
+const INITIAL_STORE_STATS = {
+  today: 47,
+  week: 284,
+  month: 1203,
+};
+
+const INITIAL_TOP_PRODUCTS = [
   { name: "Coca-Cola 330ml", scans: 38 },
   { name: "Lays Original", scans: 31 },
   { name: "Azerchay", scans: 24 },
@@ -33,7 +69,7 @@ const MY_STORE_TOP_PRODUCTS = [
   { name: "Sprite 330ml", scans: 14 },
 ];
 
-const MY_STORE_PEAK_HOURS = [
+const INITIAL_MY_STORE_PEAK_HOURS = [
   { hour: "08", baskets: 2 },
   { hour: "09", baskets: 4 },
   { hour: "10", baskets: 5 },
@@ -295,6 +331,17 @@ const FALLBACK_PRODUCTS = {
   },
 };
 
+const RETAIL_BARCODE_FORMATS = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.ITF,
+  BarcodeFormat.CODABAR,
+];
+
 function normalizeProduct(product = {}) {
   return {
     name: product.product_name?.trim() || "Unknown Product",
@@ -315,6 +362,102 @@ function buildScannedItem(barcode, productDetails) {
   };
 }
 
+function getProductLabel(name, quantity) {
+  if (name.includes("Coca-Cola")) {
+    return "Coca-Cola 330ml";
+  }
+
+  if (name.includes("Lays")) {
+    return "Lays Original";
+  }
+
+  if (name.includes("Azerchay")) {
+    return "Azerchay";
+  }
+
+  if (name.includes("Fanta")) {
+    return "Fanta 500ml";
+  }
+
+  if (name.includes("Sprite")) {
+    return "Sprite 330ml";
+  }
+
+  if (quantity && quantity !== "Quantity unavailable") {
+    return `${name} ${quantity}`;
+  }
+
+  return name;
+}
+
+function getBasketSummaryLabels(items) {
+  return items.map((item) => {
+    const name = item.isUnknown
+      ? item.customName.trim() || "Unknown Product"
+      : item.name;
+
+    if (name.includes("Coca-Cola")) {
+      return "Coke";
+    }
+
+    if (name.includes("Lays")) {
+      return "Lays";
+    }
+
+    if (name.includes("Azerchay")) {
+      return "Tea";
+    }
+
+    if (name.includes("Fanta")) {
+      return "Fanta";
+    }
+
+    if (name.includes("Sprite")) {
+      return "Sprite";
+    }
+
+    return name;
+  });
+}
+
+function formatHqFeedEntry(time, district, summary) {
+  return `${time} — District: ${district} — ${summary}`;
+}
+
+function AchievementOverlay({ achievement }) {
+  const confettiPieces = Array.from({ length: 18 }, (_, index) => ({
+    id: index,
+    left: `${(index * 11) % 100}%`,
+    delay: `${(index % 6) * 0.08}s`,
+    rotate: `${index * 19}deg`,
+    color: index % 3 === 0 ? "#ffffff" : index % 3 === 1 ? "#ffd166" : "#ff6b6b",
+  }));
+
+  return (
+    <div className="achievement-overlay" role="status" aria-live="assertive">
+      <div className="achievement-confetti" aria-hidden="true">
+        {confettiPieces.map((piece) => (
+          <span
+            className="confetti-piece"
+            key={piece.id}
+            style={{
+              left: piece.left,
+              animationDelay: piece.delay,
+              transform: `rotate(${piece.rotate})`,
+              background: piece.color,
+            }}
+          />
+        ))}
+      </div>
+      <div className="achievement-card-pop">
+        <div className="achievement-pop-kicker">Achievement Unlocked! 🏆</div>
+        <div className="achievement-pop-title">{achievement.title}</div>
+        <div className="achievement-pop-copy">{achievement.description}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
@@ -322,26 +465,97 @@ export default function App() {
   const recentScansRef = useRef(new Map());
   const pendingBarcodesRef = useRef(new Set());
   const mountedRef = useRef(false);
+  const isLookingUpRef = useRef(false);
+  const splashFadeTimerRef = useRef(null);
+  const splashHideTimerRef = useRef(null);
+  const logResetTimerRef = useRef(null);
+  const achievementTimerRef = useRef(null);
+  const hqFeedIntervalRef = useRef(null);
   const hqFeedIndexRef = useRef(0);
+  const demoTimersRef = useRef([]);
+  const sessionLoggedBasketsRef = useRef(0);
+  const scanFeedbackTimerRef = useRef(null);
 
   const [activeMode, setActiveMode] = useState("cashier");
   const [activeCashierTab, setActiveCashierTab] = useState("scan");
   const [rankingsRange, setRankingsRange] = useState("month");
   const [rankingsScope, setRankingsScope] = useState("district");
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashFading, setSplashFading] = useState(false);
   const [scanStatus, setScanStatus] = useState("Starting camera...");
   const [scannedItems, setScannedItems] = useState([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [scanFeedbackState, setScanFeedbackState] = useState("idle");
   const [hasClaimedReward, setHasClaimedReward] = useState(false);
+  const [demoModeRunning, setDemoModeRunning] = useState(false);
+  const [pulseLogButton, setPulseLogButton] = useState(false);
+  const [storeStats, setStoreStats] = useState(INITIAL_STORE_STATS);
+  const [topProductsToday, setTopProductsToday] = useState(INITIAL_TOP_PRODUCTS);
+  const [myStorePeakHours, setMyStorePeakHours] = useState(INITIAL_MY_STORE_PEAK_HOURS);
+  const [streakDays, setStreakDays] = useState(7);
+  const [basketsRemainingForStreak, setBasketsRemainingForStreak] = useState(14);
+  const [rewardProgress, setRewardProgress] = useState(683);
+  const [achievementPopup, setAchievementPopup] = useState(null);
   const [hqLiveFeed, setHqLiveFeed] = useState(() =>
     HQ_LIVE_TRANSACTIONS.slice(0, 4).map((entry, index) => ({
       id: `seed-${index}`,
       time: `14:3${index}`,
       district: entry.district,
       items: entry.items,
+      line: formatHqFeedEntry(`14:3${index}`, entry.district, entry.items),
     }))
   );
 
-  const handleDetectedBarcode = async (barcode) => {
+  const showAchievement = (achievement) => {
+    window.clearTimeout(achievementTimerRef.current);
+    setAchievementPopup(achievement);
+    achievementTimerRef.current = window.setTimeout(() => {
+      setAchievementPopup(null);
+    }, ACHIEVEMENT_DURATION_MS);
+  };
+
+  const pushHqFeedEntry = (district, summary) => {
+    const now = new Date();
+    const time = now.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      time,
+      district,
+      items: summary,
+      line: formatHqFeedEntry(time, district, summary),
+    };
+
+    setHqLiveFeed((currentFeed) => [entry, ...currentFeed].slice(0, 10));
+  };
+
+  const appendScannedItem = (barcode, productDetails) => {
+    setScannedItems((currentItems) => [
+      buildScannedItem(barcode, productDetails),
+      ...currentItems,
+    ]);
+  };
+
+  const flashScanFeedback = (nextState, duration = SCAN_FEEDBACK_DURATION_MS) => {
+    window.clearTimeout(scanFeedbackTimerRef.current);
+    setScanFeedbackState(nextState);
+
+    if (duration) {
+      scanFeedbackTimerRef.current = window.setTimeout(() => {
+        setScanFeedbackState("idle");
+      }, duration);
+    }
+  };
+
+  const vibrateOnScan = () => {
+    window.navigator?.vibrate?.(24);
+  };
+
+  const processBarcode = useEffectEvent(async (barcode) => {
     const trimmedBarcode = barcode?.trim();
 
     if (!trimmedBarcode || pendingBarcodesRef.current.has(trimmedBarcode)) {
@@ -358,7 +572,8 @@ export default function App() {
     recentScansRef.current.set(trimmedBarcode, now);
     pendingBarcodesRef.current.add(trimmedBarcode);
     setIsLookingUp(true);
-    setScanStatus(`Detected ${trimmedBarcode}. Looking up product...`);
+    flashScanFeedback("processing", 0);
+    setScanStatus("Barcode detected. Looking up product...");
 
     try {
       const response = await fetch(
@@ -369,7 +584,7 @@ export default function App() {
       );
       const data = await response.json();
       const fallbackProduct = FALLBACK_PRODUCTS[trimmedBarcode];
-      const foundProduct =
+      const productDetails =
         response.ok && data?.status === 1 && data?.product
           ? normalizeProduct(data.product)
           : fallbackProduct || {
@@ -378,15 +593,14 @@ export default function App() {
               quantity: "Unknown quantity",
             };
 
-      setScannedItems((currentItems) => [
-        buildScannedItem(trimmedBarcode, foundProduct),
-        ...currentItems,
-      ]);
+      appendScannedItem(trimmedBarcode, productDetails);
+      vibrateOnScan();
+      flashScanFeedback("success");
 
       setScanStatus(
-        foundProduct.name === "Unknown Product"
-          ? `Barcode ${trimmedBarcode} not found. Add a name manually.`
-          : `Added ${foundProduct.name}. Keep scanning.`
+        productDetails.name === "Unknown Product"
+          ? `We couldn't match that barcode. Add a name manually.`
+          : `Added ${productDetails.name}. Ready for the next item.`
       );
     } catch {
       const fallbackProduct = FALLBACK_PRODUCTS[trimmedBarcode] || {
@@ -395,27 +609,74 @@ export default function App() {
         quantity: "Unknown quantity",
       };
 
-      setScannedItems((currentItems) => [
-        buildScannedItem(trimmedBarcode, fallbackProduct),
-        ...currentItems,
-      ]);
-
+      appendScannedItem(trimmedBarcode, fallbackProduct);
+      vibrateOnScan();
+      flashScanFeedback("success");
       setScanStatus(
         fallbackProduct.name === "Unknown Product"
           ? "Lookup failed. You can still add the product manually."
-          : `Added ${fallbackProduct.name} from fallback catalog.`
+          : `Added ${fallbackProduct.name} from the offline catalog.`
       );
     } finally {
       pendingBarcodesRef.current.delete(trimmedBarcode);
       setIsLookingUp(false);
     }
+  });
+
+  const runDemoScanStep = (entry, isLast) => {
+    setIsLookingUp(true);
+    flashScanFeedback("processing", 0);
+    setScanStatus("Barcode detected. Looking up product...");
+
+    const resolveTimer = window.setTimeout(() => {
+      appendScannedItem(entry.barcode, entry.product);
+      setIsLookingUp(false);
+      vibrateOnScan();
+      flashScanFeedback("success");
+      setScanStatus(
+        isLast
+          ? `Added ${entry.product.name}. Demo basket ready to log.`
+          : `Added ${entry.product.name}. Continuing demo scan...`
+      );
+
+      if (isLast) {
+        setDemoModeRunning(false);
+        setPulseLogButton(true);
+      }
+    }, 450);
+
+    demoTimersRef.current.push(resolveTimer);
   };
+
+  useEffect(() => {
+    splashFadeTimerRef.current = window.setTimeout(() => {
+      setSplashFading(true);
+    }, SPLASH_DURATION_MS - SPLASH_FADE_MS);
+
+    splashHideTimerRef.current = window.setTimeout(() => {
+      setShowSplash(false);
+    }, SPLASH_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(splashFadeTimerRef.current);
+      window.clearTimeout(splashHideTimerRef.current);
+      window.clearTimeout(logResetTimerRef.current);
+      window.clearTimeout(achievementTimerRef.current);
+      window.clearTimeout(scanFeedbackTimerRef.current);
+      demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      window.clearInterval(hqFeedIntervalRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    isLookingUpRef.current = isLookingUp;
+  }, [isLookingUp]);
 
   useEffect(() => {
     const recentScans = recentScansRef.current;
     const pendingBarcodes = pendingBarcodesRef.current;
 
-    if (activeMode !== "cashier" || activeCashierTab !== "scan") {
+    if (showSplash || activeMode !== "cashier" || activeCashierTab !== "scan") {
       mountedRef.current = false;
       controlsRef.current?.stop?.();
       readerRef.current?.reset?.();
@@ -427,36 +688,37 @@ export default function App() {
     const startScanner = async () => {
       try {
         setScanStatus("Loading barcode scanner...");
-        const zxing = await import(/* @vite-ignore */ ZXING_CDN_URL);
+        const reader = new BrowserMultiFormatOneDReader(
+          new Map([[DecodeHintType.POSSIBLE_FORMATS, RETAIL_BARCODE_FORMATS]]),
+          {
+            delayBetweenScanAttempts: 70,
+            delayBetweenScanSuccess: 350,
+            tryPlayVideoTimeout: 3000,
+          }
+        );
+        readerRef.current = reader;
 
         if (!mountedRef.current || !videoRef.current) {
           return;
         }
 
-        const BrowserMultiFormatReader =
-          zxing.BrowserMultiFormatReader ||
-          zxing.default?.BrowserMultiFormatReader;
-
-        if (!BrowserMultiFormatReader) {
-          throw new Error("Scanner library failed to load.");
-        }
-
-        const reader = new BrowserMultiFormatReader();
-        readerRef.current = reader;
-
-        setScanStatus("Point the camera at a barcode.");
+        setScanFeedbackState("idle");
+        setScanStatus("Center the barcode in the frame.");
 
         const controls = await reader.decodeFromConstraints(
           {
             audio: false,
             video: {
               facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 24, max: 30 },
             },
           },
           videoRef.current,
           (result, error) => {
             if (result) {
-              void handleDetectedBarcode(result.getText());
+              void processBarcode(result.getText());
               return;
             }
 
@@ -464,15 +726,45 @@ export default function App() {
               return;
             }
 
-            if (error && mountedRef.current) {
-              setScanStatus("Scanning... hold steady over the barcode.");
+            if (error && mountedRef.current && !isLookingUpRef.current) {
+              setScanStatus("Align the barcode and hold steady.");
             }
           }
         );
 
         controlsRef.current = controls;
+
+        try {
+          const selectVideoTrack = (track) => track.kind === "video";
+          const capabilities = controls.streamVideoCapabilitiesGet?.(selectVideoTrack);
+          const advancedConstraints = {};
+
+          if (
+            Array.isArray(capabilities?.focusMode) &&
+            capabilities.focusMode.includes("continuous")
+          ) {
+            advancedConstraints.focusMode = "continuous";
+          }
+
+          if (
+            Array.isArray(capabilities?.exposureMode) &&
+            capabilities.exposureMode.includes("continuous")
+          ) {
+            advancedConstraints.exposureMode = "continuous";
+          }
+
+          if (Object.keys(advancedConstraints).length > 0) {
+            await controls.streamVideoConstraintsApply?.(
+              { advanced: [advancedConstraints] },
+              selectVideoTrack
+            );
+          }
+        } catch {
+          // Ignore unsupported camera capabilities and continue with defaults.
+        }
       } catch (error) {
         if (mountedRef.current) {
+          setScanFeedbackState("idle");
           setScanStatus(
             error?.message ||
               "Camera unavailable. Please allow camera access and refresh."
@@ -490,34 +782,23 @@ export default function App() {
       recentScans.clear();
       pendingBarcodes.clear();
     };
-  }, [activeMode, activeCashierTab]);
+  }, [activeMode, activeCashierTab, showSplash]);
 
   useEffect(() => {
     if (activeMode !== "hq") {
+      window.clearInterval(hqFeedIntervalRef.current);
       return undefined;
     }
 
-    const intervalId = window.setInterval(() => {
+    hqFeedIntervalRef.current = window.setInterval(() => {
       const nextIndex = hqFeedIndexRef.current % HQ_LIVE_TRANSACTIONS.length;
       const nextTemplate = HQ_LIVE_TRANSACTIONS[nextIndex];
-      const now = new Date();
-      const feedItem = {
-        id: `${Date.now()}-${nextIndex}`,
-        time: now.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }),
-        district: nextTemplate.district,
-        items: nextTemplate.items,
-      };
-
       hqFeedIndexRef.current += 1;
-      setHqLiveFeed((currentFeed) => [feedItem, ...currentFeed].slice(0, 10));
-    }, 6000);
+      pushHqFeedEntry(nextTemplate.district, nextTemplate.items);
+    }, HQ_FEED_INTERVAL_MS);
 
     return () => {
-      window.clearInterval(intervalId);
+      window.clearInterval(hqFeedIntervalRef.current);
     };
   }, [activeMode]);
 
@@ -529,6 +810,98 @@ export default function App() {
     );
   };
 
+  const handleModeToggle = (mode) => {
+    startTransition(() => {
+      setActiveMode(mode);
+    });
+  };
+
+  const handleDemoMode = () => {
+    if (demoModeRunning) {
+      return;
+    }
+
+    demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    demoTimersRef.current = [];
+    setScannedItems([]);
+    setPulseLogButton(false);
+    setDemoModeRunning(true);
+    flashScanFeedback("idle");
+    setScanStatus("Demo mode: simulating cashier flow...");
+
+    DEMO_SEQUENCE.forEach((entry, index) => {
+      const timerId = window.setTimeout(() => {
+        runDemoScanStep(entry, index === DEMO_SEQUENCE.length - 1);
+      }, DEMO_STEP_DELAY_MS * index);
+
+      demoTimersRef.current.push(timerId);
+    });
+  };
+
+  const handleLogBasket = () => {
+    if (!scannedItems.length) {
+      return;
+    }
+
+    const basketSummary = getBasketSummaryLabels(scannedItems).join(" + ");
+    pushHqFeedEntry("Narimanov", basketSummary);
+    setPulseLogButton(false);
+    setStreakDays((currentDays) => currentDays + 1);
+    setStoreStats((currentStats) => ({
+      today: currentStats.today + 1,
+      week: currentStats.week + 1,
+      month: currentStats.month + 1,
+    }));
+    setRewardProgress((currentProgress) => Math.min(1000, currentProgress + 1));
+    setBasketsRemainingForStreak((currentValue) => Math.max(0, currentValue - 1));
+    setTopProductsToday((currentProducts) => {
+      const nextProducts = currentProducts.map((product) => ({ ...product }));
+
+      scannedItems.forEach((item) => {
+        const label = getProductLabel(
+          item.isUnknown ? item.customName.trim() || item.name : item.name,
+          item.quantity
+        );
+        const productMatch = nextProducts.find(
+          (product) => product.name === label
+        );
+
+        if (productMatch) {
+          productMatch.scans += 1;
+        }
+      });
+
+      return nextProducts;
+    });
+    setMyStorePeakHours((currentHours) =>
+      currentHours.map((entry) => {
+        const hour = new Date().getHours();
+        const targetLabel = String(hour).padStart(2, "0");
+
+        return entry.hour === targetLabel
+          ? { ...entry, baskets: entry.baskets + 1 }
+          : entry;
+      })
+    );
+    sessionLoggedBasketsRef.current += 1;
+
+    if (sessionLoggedBasketsRef.current === 1) {
+      showAchievement({
+        title: "Basket Builder",
+        description:
+          "First basket logged today. Keep scanning to accelerate reward progress.",
+      });
+    }
+
+    setScanStatus("Basket logged. Ready for next customer.");
+    window.clearTimeout(logResetTimerRef.current);
+    logResetTimerRef.current = window.setTimeout(() => {
+      setScannedItems([]);
+      setScanStatus("Center the barcode in the frame.");
+      setScanFeedbackState("idle");
+    }, LOG_RESET_DELAY_MS);
+  };
+
   const currentDistrictRows = DISTRICT_RANKINGS[rankingsRange];
   const currentCityRows = CITY_LEADERBOARD[rankingsRange];
   const currentCityRank = CURRENT_STORE_CITY_RANK[rankingsRange];
@@ -538,6 +911,7 @@ export default function App() {
       : rankingsRange === "month"
         ? "This Month"
         : "All Time";
+  const rewardProgressPercent = (rewardProgress / 1000) * 100;
 
   return (
     <div className="app-shell">
@@ -547,11 +921,12 @@ export default function App() {
           --scan-red: ${PRIMARY_RED};
           --scan-red-soft: rgba(230, 28, 36, 0.08);
           --scan-red-border: rgba(230, 28, 36, 0.18);
-          --scan-ink: #111111;
+          --scan-red-dark: #a01118;
+          --scan-ink: #121212;
           --scan-muted: #6b6b6b;
           --scan-panel: #ffffff;
           --scan-bg: #f5f6f8;
-          --scan-line: rgba(17, 17, 17, 0.07);
+          --scan-line: rgba(18, 18, 18, 0.07);
           --scan-green: ${SUCCESS_GREEN};
         }
 
@@ -591,6 +966,10 @@ export default function App() {
           max-width: 1320px;
         }
 
+        .mode-scene {
+          animation: modeSwap 320ms ease;
+        }
+
         .topbar {
           display: flex;
           flex-direction: column;
@@ -612,8 +991,8 @@ export default function App() {
         }
 
         .logo-mark {
-          width: 38px;
-          height: 38px;
+          width: 40px;
+          height: 40px;
           border-radius: 14px;
           background: linear-gradient(180deg, #ff4d57, var(--scan-red));
           color: #fff;
@@ -652,33 +1031,67 @@ export default function App() {
           font-weight: 700;
         }
 
-        .mode-switch {
+        .mode-switcher {
+          padding: 10px;
+          border-radius: 22px;
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid var(--scan-line);
+          box-shadow: 0 12px 28px rgba(17, 17, 17, 0.06);
+        }
+
+        .mode-switcher-label {
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 10px;
+        }
+
+        .mode-track {
+          position: relative;
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 6px;
           padding: 6px;
-          background: rgba(255, 255, 255, 0.82);
-          border: 1px solid var(--scan-line);
           border-radius: 18px;
-          box-shadow: 0 12px 28px rgba(17, 17, 17, 0.06);
+          background: #f4f6f8;
+        }
+
+        .mode-thumb {
+          position: absolute;
+          top: 6px;
+          left: 6px;
+          width: calc(50% - 6px);
+          height: calc(100% - 12px);
+          border-radius: 14px;
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.2), rgba(230, 28, 36, 0.08));
+          box-shadow: inset 0 0 0 1px rgba(230, 28, 36, 0.12);
+          transform: translateX(0);
+          transition: transform 260ms ease;
+          pointer-events: none;
+        }
+
+        .mode-thumb.hq {
+          transform: translateX(100%);
         }
 
         .mode-button {
+          position: relative;
+          z-index: 1;
           border: none;
-          border-radius: 12px;
+          border-radius: 14px;
           padding: 12px 10px;
           background: transparent;
           color: var(--scan-muted);
           font-size: 0.82rem;
-          font-weight: 700;
+          font-weight: 800;
           letter-spacing: 0.03em;
-          transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+          transition: color 180ms ease;
         }
 
         .mode-button.active {
-          background: linear-gradient(135deg, rgba(230, 28, 36, 0.15), rgba(230, 28, 36, 0.08));
-          color: var(--scan-red);
-          box-shadow: inset 0 0 0 1px rgba(230, 28, 36, 0.15);
+          color: var(--scan-red-dark);
         }
 
         .panel {
@@ -691,6 +1104,14 @@ export default function App() {
 
         .panel-body {
           padding: 18px;
+        }
+
+        .screen-stack,
+        .rewards-stack,
+        .rankings-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
         }
 
         .camera-frame {
@@ -731,6 +1152,12 @@ export default function App() {
           font-size: 0.86rem;
           line-height: 1.35;
           color: #242424;
+          transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+        }
+
+        .status-badge.processing {
+          background: rgba(255, 245, 245, 0.94);
+          box-shadow: 0 10px 24px rgba(230, 28, 36, 0.14);
         }
 
         .spinner {
@@ -745,12 +1172,13 @@ export default function App() {
 
         .scan-window {
           align-self: center;
-          width: 80%;
-          height: 126px;
+          width: min(88%, 360px);
+          height: 142px;
           border-radius: 22px;
           border: 2px solid rgba(255, 255, 255, 0.96);
           box-shadow: 0 0 0 999px rgba(17, 17, 17, 0.25);
           position: relative;
+          transition: transform 200ms ease, border-color 180ms ease, box-shadow 180ms ease;
         }
 
         .scan-window::after {
@@ -765,6 +1193,82 @@ export default function App() {
           animation: pulse 1.9s ease-in-out infinite;
         }
 
+        .scan-window.processing {
+          transform: scale(1.01);
+          border-color: rgba(255, 226, 228, 0.98);
+        }
+
+        .scan-window.success {
+          border-color: rgba(25, 165, 90, 0.98);
+          box-shadow:
+            0 0 0 999px rgba(17, 17, 17, 0.22),
+            0 0 0 6px rgba(25, 165, 90, 0.16);
+        }
+
+        .scan-window.success::after {
+          background: rgba(25, 165, 90, 0.95);
+          box-shadow: 0 0 18px rgba(25, 165, 90, 0.45);
+        }
+
+        .scan-corners {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+        }
+
+        .scan-corners span {
+          position: absolute;
+          width: 24px;
+          height: 24px;
+          border-color: rgba(255, 255, 255, 0.96);
+          border-style: solid;
+          border-width: 0;
+        }
+
+        .scan-corners span:nth-child(1) {
+          top: 10px;
+          left: 10px;
+          border-top-width: 4px;
+          border-left-width: 4px;
+          border-top-left-radius: 10px;
+        }
+
+        .scan-corners span:nth-child(2) {
+          top: 10px;
+          right: 10px;
+          border-top-width: 4px;
+          border-right-width: 4px;
+          border-top-right-radius: 10px;
+        }
+
+        .scan-corners span:nth-child(3) {
+          right: 10px;
+          bottom: 10px;
+          border-right-width: 4px;
+          border-bottom-width: 4px;
+          border-bottom-right-radius: 10px;
+        }
+
+        .scan-corners span:nth-child(4) {
+          left: 10px;
+          bottom: 10px;
+          border-bottom-width: 4px;
+          border-left-width: 4px;
+          border-bottom-left-radius: 10px;
+        }
+
+        .camera-guidance {
+          align-self: center;
+          max-width: 88%;
+          padding: 10px 12px;
+          border-radius: 14px;
+          background: rgba(17, 17, 17, 0.36);
+          color: rgba(255, 255, 255, 0.96);
+          font-size: 0.8rem;
+          line-height: 1.35;
+          text-align: center;
+        }
+
         .section-head {
           display: flex;
           align-items: center;
@@ -773,7 +1277,8 @@ export default function App() {
           padding: 18px 18px 10px;
         }
 
-        .section-title {
+        .section-title,
+        .leaderboard-title {
           font-size: 1rem;
           font-weight: 800;
         }
@@ -783,23 +1288,22 @@ export default function App() {
           color: var(--scan-muted);
         }
 
-        .screen-stack {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .items-list {
+        .items-list,
+        .history-list,
+        .leaderboard-list {
           list-style: none;
           margin: 0;
-          padding: 0 12px 12px;
+          padding: 0;
           display: flex;
           flex-direction: column;
           gap: 10px;
         }
 
         .item-card,
-        .empty-card {
+        .empty-card,
+        .pair-card,
+        .history-item,
+        .leaderboard-row {
           border-radius: 18px;
           border: 1px solid rgba(17, 17, 17, 0.06);
           background: #fff;
@@ -839,9 +1343,17 @@ export default function App() {
           line-height: 1.28;
         }
 
-        .item-meta {
+        .item-meta,
+        .hq-copy,
+        .pairs-copy,
+        .pair-subtitle,
+        .reward-progress-copy,
+        .reward-preview-copy,
+        .history-date,
+        .champion-copy,
+        .city-rank-copy {
           font-size: 0.9rem;
-          line-height: 1.35;
+          line-height: 1.45;
           color: var(--scan-muted);
         }
 
@@ -883,59 +1395,31 @@ export default function App() {
           font-weight: 800;
           letter-spacing: 0.05em;
           box-shadow: 0 14px 28px rgba(230, 28, 36, 0.3);
+          transition: transform 180ms ease, box-shadow 180ms ease;
         }
 
-        .hq-panel {
-          padding: 22px;
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
+        .cta-button.pulsing {
+          animation: pulseButton 1.2s ease-in-out infinite;
         }
 
-        .hq-kicker {
-          font-size: 0.8rem;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: var(--scan-red);
-        }
-
-        .hq-title {
-          font-size: 1.45rem;
-          font-weight: 800;
-          line-height: 1.2;
-        }
-
-        .hq-copy {
-          color: var(--scan-muted);
-          line-height: 1.55;
-        }
-
-        .hq-mock {
-          display: grid;
-          gap: 12px;
-          margin-top: 6px;
-        }
-
-        .hq-mock-card {
-          border-radius: 18px;
-          padding: 16px;
-          background: linear-gradient(180deg, #15191f, #1f252d);
+        .demo-button {
+          position: fixed;
+          right: 18px;
+          bottom: 102px;
+          z-index: 18;
+          border: none;
+          border-radius: 999px;
+          padding: 11px 14px;
+          background: rgba(18, 20, 24, 0.95);
           color: #fff;
-          box-shadow: 0 14px 30px rgba(17, 17, 17, 0.18);
-        }
-
-        .hq-mock-label {
-          font-size: 0.78rem;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: rgba(255, 255, 255, 0.6);
-          margin-bottom: 8px;
-        }
-
-        .hq-mock-value {
-          font-size: 1.5rem;
+          font-size: 0.76rem;
           font-weight: 800;
+          letter-spacing: 0.05em;
+          box-shadow: 0 14px 28px rgba(17, 17, 17, 0.24);
+        }
+
+        .demo-button:disabled {
+          opacity: 0.72;
         }
 
         .stats-grid {
@@ -944,21 +1428,24 @@ export default function App() {
           gap: 10px;
         }
 
-        .stat-card {
+        .stat-card,
+        .hq-metric-card {
           padding: 14px 12px;
           border-radius: 18px;
           background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.02));
           border: 1px solid rgba(230, 28, 36, 0.12);
         }
 
-        .stat-label {
+        .stat-label,
+        .hq-metric-label {
           font-size: 0.72rem;
           line-height: 1.3;
           color: var(--scan-muted);
           margin-bottom: 10px;
         }
 
-        .stat-value {
+        .stat-value,
+        .hq-metric-value {
           font-size: 1.3rem;
           font-weight: 800;
           color: var(--scan-red);
@@ -986,44 +1473,39 @@ export default function App() {
           gap: 12px;
         }
 
-        .pairs-copy {
-          font-size: 0.9rem;
-          color: var(--scan-muted);
-        }
-
         .pair-card {
           padding: 14px;
-          border-radius: 18px;
-          border: 1px solid rgba(17, 17, 17, 0.06);
-          background: #fff;
         }
 
-        .pair-topline {
+        .pair-topline,
+        .reward-level,
+        .topbar-row,
+        .history-item,
+        .leaderboard-row,
+        .transaction-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          margin-bottom: 8px;
         }
 
-        .pair-title {
+        .pair-title,
+        .history-title,
+        .achievement-title,
+        .hq-card-title {
           font-size: 0.96rem;
           font-weight: 800;
         }
 
-        .pair-percent {
+        .pair-percent,
+        .city-rank-title {
           font-size: 0.88rem;
           font-weight: 800;
           color: var(--scan-red);
         }
 
-        .pair-subtitle {
-          font-size: 0.88rem;
-          color: var(--scan-muted);
-          margin-bottom: 10px;
-        }
-
-        .pair-progress {
+        .pair-progress,
+        .reward-progress-track {
           width: 100%;
           height: 10px;
           border-radius: 999px;
@@ -1031,38 +1513,16 @@ export default function App() {
           overflow: hidden;
         }
 
-        .pair-progress-fill {
+        .pair-progress-fill,
+        .reward-progress-fill {
           height: 100%;
           border-radius: inherit;
           background: linear-gradient(90deg, var(--scan-red), #ff6c74);
+          transition: width 480ms ease;
         }
 
-        .alert-card {
-          border: 2px solid rgba(230, 28, 36, 0.3);
-          box-shadow: 0 16px 34px rgba(230, 28, 36, 0.08);
-        }
-
-        .alert-title {
-          font-size: 0.8rem;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--scan-red);
-          margin-bottom: 8px;
-        }
-
-        .alert-copy {
-          font-size: 0.96rem;
-          line-height: 1.45;
-        }
-
-        .rewards-stack {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .streak-banner {
+        .streak-banner,
+        .rank-card {
           padding: 20px 18px;
           border-radius: 24px;
           background: linear-gradient(135deg, #ff5a63, var(--scan-red));
@@ -1070,36 +1530,38 @@ export default function App() {
           box-shadow: 0 18px 38px rgba(230, 28, 36, 0.24);
         }
 
-        .streak-emoji {
+        .rank-card {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.16), rgba(230, 28, 36, 0.05));
+          color: var(--scan-ink);
+        }
+
+        .streak-emoji,
+        .rank-medal {
           font-size: 2rem;
           line-height: 1;
           margin-bottom: 8px;
         }
 
-        .streak-title {
+        .streak-title,
+        .rank-title {
           font-size: 1.5rem;
           font-weight: 800;
           margin-bottom: 6px;
+          line-height: 1.2;
         }
 
         .streak-copy,
-        .streak-countdown {
+        .streak-countdown,
+        .rank-subtitle,
+        .rank-trend,
+        .hq-subcopy {
           font-size: 0.94rem;
           line-height: 1.45;
         }
 
-        .streak-countdown {
-          margin-top: 10px;
+        .streak-countdown,
+        .rank-trend {
           font-weight: 700;
-          color: rgba(255, 255, 255, 0.92);
-        }
-
-        .reward-level {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 12px;
         }
 
         .reward-level-title {
@@ -1117,28 +1579,6 @@ export default function App() {
           padding: 8px 10px;
         }
 
-        .reward-progress-track {
-          width: 100%;
-          height: 12px;
-          border-radius: 999px;
-          overflow: hidden;
-          background: rgba(17, 17, 17, 0.08);
-          margin-bottom: 10px;
-        }
-
-        .reward-progress-fill {
-          width: 68.3%;
-          height: 100%;
-          border-radius: inherit;
-          background: linear-gradient(90deg, #c6cbd3, #8e96a4);
-        }
-
-        .reward-progress-copy {
-          font-size: 0.9rem;
-          color: var(--scan-muted);
-          margin-bottom: 10px;
-        }
-
         .reward-preview {
           padding: 14px;
           border-radius: 18px;
@@ -1146,19 +1586,17 @@ export default function App() {
           border: 1px solid rgba(17, 17, 17, 0.06);
         }
 
-        .reward-preview-title {
-          font-size: 0.82rem;
+        .reward-preview-title,
+        .claim-code-label,
+        .champion-title,
+        .hq-label,
+        .mode-switcher-label {
+          font-size: 0.78rem;
           font-weight: 800;
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--scan-red);
           margin-bottom: 8px;
-        }
-
-        .reward-preview-copy {
-          font-size: 0.92rem;
-          line-height: 1.45;
-          color: #424242;
         }
 
         .claim-card {
@@ -1191,15 +1629,6 @@ export default function App() {
           border-radius: 14px;
           background: rgba(255, 255, 255, 0.86);
           border: 1px dashed rgba(15, 156, 83, 0.4);
-        }
-
-        .claim-code-label {
-          font-size: 0.76rem;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: #0d7d42;
-          margin-bottom: 6px;
         }
 
         .claim-code-value {
@@ -1239,90 +1668,19 @@ export default function App() {
           margin-bottom: 10px;
         }
 
-        .achievement-title {
-          font-size: 0.92rem;
-          font-weight: 800;
-          margin-bottom: 6px;
-        }
-
         .achievement-subtitle {
           font-size: 0.82rem;
           line-height: 1.4;
           color: inherit;
         }
 
-        .history-list {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
         .history-item {
           padding: 14px;
-          border-radius: 16px;
-          border: 1px solid rgba(17, 17, 17, 0.06);
-          background: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-        }
-
-        .history-title {
-          font-size: 0.9rem;
-          font-weight: 700;
-        }
-
-        .history-date {
-          font-size: 0.82rem;
-          color: var(--scan-muted);
-          white-space: nowrap;
-        }
-
-        .rankings-stack {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
         }
 
         .rank-card {
-          padding: 20px 18px;
-          border-radius: 24px;
-          background: linear-gradient(135deg, rgba(230, 28, 36, 0.14), rgba(230, 28, 36, 0.04));
           border: 1px solid rgba(230, 28, 36, 0.14);
           box-shadow: 0 18px 36px rgba(230, 28, 36, 0.08);
-        }
-
-        .rank-medal {
-          font-size: 2rem;
-          line-height: 1;
-          margin-bottom: 8px;
-        }
-
-        .rank-title {
-          font-size: 1.34rem;
-          font-weight: 800;
-          line-height: 1.25;
-          margin-bottom: 8px;
-        }
-
-        .rank-subtitle,
-        .rank-trend {
-          font-size: 0.92rem;
-          line-height: 1.45;
-        }
-
-        .rank-subtitle {
-          color: #4e4e4e;
-          margin-bottom: 6px;
-        }
-
-        .rank-trend {
-          color: #16814a;
-          font-weight: 700;
         }
 
         .champion-preview {
@@ -1330,21 +1688,6 @@ export default function App() {
           border-radius: 18px;
           background: #fff7f7;
           border: 1px dashed rgba(230, 28, 36, 0.24);
-        }
-
-        .champion-title {
-          font-size: 0.82rem;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--scan-red);
-          margin-bottom: 8px;
-        }
-
-        .champion-copy {
-          font-size: 0.9rem;
-          line-height: 1.45;
-          color: #4f4f4f;
         }
 
         .switch-row {
@@ -1373,29 +1716,11 @@ export default function App() {
           border-color: rgba(230, 28, 36, 0.16);
         }
 
-        .leaderboard-title {
-          font-size: 1rem;
-          font-weight: 800;
-        }
-
-        .leaderboard-list {
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
         .leaderboard-row {
           display: grid;
           grid-template-columns: auto minmax(0, 1fr) auto;
-          gap: 12px;
           align-items: center;
           padding: 14px;
-          border-radius: 18px;
-          border: 1px solid rgba(17, 17, 17, 0.06);
-          background: #fff;
         }
 
         .leaderboard-row.you {
@@ -1416,10 +1741,6 @@ export default function App() {
           font-size: 0.95rem;
           font-weight: 800;
           min-width: 64px;
-        }
-
-        .leaderboard-store {
-          min-width: 0;
         }
 
         .leaderboard-store-name {
@@ -1443,7 +1764,8 @@ export default function App() {
           padding: 4px 6px;
         }
 
-        .leaderboard-delta {
+        .leaderboard-delta,
+        .leaderboard-score-label {
           margin-top: 4px;
           font-size: 0.8rem;
           color: var(--scan-muted);
@@ -1459,30 +1781,12 @@ export default function App() {
           white-space: nowrap;
         }
 
-        .leaderboard-score-label {
-          font-size: 0.76rem;
-          color: var(--scan-muted);
-        }
-
         .city-rank-card {
           padding: 14px;
           border-radius: 18px;
           background: #f7f8fb;
           border: 1px solid rgba(17, 17, 17, 0.06);
           margin-top: 12px;
-        }
-
-        .city-rank-title {
-          font-size: 0.88rem;
-          font-weight: 800;
-          color: var(--scan-red);
-          margin-bottom: 4px;
-        }
-
-        .city-rank-copy {
-          font-size: 0.9rem;
-          line-height: 1.45;
-          color: #4b4b4b;
         }
 
         .hq-shell {
@@ -1524,15 +1828,6 @@ export default function App() {
           max-width: 700px;
         }
 
-        .hq-label {
-          font-size: 0.78rem;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: var(--scan-red);
-          margin-bottom: 10px;
-        }
-
         .hq-heading {
           font-size: 2rem;
           font-weight: 800;
@@ -1540,36 +1835,10 @@ export default function App() {
           margin-bottom: 8px;
         }
 
-        .hq-subcopy {
-          font-size: 0.98rem;
-          line-height: 1.55;
-          color: #5f6570;
-        }
-
         .hq-metrics {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 12px;
-        }
-
-        .hq-metric-card {
-          padding: 18px 16px;
-          border-radius: 20px;
-          background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.02));
-          border: 1px solid rgba(230, 28, 36, 0.12);
-        }
-
-        .hq-metric-label {
-          font-size: 0.78rem;
-          color: #6b7079;
-          margin-bottom: 10px;
-        }
-
-        .hq-metric-value {
-          font-size: 1.48rem;
-          font-weight: 800;
-          line-height: 1.2;
-          color: #15191f;
         }
 
         .hq-grid {
@@ -1583,12 +1852,6 @@ export default function App() {
           border: 1px solid rgba(17, 17, 17, 0.06);
           background: #fff;
           padding: 18px;
-        }
-
-        .hq-card-title {
-          font-size: 1rem;
-          font-weight: 800;
-          margin-bottom: 6px;
         }
 
         .hq-card-copy {
@@ -1717,6 +1980,101 @@ export default function App() {
           color: #fff;
         }
 
+        .achievement-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          background: rgba(17, 17, 17, 0.44);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          backdrop-filter: blur(6px);
+        }
+
+        .achievement-confetti {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          pointer-events: none;
+        }
+
+        .confetti-piece {
+          position: absolute;
+          top: -30px;
+          width: 10px;
+          height: 22px;
+          border-radius: 4px;
+          animation: confettiFall 2.8s linear forwards;
+        }
+
+        .achievement-card-pop {
+          position: relative;
+          z-index: 1;
+          width: min(92vw, 420px);
+          padding: 28px 24px;
+          border-radius: 28px;
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.96), #c9151d);
+          color: #fff;
+          text-align: center;
+          box-shadow: 0 26px 56px rgba(17, 17, 17, 0.28);
+        }
+
+        .achievement-pop-kicker {
+          font-size: 0.84rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          margin-bottom: 10px;
+        }
+
+        .achievement-pop-title {
+          font-size: 1.6rem;
+          font-weight: 800;
+          margin-bottom: 10px;
+        }
+
+        .achievement-pop-copy {
+          font-size: 0.98rem;
+          line-height: 1.5;
+          color: rgba(255, 255, 255, 0.92);
+        }
+
+        .splash-screen {
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          background: var(--scan-red);
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: opacity ${SPLASH_FADE_MS}ms ease;
+        }
+
+        .splash-screen.fade-out {
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .splash-inner {
+          text-align: center;
+          padding: 24px;
+        }
+
+        .splash-title {
+          font-size: clamp(2.6rem, 6vw, 4.2rem);
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          margin-bottom: 12px;
+        }
+
+        .splash-tagline {
+          font-size: 1rem;
+          line-height: 1.5;
+          color: rgba(255, 255, 255, 0.92);
+        }
+
         @keyframes spin {
           to {
             transform: rotate(360deg);
@@ -1734,10 +2092,46 @@ export default function App() {
           }
         }
 
+        @keyframes pulseButton {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 14px 28px rgba(230, 28, 36, 0.3);
+          }
+          50% {
+            transform: scale(1.02);
+            box-shadow: 0 18px 34px rgba(230, 28, 36, 0.42);
+          }
+        }
+
         @keyframes feedSlide {
           0% {
             opacity: 0;
             transform: translateY(-10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes confettiFall {
+          0% {
+            opacity: 0;
+            transform: translateY(0) rotate(0deg);
+          }
+          10% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(110vh) rotate(420deg);
+          }
+        }
+
+        @keyframes modeSwap {
+          0% {
+            opacity: 0;
+            transform: translateY(10px);
           }
           100% {
             opacity: 1;
@@ -1757,6 +2151,19 @@ export default function App() {
         }
       `}</style>
 
+      {achievementPopup ? <AchievementOverlay achievement={achievementPopup} /> : null}
+
+      {showSplash ? (
+        <div className={`splash-screen ${splashFading ? "fade-out" : ""}`}>
+          <div className="splash-inner">
+            <div className="splash-title">SCAN</div>
+            <div className="splash-tagline">
+              Basket Intelligence for Every Store
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <main className={`screen ${activeMode === "hq" ? "hq-screen" : ""}`}>
         <header className="topbar">
           <div className="topbar-row">
@@ -1765,141 +2172,627 @@ export default function App() {
               <div className="logo-copy">SCAN</div>
             </div>
             <div className={`store-pill ${activeMode === "hq" ? "hq-pill" : ""}`}>
-              {activeMode === "hq" ? "CCI HQ — Baku Region" : STORE_NAME}
+              {activeMode === "hq" ? HQ_REGION_NAME : STORE_NAME}
             </div>
           </div>
 
-          <div className="mode-switch">
-            <button
-              className={`mode-button ${activeMode === "cashier" ? "active" : ""}`}
-              type="button"
-              onClick={() => setActiveMode("cashier")}
-            >
-              CASHIER MODE
-            </button>
-            <button
-              className={`mode-button ${activeMode === "hq" ? "active" : ""}`}
-              type="button"
-              onClick={() => setActiveMode("hq")}
-            >
-              HQ MODE
-            </button>
+          <div className="mode-switcher">
+            <div className="mode-switcher-label">CASHIER VIEW ↔ HQ VIEW</div>
+            <div className="mode-track">
+              <div className={`mode-thumb ${activeMode === "hq" ? "hq" : ""}`} />
+              <button
+                className={`mode-button ${activeMode === "cashier" ? "active" : ""}`}
+                type="button"
+                onClick={() => handleModeToggle("cashier")}
+              >
+                CASHIER VIEW
+              </button>
+              <button
+                className={`mode-button ${activeMode === "hq" ? "active" : ""}`}
+                type="button"
+                onClick={() => handleModeToggle("hq")}
+              >
+                HQ VIEW
+              </button>
+            </div>
           </div>
         </header>
 
-        {activeMode === "cashier" ? (
-          <div className="screen-stack">
-            {activeCashierTab === "scan" ? (
-              <>
-            <section className="panel">
-              <div className="camera-frame">
-                <video ref={videoRef} muted playsInline />
-                <div className="camera-overlay">
-                  <div className="status-badge">
-                    {isLookingUp ? <span className="spinner" aria-hidden="true" /> : null}
-                    <span>{scanStatus}</span>
-                  </div>
-                  <div className="scan-window" />
-                </div>
-              </div>
-            </section>
-
-            <section className="panel">
-              <div className="section-head">
-                <div className="section-title">Scanned Basket</div>
-                <div className="section-meta">{scannedItems.length} item(s)</div>
-              </div>
-
-              {scannedItems.length === 0 ? (
-                <div className="empty-card">
-                  Open the camera and scan a product barcode to start building the
-                  basket.
-                </div>
-              ) : (
-                <ul className="items-list">
-                  {scannedItems.map((item) => (
-                    <li className="item-card" key={item.id}>
-                      <div className="checkmark">✓</div>
-                      <div className="item-body">
-                        <div className="item-name">
-                          {item.isUnknown
-                            ? item.customName.trim() || "Unknown Product"
-                            : item.name}
+        <div className="mode-scene" key={activeMode}>
+          {activeMode === "cashier" ? (
+            <div className="screen-stack">
+              {activeCashierTab === "scan" ? (
+                <>
+                  <section className="panel">
+                    <div className="camera-frame">
+                      <video ref={videoRef} muted playsInline />
+                      <div className="camera-overlay">
+                        <div
+                          className={`status-badge ${
+                            scanFeedbackState === "processing" ? "processing" : ""
+                          }`}
+                        >
+                          {isLookingUp ? (
+                            <span className="spinner" aria-hidden="true" />
+                          ) : null}
+                          <span>{scanStatus}</span>
                         </div>
-                        <div className="item-meta">{item.brand}</div>
-                        <div className="item-meta">{item.quantity}</div>
-                        {item.isUnknown ? (
-                          <input
-                            className="unknown-input"
-                            type="text"
-                            placeholder="Type product name manually"
-                            value={item.customName}
-                            onChange={(event) =>
-                              updateUnknownProductName(item.id, event.target.value)
-                            }
-                          />
-                        ) : null}
+                        <div className={`scan-window ${scanFeedbackState}`}>
+                          <div className="scan-corners" aria-hidden="true">
+                            <span />
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        </div>
+                        <div className="camera-guidance">
+                          Keep the code flat, fill the frame, and move closer for
+                          small items.
+                        </div>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                    </div>
+                  </section>
 
-            {scannedItems.length > 0 ? (
-              <div className="cta-wrap">
-                <button className="cta-button" type="button">
-                  LOG BASKET
-                </button>
-              </div>
-            ) : null}
-              </>
-            ) : null}
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Scanned Basket</div>
+                      <div className="section-meta">{scannedItems.length} item(s)</div>
+                    </div>
 
-            {activeCashierTab === "store" ? (
-              <>
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">My Store Snapshot</div>
-                    <div className="section-meta">Only {STORE_NAME} data</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="stats-grid">
-                      {MY_STORE_STATS.map((stat) => (
-                        <div className="stat-card" key={stat.label}>
-                          <div className="stat-label">{stat.label}</div>
-                          <div className="stat-value">{stat.value}</div>
+                    {scannedItems.length === 0 ? (
+                      <div className="empty-card">
+                        Open the camera and scan a product barcode to start building the
+                        basket.
+                      </div>
+                    ) : (
+                      <ul className="items-list" style={{ padding: "0 12px 12px" }}>
+                        {scannedItems.map((item) => (
+                          <li className="item-card" key={item.id}>
+                            <div className="checkmark">✓</div>
+                            <div className="item-body">
+                              <div className="item-name">
+                                {item.isUnknown
+                                  ? item.customName.trim() || "Unknown Product"
+                                  : item.name}
+                              </div>
+                              <div className="item-meta">{item.brand}</div>
+                              <div className="item-meta">{item.quantity}</div>
+                              {item.isUnknown ? (
+                                <input
+                                  className="unknown-input"
+                                  type="text"
+                                  placeholder="Type product name manually"
+                                  value={item.customName}
+                                  onChange={(event) =>
+                                    updateUnknownProductName(item.id, event.target.value)
+                                  }
+                                />
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+
+                  {scannedItems.length > 0 ? (
+                    <div className="cta-wrap">
+                      <button
+                        className={`cta-button ${pulseLogButton ? "pulsing" : ""}`}
+                        type="button"
+                        onClick={handleLogBasket}
+                      >
+                        LOG BASKET
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {activeCashierTab === "store" ? (
+                <>
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">My Store Snapshot</div>
+                      <div className="section-meta">Only {STORE_NAME} data</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="stats-grid">
+                        <div className="stat-card">
+                          <div className="stat-label">Today's baskets</div>
+                          <div className="stat-value">{storeStats.today}</div>
                         </div>
-                      ))}
+                        <div className="stat-card">
+                          <div className="stat-label">This week</div>
+                          <div className="stat-value">{storeStats.week}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">This month</div>
+                          <div className="stat-value">{storeStats.month}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Top Products Today</div>
+                      <div className="section-meta">Most scanned in this store</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="chart-shell">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={topProductsToday}
+                            layout="vertical"
+                            margin={{ top: 4, right: 12, left: 18, bottom: 4 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                            <XAxis type="number" tickLine={false} axisLine={false} />
+                            <YAxis
+                              type="category"
+                              dataKey="name"
+                              width={110}
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 12, fill: "#4f4f4f" }}
+                            />
+                            <Tooltip
+                              cursor={{ fill: "rgba(230, 28, 36, 0.06)" }}
+                              contentStyle={{
+                                borderRadius: "14px",
+                                border: "1px solid rgba(17,17,17,0.08)",
+                                boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                              }}
+                            />
+                            <Bar
+                              dataKey="scans"
+                              radius={[0, 10, 10, 0]}
+                              fill={PRIMARY_RED}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Peak Hours Today</div>
+                      <div className="section-meta">08:00 - 21:00</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="chart-shell line-shell">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={myStorePeakHours}
+                            margin={{ top: 8, right: 12, left: -8, bottom: 2 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                            <XAxis
+                              dataKey="hour"
+                              tickFormatter={(value) => `${value}:00`}
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                            />
+                            <YAxis
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                            />
+                            <Tooltip
+                              formatter={(value) => [`${value} baskets`, "Volume"]}
+                              labelFormatter={(value) => `${value}:00`}
+                              contentStyle={{
+                                borderRadius: "14px",
+                                border: "1px solid rgba(17,17,17,0.08)",
+                                boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                              }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="baskets"
+                              stroke={PRIMARY_RED}
+                              strokeWidth={3}
+                              dot={{ r: 4, fill: PRIMARY_RED }}
+                              activeDot={{ r: 6 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="chart-footnote">
+                        Lunch and evening traffic stand out as the busiest periods in
+                        this store today.
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Top Pairs In My Store</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="pairs-wrap">
+                        <div className="pairs-copy">
+                          Your customers most often buy together:
+                        </div>
+                        {MY_STORE_TOP_PAIRS.map((pair) => (
+                          <div className="pair-card" key={pair.title}>
+                            <div className="pair-topline">
+                              <div className="pair-title">{pair.title}</div>
+                              <div className="pair-percent">{pair.percentage}%</div>
+                            </div>
+                            <div className="pair-subtitle">{pair.subtitle}</div>
+                            <div className="pair-progress">
+                              <div
+                                className="pair-progress-fill"
+                                style={{ width: `${pair.percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-body" style={{ border: "2px solid rgba(230, 28, 36, 0.3)", borderRadius: "24px" }}>
+                      <div className="champion-title">Restock Alert</div>
+                      <div className="alert-copy">
+                        Coca-Cola 330ml selling fast — consider restocking soon
+                      </div>
+                    </div>
+                  </section>
+                </>
+              ) : null}
+
+              {activeCashierTab === "rewards" ? (
+                <div className="rewards-stack">
+                  <section className="streak-banner">
+                    <div className="streak-emoji">🔥</div>
+                    <div className="streak-title">{streakDays} Day Streak!</div>
+                    <div className="streak-copy">
+                      Scan at least 5 baskets today to keep it alive
+                    </div>
+                    <div className="streak-countdown">
+                      {basketsRemainingForStreak} more baskets today to maintain streak
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Progress To Next Reward</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="reward-level">
+                        <div className="reward-level-title">Current level: SILVER 🥈</div>
+                        <div className="reward-level-chip">{rewardProgress}/1000 baskets</div>
+                      </div>
+                      <div className="reward-progress-track">
+                        <div
+                          className="reward-progress-fill"
+                          style={{ width: `${rewardProgressPercent}%` }}
+                        />
+                      </div>
+                      <div className="reward-progress-copy">
+                        {1000 - rewardProgress} baskets until GOLD 🥇
+                      </div>
+                      <div className="reward-preview">
+                        <div className="reward-preview-title">Gold reward preview</div>
+                        <div className="reward-preview-copy">
+                          10% discount on next CCI order + Priority delivery scheduling
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel claim-card">
+                    <div className="panel-body">
+                      <div className="claim-card-title">
+                        {CURRENT_REWARD.title}
+                      </div>
+                      <div className="hq-copy">
+                        Current unlocked reward for {STORE_NAME}. Claim it when you are
+                        ready to place the next order.
+                      </div>
+                      {hasClaimedReward ? (
+                        <div className="claim-code">
+                          <div className="claim-code-label">Claim code</div>
+                          <div className="claim-code-value">{CURRENT_REWARD.code}</div>
+                          <div className="claim-validity">
+                            {CURRENT_REWARD.validUntil}
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className="claim-button"
+                          type="button"
+                          onClick={() => setHasClaimedReward(true)}
+                        >
+                          CLAIM DISCOUNT
+                        </button>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Achievements</div>
+                      <div className="section-meta">Store progress only</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="achievements-grid">
+                        {ACHIEVEMENTS.map((achievement) => (
+                          <div
+                            className={`achievement-card ${
+                              achievement.unlocked ? "" : "locked"
+                            }`}
+                            key={achievement.title}
+                          >
+                            <div className="achievement-icon">{achievement.icon}</div>
+                            <div className="achievement-title">
+                              {achievement.title}
+                            </div>
+                            <div className="achievement-subtitle">
+                              {achievement.subtitle}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Reward History</div>
+                    </div>
+                    <div className="panel-body">
+                      <ul className="history-list">
+                        {REWARD_HISTORY.map((reward) => (
+                          <li className="history-item" key={`${reward.title}-${reward.date}`}>
+                            <div className="history-title">{reward.title}</div>
+                            <div className="history-date">{reward.date}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {activeCashierTab === "rankings" ? (
+                <div className="rankings-stack">
+                  <section className="rank-card">
+                    <div className="rank-medal">🥈</div>
+                    <div className="rank-title">You are #2 in Narimanov District</div>
+                    <div className="rank-subtitle">164 baskets behind #1</div>
+                    <div className="rank-trend">You moved up 2 places this week ↑</div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-body">
+                      <div className="champion-preview">
+                        <div className="champion-title">District Champion Preview</div>
+                        <div className="champion-copy">
+                          Reach #1 to unlock District Champion badge + free case of
+                          Coca-Cola.
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Leaderboard Range</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="switch-row">
+                        <button
+                          className={`mini-switch ${rankingsRange === "week" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsRange("week")}
+                        >
+                          This Week
+                        </button>
+                        <button
+                          className={`mini-switch ${rankingsRange === "month" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsRange("month")}
+                        >
+                          This Month
+                        </button>
+                        <button
+                          className={`mini-switch ${rankingsRange === "allTime" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsRange("allTime")}
+                        >
+                          All Time
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="leaderboard-title">
+                        {rankingsScope === "district"
+                          ? `🏆 Narimanov District — ${rankingsRangeLabel}`
+                          : "🏙️ Baku City Leaderboard"}
+                      </div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="switch-row scope-row">
+                        <button
+                          className={`mini-switch ${rankingsScope === "district" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsScope("district")}
+                        >
+                          District
+                        </button>
+                        <button
+                          className={`mini-switch ${rankingsScope === "city" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsScope("city")}
+                        >
+                          City
+                        </button>
+                      </div>
+
+                      {rankingsScope === "district" ? (
+                        <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
+                          {currentDistrictRows.map((row) => (
+                            <li
+                              className={`leaderboard-row ${row.isYou ? "you" : ""} ${
+                                row.muted ? "muted" : ""
+                              }`}
+                              key={`${rankingsRange}-${row.store}`}
+                            >
+                              <div className="leaderboard-rank">
+                                <span>#{row.rank}</span>
+                                <span>{row.medal || ""}</span>
+                              </div>
+                              <div className="leaderboard-store">
+                                <div className="leaderboard-store-name">
+                                  <span>{row.store}</span>
+                                  {row.isYou ? <span className="you-tag">YOU</span> : null}
+                                </div>
+                                <div className="leaderboard-delta">(+{row.delta} today)</div>
+                              </div>
+                              <div className="leaderboard-score">
+                                <div className="leaderboard-score-value">{row.baskets}</div>
+                                <div className="leaderboard-score-label">baskets</div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <>
+                          <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
+                            {currentCityRows.map((row) => (
+                              <li className="leaderboard-row" key={`${rankingsRange}-${row.store}`}>
+                                <div className="leaderboard-rank">
+                                  <span>#{row.rank}</span>
+                                </div>
+                                <div className="leaderboard-store">
+                                  <div className="leaderboard-store-name">
+                                    <span>{row.store}</span>
+                                  </div>
+                                  <div className="leaderboard-delta">(+{row.delta} today)</div>
+                                </div>
+                                <div className="leaderboard-score">
+                                  <div className="leaderboard-score-value">{row.baskets}</div>
+                                  <div className="leaderboard-score-label">baskets</div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+
+                          <div className="city-rank-card">
+                            <div className="city-rank-title">
+                              You are #{currentCityRank.rank} in Baku overall
+                            </div>
+                            <div className="city-rank-copy">
+                              {STORE_NAME} currently has {currentCityRank.baskets} baskets
+                              in this view, even though it is outside the top 10 city
+                              leaderboard.
+                            </div>
+                          </div>
+
+                          <ul className="leaderboard-list" style={{ marginTop: "12px" }}>
+                            <li className="leaderboard-row you">
+                              <div className="leaderboard-rank">
+                                <span>#{currentCityRank.rank}</span>
+                              </div>
+                              <div className="leaderboard-store">
+                                <div className="leaderboard-store-name">
+                                  <span>Store #47 — Narimanov</span>
+                                  <span className="you-tag">YOU</span>
+                                </div>
+                                <div className="leaderboard-delta">
+                                  (+{currentCityRank.delta} today)
+                                </div>
+                              </div>
+                              <div className="leaderboard-score">
+                                <div className="leaderboard-score-value">
+                                  {currentCityRank.baskets}
+                                </div>
+                                <div className="leaderboard-score-label">baskets</div>
+                              </div>
+                            </li>
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <section className="hq-shell">
+              <div className="hq-main">
+                <div className="hq-header">
+                  <div className="hq-header-copy">
+                    <div className="hq-label">CCI Headquarters Intelligence</div>
+                    <div className="hq-heading">SCAN Network Dashboard</div>
+                    <div className="hq-subcopy">
+                      Live basket intelligence across all active stores in Baku,
+                      focused on what customers buy with CCI products.
                     </div>
                   </div>
-                </section>
+                </div>
 
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Top Products Today</div>
-                    <div className="section-meta">Most scanned in this store</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="chart-shell">
+                <div className="hq-metrics">
+                  {HQ_METRICS.map((metric) => (
+                    <div className="hq-metric-card" key={metric.label}>
+                      <div className="hq-metric-label">{metric.label}</div>
+                      <div className="hq-metric-value">{metric.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hq-grid">
+                  <div className="hq-card">
+                    <div className="hq-card-title">
+                      What do customers buy with CCI products?
+                    </div>
+                    <div className="hq-card-copy">
+                      Basket pair analysis across the full network of anonymized
+                      stores.
+                    </div>
+                    <div className="hq-chart-shell">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
-                          data={MY_STORE_TOP_PRODUCTS}
+                          data={HQ_PAIR_ANALYSIS}
                           layout="vertical"
-                          margin={{ top: 4, right: 12, left: 18, bottom: 4 }}
+                          margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
-                          <XAxis type="number" tickLine={false} axisLine={false} />
-                          <YAxis
-                            type="category"
-                            dataKey="name"
-                            width={110}
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="rgba(17,17,17,0.08)"
+                          />
+                          <XAxis
+                            type="number"
                             tickLine={false}
                             axisLine={false}
-                            tick={{ fontSize: 12, fill: "#4f4f4f" }}
+                            domain={[0, 100]}
+                            tickFormatter={(value) => `${value}%`}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="label"
+                            width={170}
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#4d545f" }}
                           />
                           <Tooltip
-                            cursor={{ fill: "rgba(230, 28, 36, 0.06)" }}
+                            formatter={(value, _name, item) => {
+                              const suffix = item.payload.suffix
+                                ? ` ${item.payload.suffix}`
+                                : "";
+                              return [`${value}%${suffix}`, "Share"];
+                            }}
                             contentStyle={{
                               borderRadius: "14px",
                               border: "1px solid rgba(17,17,17,0.08)",
@@ -1907,7 +2800,7 @@ export default function App() {
                             }}
                           />
                           <Bar
-                            dataKey="scans"
+                            dataKey="percentage"
                             radius={[0, 10, 10, 0]}
                             fill={PRIMARY_RED}
                           />
@@ -1915,632 +2808,167 @@ export default function App() {
                       </ResponsiveContainer>
                     </div>
                   </div>
-                </section>
 
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Peak Hours Today</div>
-                    <div className="section-meta">08:00 - 21:00</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="chart-shell line-shell">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={MY_STORE_PEAK_HOURS}
-                          margin={{ top: 8, right: 12, left: -8, bottom: 2 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
-                          <XAxis
-                            dataKey="hour"
-                            tickFormatter={(value) => `${value}:00`}
-                            tickLine={false}
-                            axisLine={false}
-                            tick={{ fontSize: 12, fill: "#5b5b5b" }}
-                          />
-                          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: "#5b5b5b" }} />
-                          <Tooltip
-                            formatter={(value) => [`${value} baskets`, "Volume"]}
-                            labelFormatter={(value) => `${value}:00`}
-                            contentStyle={{
-                              borderRadius: "14px",
-                              border: "1px solid rgba(17,17,17,0.08)",
-                              boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="baskets"
-                            stroke={PRIMARY_RED}
-                            strokeWidth={3}
-                            dot={{ r: 4, fill: PRIMARY_RED }}
-                            activeDot={{ r: 6 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                  <div className="hq-card">
+                    <div className="hq-card-title">Geographic Breakdown</div>
+                    <div className="hq-card-copy">
+                      District comparison across all anonymized stores.
                     </div>
-                    <div className="chart-footnote">
-                      Lunch and evening traffic stand out as the busiest periods
-                      in this store today.
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Top Pairs In My Store</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="pairs-wrap">
-                      <div className="pairs-copy">
-                        Your customers most often buy together:
-                      </div>
-                      {MY_STORE_TOP_PAIRS.map((pair) => (
-                        <div className="pair-card" key={pair.title}>
-                          <div className="pair-topline">
-                            <div className="pair-title">{pair.title}</div>
-                            <div className="pair-percent">{pair.percentage}%</div>
-                          </div>
-                          <div className="pair-subtitle">{pair.subtitle}</div>
-                          <div className="pair-progress">
-                            <div
-                              className="pair-progress-fill"
-                              style={{ width: `${pair.percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel alert-card">
-                  <div className="panel-body">
-                    <div className="alert-title">Restock Alert</div>
-                    <div className="alert-copy">
-                      Coca-Cola 330ml selling fast — consider restocking soon
-                    </div>
-                  </div>
-                </section>
-              </>
-            ) : null}
-
-            {activeCashierTab === "rewards" ? (
-              <div className="rewards-stack">
-                <section className="streak-banner">
-                  <div className="streak-emoji">🔥</div>
-                  <div className="streak-title">7 Day Streak!</div>
-                  <div className="streak-copy">
-                    Scan at least 5 baskets today to keep it alive
-                  </div>
-                  <div className="streak-countdown">
-                    14 more baskets today to maintain streak
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Progress To Next Reward</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="reward-level">
-                      <div className="reward-level-title">Current level: SILVER 🥈</div>
-                      <div className="reward-level-chip">683/1000 baskets</div>
-                    </div>
-                    <div className="reward-progress-track">
-                      <div className="reward-progress-fill" />
-                    </div>
-                    <div className="reward-progress-copy">
-                      317 baskets until GOLD 🥇
-                    </div>
-                    <div className="reward-preview">
-                      <div className="reward-preview-title">Gold reward preview</div>
-                      <div className="reward-preview-copy">
-                        10% discount on next CCI order + Priority delivery scheduling
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel claim-card">
-                  <div className="panel-body">
-                    <div className="claim-card-title">
-                      5% discount on next CCI order
-                    </div>
-                    <div className="hq-copy">
-                      Current unlocked reward for {STORE_NAME}. Claim it when
-                      you are ready to place the next order.
-                    </div>
-                    {hasClaimedReward ? (
-                      <div className="claim-code">
-                        <div className="claim-code-label">Claim code</div>
-                        <div className="claim-code-value">{CURRENT_REWARD.code}</div>
-                        <div className="claim-validity">
-                          {CURRENT_REWARD.validUntil}
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        className="claim-button"
-                        type="button"
-                        onClick={() => setHasClaimedReward(true)}
-                      >
-                        CLAIM DISCOUNT
-                      </button>
-                    )}
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Achievements</div>
-                    <div className="section-meta">Store progress only</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="achievements-grid">
-                      {ACHIEVEMENTS.map((achievement) => (
-                        <div
-                          className={`achievement-card ${
-                            achievement.unlocked ? "" : "locked"
-                          }`}
-                          key={achievement.title}
-                        >
-                          <div className="achievement-icon">{achievement.icon}</div>
-                          <div className="achievement-title">
-                            {achievement.title}
-                          </div>
-                          <div className="achievement-subtitle">
-                            {achievement.subtitle}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Reward History</div>
-                  </div>
-                  <div className="panel-body">
-                    <ul className="history-list">
-                      {REWARD_HISTORY.map((reward) => (
-                        <li className="history-item" key={`${reward.title}-${reward.date}`}>
-                          <div className="history-title">{reward.title}</div>
-                          <div className="history-date">{reward.date}</div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </section>
-              </div>
-            ) : null}
-
-            {activeCashierTab === "rankings" ? (
-              <div className="rankings-stack">
-                <section className="rank-card">
-                  <div className="rank-medal">🥈</div>
-                  <div className="rank-title">
-                    You are #2 in Narimanov District
-                  </div>
-                  <div className="rank-subtitle">164 baskets behind #1</div>
-                  <div className="rank-trend">
-                    You moved up 2 places this week ↑
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="panel-body">
-                    <div className="champion-preview">
-                      <div className="champion-title">District Champion Preview</div>
-                      <div className="champion-copy">
-                        Reach #1 to unlock District Champion badge + free case
-                        of Coca-Cola.
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="section-title">Leaderboard Range</div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="switch-row">
-                      <button
-                        className={`mini-switch ${
-                          rankingsRange === "week" ? "active" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setRankingsRange("week")}
-                      >
-                        This Week
-                      </button>
-                      <button
-                        className={`mini-switch ${
-                          rankingsRange === "month" ? "active" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setRankingsRange("month")}
-                      >
-                        This Month
-                      </button>
-                      <button
-                        className={`mini-switch ${
-                          rankingsRange === "allTime" ? "active" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setRankingsRange("allTime")}
-                      >
-                        All Time
-                      </button>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <div className="section-head">
-                    <div className="leaderboard-title">
-                      {rankingsScope === "district"
-                        ? `🏆 Narimanov District — ${rankingsRangeLabel}`
-                        : "🏙️ Baku City Leaderboard"}
-                    </div>
-                  </div>
-                  <div className="panel-body">
-                    <div className="switch-row scope-row">
-                      <button
-                        className={`mini-switch ${
-                          rankingsScope === "district" ? "active" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setRankingsScope("district")}
-                      >
-                        District
-                      </button>
-                      <button
-                        className={`mini-switch ${
-                          rankingsScope === "city" ? "active" : ""
-                        }`}
-                        type="button"
-                        onClick={() => setRankingsScope("city")}
-                      >
-                        City
-                      </button>
-                    </div>
-
-                    {rankingsScope === "district" ? (
-                      <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
-                        {currentDistrictRows.map((row) => (
-                          <li
-                            className={`leaderboard-row ${
-                              row.isYou ? "you" : ""
-                            } ${row.muted ? "muted" : ""}`}
-                            key={`${rankingsRange}-${row.store}`}
-                          >
-                            <div className="leaderboard-rank">
-                              <span>#{row.rank}</span>
-                              <span>{row.medal || ""}</span>
-                            </div>
-                            <div className="leaderboard-store">
-                              <div className="leaderboard-store-name">
-                                <span>{row.store}</span>
-                                {row.isYou ? <span className="you-tag">YOU</span> : null}
-                              </div>
-                              <div className="leaderboard-delta">
-                                (+{row.delta} today)
-                              </div>
-                            </div>
-                            <div className="leaderboard-score">
-                              <div className="leaderboard-score-value">
-                                {row.baskets}
-                              </div>
-                              <div className="leaderboard-score-label">
-                                baskets
-                              </div>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <>
-                        <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
-                          {currentCityRows.map((row) => (
-                            <li
-                              className="leaderboard-row"
-                              key={`${rankingsRange}-${row.store}`}
+                    <table className="hq-table">
+                      <thead>
+                        <tr>
+                          <th>District</th>
+                          <th>Baskets</th>
+                          <th>Top Pair</th>
+                          <th>Trend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {HQ_DISTRICT_BREAKDOWN.map((row) => (
+                          <tr key={row.district}>
+                            <td>{row.district}</td>
+                            <td>{row.baskets}</td>
+                            <td>{row.topPair}</td>
+                            <td
+                              className={
+                                row.trend === "↓"
+                                  ? "hq-trend-down"
+                                  : row.trend === "→"
+                                    ? "hq-trend-neutral"
+                                    : "hq-trend-up"
+                              }
                             >
-                              <div className="leaderboard-rank">
-                                <span>#{row.rank}</span>
-                              </div>
-                              <div className="leaderboard-store">
-                                <div className="leaderboard-store-name">
-                                  <span>{row.store}</span>
-                                </div>
-                                <div className="leaderboard-delta">
-                                  (+{row.delta} today)
-                                </div>
-                              </div>
-                              <div className="leaderboard-score">
-                                <div className="leaderboard-score-value">
-                                  {row.baskets}
-                                </div>
-                                <div className="leaderboard-score-label">
-                                  baskets
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <div className="city-rank-card">
-                          <div className="city-rank-title">
-                            You are #{currentCityRank.rank} in Baku overall
-                          </div>
-                          <div className="city-rank-copy">
-                            {STORE_NAME} currently has {currentCityRank.baskets}{" "}
-                            baskets in this view, even though it is outside the
-                            top 10 city leaderboard.
-                          </div>
-                        </div>
-
-                        <ul className="leaderboard-list" style={{ marginTop: "12px" }}>
-                          <li className="leaderboard-row you">
-                            <div className="leaderboard-rank">
-                              <span>#{currentCityRank.rank}</span>
-                            </div>
-                            <div className="leaderboard-store">
-                              <div className="leaderboard-store-name">
-                                <span>Store #47 — Narimanov</span>
-                                <span className="you-tag">YOU</span>
-                              </div>
-                              <div className="leaderboard-delta">
-                                (+{currentCityRank.delta} today)
-                              </div>
-                            </div>
-                            <div className="leaderboard-score">
-                              <div className="leaderboard-score-value">
-                                {currentCityRank.baskets}
-                              </div>
-                              <div className="leaderboard-score-label">
-                                baskets
-                              </div>
-                            </div>
-                          </li>
-                        </ul>
-                      </>
-                    )}
-                  </div>
-                </section>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <section className="hq-shell">
-            <div className="hq-main">
-              <div className="hq-header">
-                <div className="hq-header-copy">
-                  <div className="hq-label">CCI Headquarters Intelligence</div>
-                  <div className="hq-heading">SCAN Network Dashboard</div>
-                  <div className="hq-subcopy">
-                    Live basket intelligence across all active stores in Baku,
-                    focused on what customers buy with CCI products.
+                              {row.trend}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </div>
 
-              <div className="hq-metrics">
-                {HQ_METRICS.map((metric) => (
-                  <div className="hq-metric-card" key={metric.label}>
-                    <div className="hq-metric-label">{metric.label}</div>
-                    <div className="hq-metric-value">{metric.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="hq-grid">
                 <div className="hq-card">
-                  <div className="hq-card-title">
-                    What do customers buy with CCI products?
-                  </div>
+                  <div className="hq-card-title">Peak Hours</div>
                   <div className="hq-card-copy">
-                    Basket pair analysis across the full network of anonymized
-                    stores.
+                    Aggregated basket volume across all stores combined, with clear
+                    lunch and evening surges.
                   </div>
-                  <div className="hq-chart-shell">
+                  <div className="hq-chart-shell" style={{ height: "280px" }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={HQ_PAIR_ANALYSIS}
-                        layout="vertical"
-                        margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
+                      <LineChart
+                        data={HQ_PEAK_HOURS}
+                        margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
                       >
                         <CartesianGrid
                           strokeDasharray="3 3"
                           stroke="rgba(17,17,17,0.08)"
                         />
                         <XAxis
-                          type="number"
+                          dataKey="hour"
                           tickLine={false}
                           axisLine={false}
-                          domain={[0, 100]}
-                          tickFormatter={(value) => `${value}%`}
+                          tick={{ fontSize: 12, fill: "#5c6370" }}
                         />
                         <YAxis
-                          type="category"
-                          dataKey="label"
-                          width={170}
                           tickLine={false}
                           axisLine={false}
-                          tick={{ fontSize: 12, fill: "#4d545f" }}
+                          tick={{ fontSize: 12, fill: "#5c6370" }}
                         />
                         <Tooltip
-                          formatter={(value, _name, item) => {
-                            const suffix = item.payload.suffix
-                              ? ` ${item.payload.suffix}`
-                              : "";
-                            return [`${value}%${suffix}`, "Share"];
-                          }}
+                          formatter={(value) => [`${value} baskets`, "Volume"]}
                           contentStyle={{
                             borderRadius: "14px",
                             border: "1px solid rgba(17,17,17,0.08)",
                             boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
                           }}
                         />
-                        <Bar
-                          dataKey="percentage"
-                          radius={[0, 10, 10, 0]}
-                          fill={PRIMARY_RED}
+                        <Line
+                          type="monotone"
+                          dataKey="baskets"
+                          stroke={PRIMARY_RED}
+                          strokeWidth={3}
+                          dot={{ r: 4, fill: PRIMARY_RED }}
+                          activeDot={{ r: 6 }}
                         />
-                      </BarChart>
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
+              </div>
 
-                <div className="hq-card">
-                  <div className="hq-card-title">Geographic Breakdown</div>
-                  <div className="hq-card-copy">
-                    District comparison across all anonymized stores.
+              <aside className="hq-sidebar">
+                <div>
+                  <div className="hq-sidebar-title">Live Transaction Feed</div>
+                  <div className="hq-sidebar-copy">
+                    New anonymized baskets stream in every few seconds from the
+                    active network.
                   </div>
-                  <table className="hq-table">
-                    <thead>
-                      <tr>
-                        <th>District</th>
-                        <th>Baskets</th>
-                        <th>Top Pair</th>
-                        <th>Trend</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {HQ_DISTRICT_BREAKDOWN.map((row) => (
-                        <tr key={row.district}>
-                          <td>{row.district}</td>
-                          <td>{row.baskets}</td>
-                          <td>{row.topPair}</td>
-                          <td
-                            className={
-                              row.trend === "↓"
-                                ? "hq-trend-down"
-                                : row.trend === "→"
-                                  ? "hq-trend-neutral"
-                                  : "hq-trend-up"
-                            }
-                          >
-                            {row.trend}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
-              </div>
 
-              <div className="hq-card">
-                <div className="hq-card-title">Peak Hours</div>
-                <div className="hq-card-copy">
-                  Aggregated basket volume across all stores combined, with
-                  clear lunch and evening surges.
-                </div>
-                <div className="hq-chart-shell" style={{ height: "280px" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={HQ_PEAK_HOURS}
-                      margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="rgba(17,17,17,0.08)"
-                      />
-                      <XAxis
-                        dataKey="hour"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 12, fill: "#5c6370" }}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 12, fill: "#5c6370" }}
-                      />
-                      <Tooltip
-                        formatter={(value) => [`${value} baskets`, "Volume"]}
-                        contentStyle={{
-                          borderRadius: "14px",
-                          border: "1px solid rgba(17,17,17,0.08)",
-                          boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="baskets"
-                        stroke={PRIMARY_RED}
-                        strokeWidth={3}
-                        dot={{ r: 4, fill: PRIMARY_RED }}
-                        activeDot={{ r: 6 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-
-            <aside className="hq-sidebar">
-              <div>
-                <div className="hq-sidebar-title">Live Transaction Feed</div>
-                <div className="hq-sidebar-copy">
-                  New anonymized baskets stream in every few seconds from the
-                  active network.
-                </div>
-              </div>
-
-              <div className="hq-feed">
-                {hqLiveFeed.map((entry) => (
-                  <div className="hq-feed-item" key={entry.id}>
-                    <div className="hq-feed-time">{entry.time}</div>
-                    <div className="hq-feed-line">
-                      District: {entry.district} — {entry.items}
+                <div className="hq-feed">
+                  {hqLiveFeed.map((entry) => (
+                    <div className="hq-feed-item" key={entry.id}>
+                      <div className="hq-feed-time">{entry.time}</div>
+                      <div className="hq-feed-line">
+                        District: {entry.district} — {entry.items}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              <div className="hq-sidebar-note">
-                Privacy mode is enabled. Headquarters sees district-level
-                activity and anonymized store performance only.
-              </div>
-            </aside>
-          </section>
-        )}
+                <div className="hq-sidebar-note">
+                  Privacy mode is enabled. Headquarters sees district-level
+                  activity and anonymized store performance only.
+                </div>
+              </aside>
+            </section>
+          )}
+        </div>
       </main>
 
       {activeMode === "cashier" ? (
-        <nav className="bottom-nav" aria-label="Primary">
-        <button
-          className={`nav-item ${activeCashierTab === "scan" ? "active" : ""}`}
-          type="button"
-          onClick={() => setActiveCashierTab("scan")}
-        >
-          Scan
-        </button>
-        <button
-          className={`nav-item ${activeCashierTab === "store" ? "active" : ""}`}
-          type="button"
-          onClick={() => setActiveCashierTab("store")}
-        >
-          My Store
-        </button>
-        <button
-          className={`nav-item ${activeCashierTab === "rewards" ? "active" : ""}`}
-          type="button"
-          onClick={() => setActiveCashierTab("rewards")}
-        >
-          Rewards
-        </button>
-        <button
-          className={`nav-item ${activeCashierTab === "rankings" ? "active" : ""}`}
-          type="button"
-          onClick={() => setActiveCashierTab("rankings")}
-        >
-          Rankings
-        </button>
-        </nav>
+        <>
+          {activeCashierTab === "scan" ? (
+            <button
+              className="demo-button"
+              type="button"
+              disabled={demoModeRunning}
+              onClick={handleDemoMode}
+            >
+              {demoModeRunning ? "RUNNING DEMO..." : "DEMO MODE"}
+            </button>
+          ) : null}
+          <nav className="bottom-nav" aria-label="Primary">
+            <button
+              className={`nav-item ${activeCashierTab === "scan" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("scan")}
+            >
+              Scan
+            </button>
+            <button
+              className={`nav-item ${activeCashierTab === "store" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("store")}
+            >
+              My Store
+            </button>
+            <button
+              className={`nav-item ${activeCashierTab === "rewards" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("rewards")}
+            >
+              Rewards
+            </button>
+            <button
+              className={`nav-item ${activeCashierTab === "rankings" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("rankings")}
+            >
+              Rankings
+            </button>
+          </nav>
+        </>
       ) : null}
     </div>
   );
