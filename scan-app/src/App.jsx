@@ -12,6 +12,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { createDashboardSnapshot } from "./services/analytics";
+import {
+  fetchPersistedBaskets,
+  getBasketDataMode,
+  persistBasket,
+  subscribeToBasketChanges,
+} from "./services/basketService";
 
 const OPEN_FOOD_FACTS_API = "https://world.openfoodfacts.org/api/v2/product";
 const DUPLICATE_SCAN_WINDOW_MS = 3000;
@@ -20,7 +27,6 @@ const SPLASH_FADE_MS = 420;
 const DEMO_STEP_DELAY_MS = 1500;
 const LOG_RESET_DELAY_MS = 1200;
 const ACHIEVEMENT_DURATION_MS = 3000;
-const HQ_FEED_INTERVAL_MS = 6000;
 const SCAN_FEEDBACK_DURATION_MS = 950;
 
 const PRIMARY_RED = "#E61C24";
@@ -52,50 +58,6 @@ const DEMO_SEQUENCE = [
       brand: "Azerchay",
       quantity: "Black Tea",
     },
-  },
-];
-
-const INITIAL_STORE_STATS = {
-  today: 47,
-  week: 284,
-  month: 1203,
-};
-
-const INITIAL_TOP_PRODUCTS = [
-  { name: "Coca-Cola 330ml", scans: 38 },
-  { name: "Lays Original", scans: 31 },
-  { name: "Azerchay", scans: 24 },
-  { name: "Fanta 500ml", scans: 19 },
-  { name: "Sprite 330ml", scans: 14 },
-];
-
-const INITIAL_MY_STORE_PEAK_HOURS = [
-  { hour: "08", baskets: 2 },
-  { hour: "09", baskets: 4 },
-  { hour: "10", baskets: 5 },
-  { hour: "11", baskets: 6 },
-  { hour: "12", baskets: 10 },
-  { hour: "13", baskets: 13 },
-  { hour: "14", baskets: 11 },
-  { hour: "15", baskets: 7 },
-  { hour: "16", baskets: 6 },
-  { hour: "17", baskets: 8 },
-  { hour: "18", baskets: 12 },
-  { hour: "19", baskets: 14 },
-  { hour: "20", baskets: 11 },
-  { hour: "21", baskets: 7 },
-];
-
-const MY_STORE_TOP_PAIRS = [
-  {
-    title: "Coke + Lays",
-    subtitle: "68% of Coke transactions",
-    percentage: 68,
-  },
-  {
-    title: "Fanta + chips",
-    subtitle: "54% of Fanta transactions",
-    percentage: 54,
   },
 ];
 
@@ -261,58 +223,6 @@ const CURRENT_STORE_CITY_RANK = {
   allTime: { rank: 49, baskets: 5314, delta: 0 },
 };
 
-const HQ_METRICS = [
-  { label: "Total baskets today", value: "2,847" },
-  { label: "Active stores today", value: "134" },
-  { label: "Most common basket pair", value: "Coke + Lays (68%)" },
-  { label: "Fastest growing district", value: "Yasamal (+34%)" },
-];
-
-const HQ_PAIR_ANALYSIS = [
-  { label: "Coca-Cola 330ml + Lays Original", percentage: 68 },
-  { label: "Fanta 500ml + Chips", percentage: 57 },
-  { label: "Coca-Cola + Azerchay Tea", percentage: 41 },
-  { label: "Sprite + Sandwich", percentage: 38 },
-  { label: "Coca-Cola 2L + Bread", percentage: 35 },
-  { label: "Energy Drink (alone)", percentage: 89, suffix: "alone" },
-  { label: "Fanta + Azerchay", percentage: 28 },
-  { label: "Sprite + Lays", percentage: 24 },
-];
-
-const HQ_DISTRICT_BREAKDOWN = [
-  { district: "Narimanov", baskets: 847, topPair: "Coke + Lays", trend: "↑" },
-  { district: "Yasamal", baskets: 634, topPair: "Fanta + Chips", trend: "↑↑" },
-  { district: "Khatai", baskets: 521, topPair: "Coke + Tea", trend: "→" },
-  { district: "Sabunchu", baskets: 423, topPair: "Sprite + Sandwich", trend: "↓" },
-  { district: "Surakhani", baskets: 387, topPair: "Coke + Bread", trend: "↑" },
-];
-
-const HQ_PEAK_HOURS = [
-  { hour: "08:00", baskets: 112 },
-  { hour: "09:00", baskets: 164 },
-  { hour: "10:00", baskets: 208 },
-  { hour: "11:00", baskets: 257 },
-  { hour: "12:00", baskets: 391 },
-  { hour: "13:00", baskets: 428 },
-  { hour: "14:00", baskets: 316 },
-  { hour: "15:00", baskets: 272 },
-  { hour: "16:00", baskets: 301 },
-  { hour: "17:00", baskets: 412 },
-  { hour: "18:00", baskets: 447 },
-  { hour: "19:00", baskets: 433 },
-  { hour: "20:00", baskets: 288 },
-  { hour: "21:00", baskets: 196 },
-];
-
-const HQ_LIVE_TRANSACTIONS = [
-  { district: "Narimanov", items: "Coke + Lays + Tea" },
-  { district: "Yasamal", items: "Fanta + Chips" },
-  { district: "Khatai", items: "Sprite + Sandwich" },
-  { district: "Sabunchu", items: "Coke + Bread" },
-  { district: "Surakhani", items: "Energy Drink" },
-  { district: "Narimanov", items: "Coke + Azerchay Tea" },
-];
-
 const FALLBACK_PRODUCTS = {
   "5449000000996": {
     name: "Coca-Cola",
@@ -362,68 +272,6 @@ function buildScannedItem(barcode, productDetails) {
   };
 }
 
-function getProductLabel(name, quantity) {
-  if (name.includes("Coca-Cola")) {
-    return "Coca-Cola 330ml";
-  }
-
-  if (name.includes("Lays")) {
-    return "Lays Original";
-  }
-
-  if (name.includes("Azerchay")) {
-    return "Azerchay";
-  }
-
-  if (name.includes("Fanta")) {
-    return "Fanta 500ml";
-  }
-
-  if (name.includes("Sprite")) {
-    return "Sprite 330ml";
-  }
-
-  if (quantity && quantity !== "Quantity unavailable") {
-    return `${name} ${quantity}`;
-  }
-
-  return name;
-}
-
-function getBasketSummaryLabels(items) {
-  return items.map((item) => {
-    const name = item.isUnknown
-      ? item.customName.trim() || "Unknown Product"
-      : item.name;
-
-    if (name.includes("Coca-Cola")) {
-      return "Coke";
-    }
-
-    if (name.includes("Lays")) {
-      return "Lays";
-    }
-
-    if (name.includes("Azerchay")) {
-      return "Tea";
-    }
-
-    if (name.includes("Fanta")) {
-      return "Fanta";
-    }
-
-    if (name.includes("Sprite")) {
-      return "Sprite";
-    }
-
-    return name;
-  });
-}
-
-function formatHqFeedEntry(time, district, summary) {
-  return `${time} — District: ${district} — ${summary}`;
-}
-
 function AchievementOverlay({ achievement }) {
   const confettiPieces = Array.from({ length: 18 }, (_, index) => ({
     id: index,
@@ -459,6 +307,7 @@ function AchievementOverlay({ achievement }) {
 }
 
 export default function App() {
+  const basketDataMode = getBasketDataMode();
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const controlsRef = useRef(null);
@@ -470,11 +319,10 @@ export default function App() {
   const splashHideTimerRef = useRef(null);
   const logResetTimerRef = useRef(null);
   const achievementTimerRef = useRef(null);
-  const hqFeedIntervalRef = useRef(null);
-  const hqFeedIndexRef = useRef(0);
   const demoTimersRef = useRef([]);
   const sessionLoggedBasketsRef = useRef(0);
   const scanFeedbackTimerRef = useRef(null);
+  const basketRefreshTimerRef = useRef(null);
 
   const [activeMode, setActiveMode] = useState("cashier");
   const [activeCashierTab, setActiveCashierTab] = useState("scan");
@@ -489,22 +337,18 @@ export default function App() {
   const [hasClaimedReward, setHasClaimedReward] = useState(false);
   const [demoModeRunning, setDemoModeRunning] = useState(false);
   const [pulseLogButton, setPulseLogButton] = useState(false);
-  const [storeStats, setStoreStats] = useState(INITIAL_STORE_STATS);
-  const [topProductsToday, setTopProductsToday] = useState(INITIAL_TOP_PRODUCTS);
-  const [myStorePeakHours, setMyStorePeakHours] = useState(INITIAL_MY_STORE_PEAK_HOURS);
+  const [isSavingBasket, setIsSavingBasket] = useState(false);
   const [streakDays, setStreakDays] = useState(7);
   const [basketsRemainingForStreak, setBasketsRemainingForStreak] = useState(14);
   const [rewardProgress, setRewardProgress] = useState(683);
   const [achievementPopup, setAchievementPopup] = useState(null);
-  const [hqLiveFeed, setHqLiveFeed] = useState(() =>
-    HQ_LIVE_TRANSACTIONS.slice(0, 4).map((entry, index) => ({
-      id: `seed-${index}`,
-      time: `14:3${index}`,
-      district: entry.district,
-      items: entry.items,
-      line: formatHqFeedEntry(`14:3${index}`, entry.district, entry.items),
-    }))
+  const [persistedBaskets, setPersistedBaskets] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
+  const [syncStatus, setSyncStatus] = useState(
+    basketDataMode === "supabase" ? "Connecting..." : "Local fallback active"
   );
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const showAchievement = (achievement) => {
     window.clearTimeout(achievementTimerRef.current);
@@ -512,25 +356,6 @@ export default function App() {
     achievementTimerRef.current = window.setTimeout(() => {
       setAchievementPopup(null);
     }, ACHIEVEMENT_DURATION_MS);
-  };
-
-  const pushHqFeedEntry = (district, summary) => {
-    const now = new Date();
-    const time = now.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-
-    const entry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      time,
-      district,
-      items: summary,
-      line: formatHqFeedEntry(time, district, summary),
-    };
-
-    setHqLiveFeed((currentFeed) => [entry, ...currentFeed].slice(0, 10));
   };
 
   const appendScannedItem = (barcode, productDetails) => {
@@ -554,6 +379,31 @@ export default function App() {
   const vibrateOnScan = () => {
     window.navigator?.vibrate?.(24);
   };
+
+  const refreshPersistedBaskets = useEffectEvent(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setDataLoading(true);
+    }
+
+    try {
+      const baskets = await fetchPersistedBaskets();
+      setPersistedBaskets(baskets);
+      setDataError("");
+      setLastSyncedAt(new Date());
+      setSyncStatus(
+        basketDataMode === "supabase" ? "Synced live" : "Local fallback active"
+      );
+    } catch (error) {
+      setDataError(error?.message || "Unable to sync basket data.");
+      setSyncStatus(
+        basketDataMode === "supabase" ? "Sync error" : "Local fallback active"
+      );
+    } finally {
+      if (!silent) {
+        setDataLoading(false);
+      }
+    }
+  });
 
   const processBarcode = useEffectEvent(async (barcode) => {
     const trimmedBarcode = barcode?.trim();
@@ -663,8 +513,8 @@ export default function App() {
       window.clearTimeout(logResetTimerRef.current);
       window.clearTimeout(achievementTimerRef.current);
       window.clearTimeout(scanFeedbackTimerRef.current);
+      window.clearTimeout(basketRefreshTimerRef.current);
       demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-      window.clearInterval(hqFeedIntervalRef.current);
     };
   }, []);
 
@@ -785,22 +635,28 @@ export default function App() {
   }, [activeMode, activeCashierTab, showSplash]);
 
   useEffect(() => {
-    if (activeMode !== "hq") {
-      window.clearInterval(hqFeedIntervalRef.current);
-      return undefined;
-    }
+    window.queueMicrotask(() => {
+      void refreshPersistedBaskets();
+    });
 
-    hqFeedIntervalRef.current = window.setInterval(() => {
-      const nextIndex = hqFeedIndexRef.current % HQ_LIVE_TRANSACTIONS.length;
-      const nextTemplate = HQ_LIVE_TRANSACTIONS[nextIndex];
-      hqFeedIndexRef.current += 1;
-      pushHqFeedEntry(nextTemplate.district, nextTemplate.items);
-    }, HQ_FEED_INTERVAL_MS);
+    const unsubscribe = subscribeToBasketChanges(
+      () => {
+        setSyncStatus("Syncing...");
+        window.clearTimeout(basketRefreshTimerRef.current);
+        basketRefreshTimerRef.current = window.setTimeout(() => {
+          void refreshPersistedBaskets({ silent: true });
+        }, 250);
+      },
+      (error) => {
+        setDataError(error?.message || "Realtime sync is unavailable.");
+        setSyncStatus("Sync error");
+      }
+    );
 
     return () => {
-      window.clearInterval(hqFeedIntervalRef.current);
+      unsubscribe();
     };
-  }, [activeMode]);
+  }, []);
 
   const updateUnknownProductName = (id, nextName) => {
     setScannedItems((currentItems) =>
@@ -838,68 +694,54 @@ export default function App() {
     });
   };
 
-  const handleLogBasket = () => {
+  const handleLogBasket = async () => {
     if (!scannedItems.length) {
       return;
     }
 
-    const basketSummary = getBasketSummaryLabels(scannedItems).join(" + ");
-    pushHqFeedEntry("Narimanov", basketSummary);
     setPulseLogButton(false);
-    setStreakDays((currentDays) => currentDays + 1);
-    setStoreStats((currentStats) => ({
-      today: currentStats.today + 1,
-      week: currentStats.week + 1,
-      month: currentStats.month + 1,
-    }));
-    setRewardProgress((currentProgress) => Math.min(1000, currentProgress + 1));
-    setBasketsRemainingForStreak((currentValue) => Math.max(0, currentValue - 1));
-    setTopProductsToday((currentProducts) => {
-      const nextProducts = currentProducts.map((product) => ({ ...product }));
+    setIsSavingBasket(true);
+    setSyncStatus(basketDataMode === "supabase" ? "Syncing..." : "Saving locally...");
+    setDataError("");
 
-      scannedItems.forEach((item) => {
-        const label = getProductLabel(
-          item.isUnknown ? item.customName.trim() || item.name : item.name,
-          item.quantity
-        );
-        const productMatch = nextProducts.find(
-          (product) => product.name === label
-        );
+    try {
+      const persistedBasket = await persistBasket(scannedItems);
 
-        if (productMatch) {
-          productMatch.scans += 1;
-        }
-      });
+      setPersistedBaskets((currentBaskets) => [
+        persistedBasket,
+        ...currentBaskets.filter((basket) => basket.id !== persistedBasket.id),
+      ]);
+      setLastSyncedAt(new Date());
+      setSyncStatus(
+        basketDataMode === "supabase" ? "Synced live" : "Local fallback active"
+      );
+      setStreakDays((currentDays) => currentDays + 1);
+      setRewardProgress((currentProgress) => Math.min(1000, currentProgress + 1));
+      setBasketsRemainingForStreak((currentValue) => Math.max(0, currentValue - 1));
+      sessionLoggedBasketsRef.current += 1;
 
-      return nextProducts;
-    });
-    setMyStorePeakHours((currentHours) =>
-      currentHours.map((entry) => {
-        const hour = new Date().getHours();
-        const targetLabel = String(hour).padStart(2, "0");
+      if (sessionLoggedBasketsRef.current === 1) {
+        showAchievement({
+          title: "Basket Builder",
+          description:
+            "First basket logged today. Keep scanning to accelerate reward progress.",
+        });
+      }
 
-        return entry.hour === targetLabel
-          ? { ...entry, baskets: entry.baskets + 1 }
-          : entry;
-      })
-    );
-    sessionLoggedBasketsRef.current += 1;
-
-    if (sessionLoggedBasketsRef.current === 1) {
-      showAchievement({
-        title: "Basket Builder",
-        description:
-          "First basket logged today. Keep scanning to accelerate reward progress.",
-      });
+      setScanStatus("Basket logged. Ready for next customer.");
+      window.clearTimeout(logResetTimerRef.current);
+      logResetTimerRef.current = window.setTimeout(() => {
+        setScannedItems([]);
+        setScanStatus("Center the barcode in the frame.");
+        setScanFeedbackState("idle");
+      }, LOG_RESET_DELAY_MS);
+    } catch (error) {
+      setDataError(error?.message || "Unable to save the basket.");
+      setSyncStatus("Sync error");
+      setScanStatus("Basket save failed. Please try again.");
+    } finally {
+      setIsSavingBasket(false);
     }
-
-    setScanStatus("Basket logged. Ready for next customer.");
-    window.clearTimeout(logResetTimerRef.current);
-    logResetTimerRef.current = window.setTimeout(() => {
-      setScannedItems([]);
-      setScanStatus("Center the barcode in the frame.");
-      setScanFeedbackState("idle");
-    }, LOG_RESET_DELAY_MS);
   };
 
   const currentDistrictRows = DISTRICT_RANKINGS[rankingsRange];
@@ -912,6 +754,24 @@ export default function App() {
         ? "This Month"
         : "All Time";
   const rewardProgressPercent = (rewardProgress / 1000) * 100;
+  const dashboardSnapshot = createDashboardSnapshot(persistedBaskets, STORE_NAME);
+  const storeStats = dashboardSnapshot.storeStats;
+  const topProductsToday = dashboardSnapshot.topProductsToday;
+  const myStorePeakHours = dashboardSnapshot.myStorePeakHours;
+  const myStoreTopPairs = dashboardSnapshot.myStoreTopPairs;
+  const hqMetrics = dashboardSnapshot.hqMetrics;
+  const hqPairAnalysis = dashboardSnapshot.hqPairAnalysis;
+  const hqDistrictBreakdown = dashboardSnapshot.hqDistrictBreakdown;
+  const hqPeakHours = dashboardSnapshot.hqPeakHours;
+  const hqLiveFeed = dashboardSnapshot.hqLiveFeed;
+  const syncMeta = lastSyncedAt
+    ? `Last sync ${lastSyncedAt.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`
+    : basketDataMode === "supabase"
+      ? "Waiting for first sync"
+      : "Supabase env vars not configured";
 
   return (
     <div className="app-shell">
@@ -1092,6 +952,58 @@ export default function App() {
 
         .mode-button.active {
           color: var(--scan-red-dark);
+        }
+
+        .sync-strip {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 14px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid var(--scan-line);
+          box-shadow: 0 12px 28px rgba(17, 17, 17, 0.06);
+          flex-wrap: wrap;
+        }
+
+        .sync-strip.error {
+          border-color: rgba(230, 28, 36, 0.24);
+          background: rgba(255, 246, 246, 0.96);
+        }
+
+        .sync-status-row {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.84rem;
+          font-weight: 800;
+          color: var(--scan-ink);
+        }
+
+        .sync-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: var(--scan-green);
+          box-shadow: 0 0 0 4px rgba(25, 165, 90, 0.12);
+        }
+
+        .sync-dot.loading {
+          background: #f5a623;
+          box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.12);
+          animation: pulse 1.3s ease-in-out infinite;
+        }
+
+        .sync-dot.error {
+          background: var(--scan-red);
+          box-shadow: 0 0 0 4px rgba(230, 28, 36, 0.12);
+        }
+
+        .sync-copy {
+          font-size: 0.8rem;
+          color: var(--scan-muted);
+          line-height: 1.4;
         }
 
         .panel {
@@ -1400,6 +1312,12 @@ export default function App() {
 
         .cta-button.pulsing {
           animation: pulseButton 1.2s ease-in-out infinite;
+        }
+
+        .cta-button:disabled {
+          opacity: 0.82;
+          transform: none;
+          box-shadow: 0 10px 20px rgba(230, 28, 36, 0.18);
         }
 
         .demo-button {
@@ -2196,6 +2114,21 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          <div className={`sync-strip ${dataError ? "error" : ""}`}>
+            <div className="sync-status-row">
+              <span
+                className={`sync-dot ${
+                  dataError ? "error" : dataLoading ? "loading" : "live"
+                }`}
+                aria-hidden="true"
+              />
+              <span className="sync-title">{syncStatus}</span>
+            </div>
+            <div className="sync-copy">
+              {dataError ? dataError : syncMeta}
+            </div>
+          </div>
         </header>
 
         <div className="mode-scene" key={activeMode}>
@@ -2281,8 +2214,9 @@ export default function App() {
                         className={`cta-button ${pulseLogButton ? "pulsing" : ""}`}
                         type="button"
                         onClick={handleLogBasket}
+                        disabled={isSavingBasket}
                       >
-                        LOG BASKET
+                        {isSavingBasket ? "SAVING BASKET..." : "LOG BASKET"}
                       </button>
                     </div>
                   ) : null}
@@ -2417,7 +2351,7 @@ export default function App() {
                         <div className="pairs-copy">
                           Your customers most often buy together:
                         </div>
-                        {MY_STORE_TOP_PAIRS.map((pair) => (
+                        {myStoreTopPairs.map((pair) => (
                           <div className="pair-card" key={pair.title}>
                             <div className="pair-topline">
                               <div className="pair-title">{pair.title}</div>
@@ -2743,7 +2677,7 @@ export default function App() {
                 </div>
 
                 <div className="hq-metrics">
-                  {HQ_METRICS.map((metric) => (
+                  {hqMetrics.map((metric) => (
                     <div className="hq-metric-card" key={metric.label}>
                       <div className="hq-metric-label">{metric.label}</div>
                       <div className="hq-metric-value">{metric.value}</div>
@@ -2763,7 +2697,7 @@ export default function App() {
                     <div className="hq-chart-shell">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
-                          data={HQ_PAIR_ANALYSIS}
+                          data={hqPairAnalysis}
                           layout="vertical"
                           margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
                         >
@@ -2824,7 +2758,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {HQ_DISTRICT_BREAKDOWN.map((row) => (
+                        {hqDistrictBreakdown.map((row) => (
                           <tr key={row.district}>
                             <td>{row.district}</td>
                             <td>{row.baskets}</td>
@@ -2856,7 +2790,7 @@ export default function App() {
                   <div className="hq-chart-shell" style={{ height: "280px" }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
-                        data={HQ_PEAK_HOURS}
+                        data={hqPeakHours}
                         margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
                       >
                         <CartesianGrid
