@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient";
+import { evaluateBasketReward } from "./rewards";
 
 const LOCAL_STORAGE_KEY = "scan:baskets";
 const LOCAL_STORE_KEY = "scan:stores";
@@ -275,9 +276,12 @@ function loadLocalBaskets() {
 
 function saveLocalBasket(scannedItems) {
   const store = ensureLocalStore();
+  const existingBaskets = loadLocalBaskets();
+  const recentBaskets = existingBaskets.filter((basket) => basket.store_name === store.name);
   const productItems = scannedItems.map(buildProductPayload);
   const resolvedProducts = productItems.map(ensureLocalProduct);
   const createdAt = nowIsoString();
+  const rewardMeta = evaluateBasketReward(scannedItems, recentBaskets);
   const basket = {
     id: createLocalId("basket"),
     store_id: store.id,
@@ -286,27 +290,30 @@ function saveLocalBasket(scannedItems) {
     created_at: createdAt,
     total_items: productItems.length,
     contains_cci: productItems.some((item) => item.is_cci_product),
-    quality_score: Math.min(100, 55 + productItems.length * 8),
-    points_awarded: productItems.length * 4,
+    quality_score: rewardMeta.qualityScore,
+    points_awarded: rewardMeta.pointsAwarded,
     items: productItems.map((item, index) => ({
       id: createLocalId("basket-item"),
       basket_id: null,
       product_id: resolvedProducts[index].id,
       product_name: item.name,
-      category: item.category,
+      category: scannedItems[index]?.isUnknown ? "Manual Entry" : item.category,
       is_cci_product: item.is_cci_product,
       quantity: item.quantity,
+      is_manual: Boolean(scannedItems[index]?.isUnknown),
     })),
   };
 
-  const baskets = loadLocalBaskets();
-  writeLocalJson(LOCAL_STORAGE_KEY, [basket, ...baskets]);
+  writeLocalJson(LOCAL_STORAGE_KEY, [basket, ...existingBaskets]);
 
   return basket;
 }
 
 async function saveSupabaseBasket(scannedItems) {
   const store = await ensureSupabaseStore();
+  const recentBaskets = (await loadSupabaseBaskets()).filter(
+    (basket) => basket.store_name === store.name
+  );
   const productPayloads = scannedItems.map(buildProductPayload);
   const resolvedProducts = [];
 
@@ -316,13 +323,14 @@ async function saveSupabaseBasket(scannedItems) {
   }
 
   const containsCci = productPayloads.some((item) => item.is_cci_product);
+  const rewardMeta = evaluateBasketReward(scannedItems, recentBaskets);
   const basketInsert = {
     store_id: store.id,
     district: store.district,
     total_items: productPayloads.length,
     contains_cci: containsCci,
-    quality_score: Math.min(100, 55 + productPayloads.length * 8),
-    points_awarded: productPayloads.length * 4,
+    quality_score: rewardMeta.qualityScore,
+    points_awarded: rewardMeta.pointsAwarded,
   };
 
   const { data: basketRow, error: basketError } = await supabase
@@ -339,7 +347,7 @@ async function saveSupabaseBasket(scannedItems) {
     basket_id: basketRow.id,
     product_id: resolvedProducts[index].id,
     product_name: item.name,
-    category: item.category,
+    category: scannedItems[index]?.isUnknown ? "Manual Entry" : item.category,
     is_cci_product: item.is_cci_product,
     quantity: item.quantity,
   }));

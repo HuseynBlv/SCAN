@@ -19,6 +19,7 @@ import {
   persistBasket,
   subscribeToBasketChanges,
 } from "./services/basketService";
+import { createRewardsSnapshot } from "./services/rewards";
 
 const OPEN_FOOD_FACTS_API = "https://world.openfoodfacts.org/api/v2/product";
 const DUPLICATE_SCAN_WINDOW_MS = 3000;
@@ -58,90 +59,6 @@ const DEMO_SEQUENCE = [
       brand: "Azerchay",
       quantity: "Black Tea",
     },
-  },
-];
-
-const CURRENT_REWARD = {
-  title: "5% discount on next CCI order",
-  code: "SCAN-2024-NK47",
-  validUntil: "Valid until 30 June 2026",
-};
-
-const REWARD_HISTORY = [
-  {
-    title: "3% discount on beverage restock",
-    date: "12 May 2026",
-  },
-  {
-    title: "Free priority slot booking",
-    date: "28 April 2026",
-  },
-  {
-    title: "2% district performance bonus",
-    date: "09 April 2026",
-  },
-];
-
-const ACHIEVEMENTS = [
-  {
-    title: "First Scan",
-    subtitle: "scanned your first basket",
-    unlocked: true,
-    icon: "✅",
-  },
-  {
-    title: "Getting Started",
-    subtitle: "20 baskets",
-    unlocked: true,
-    icon: "✅",
-  },
-  {
-    title: "On Fire",
-    subtitle: "7 day streak",
-    unlocked: true,
-    icon: "✅",
-  },
-  {
-    title: "Consistent",
-    subtitle: "50 baskets",
-    unlocked: true,
-    icon: "✅",
-  },
-  {
-    title: "Silver Scanner",
-    subtitle: "100 baskets",
-    unlocked: true,
-    icon: "✅",
-  },
-  {
-    title: "Century Club",
-    subtitle: "500 baskets this month",
-    unlocked: false,
-    icon: "🔒",
-  },
-  {
-    title: "Gold Scanner",
-    subtitle: "1000 total baskets",
-    unlocked: false,
-    icon: "🔒",
-  },
-  {
-    title: "Streak Master",
-    subtitle: "30 day streak",
-    unlocked: false,
-    icon: "🔒",
-  },
-  {
-    title: "District Legend",
-    subtitle: "reach #1 in district",
-    unlocked: false,
-    icon: "🔒",
-  },
-  {
-    title: "Platinum Partner",
-    subtitle: "maintain gold for 3 months",
-    unlocked: false,
-    icon: "🔒",
   },
 ];
 
@@ -320,7 +237,6 @@ export default function App() {
   const logResetTimerRef = useRef(null);
   const achievementTimerRef = useRef(null);
   const demoTimersRef = useRef([]);
-  const sessionLoggedBasketsRef = useRef(0);
   const scanFeedbackTimerRef = useRef(null);
   const basketRefreshTimerRef = useRef(null);
 
@@ -334,13 +250,9 @@ export default function App() {
   const [scannedItems, setScannedItems] = useState([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [scanFeedbackState, setScanFeedbackState] = useState("idle");
-  const [hasClaimedReward, setHasClaimedReward] = useState(false);
   const [demoModeRunning, setDemoModeRunning] = useState(false);
   const [pulseLogButton, setPulseLogButton] = useState(false);
   const [isSavingBasket, setIsSavingBasket] = useState(false);
-  const [streakDays, setStreakDays] = useState(7);
-  const [basketsRemainingForStreak, setBasketsRemainingForStreak] = useState(14);
-  const [rewardProgress, setRewardProgress] = useState(683);
   const [achievementPopup, setAchievementPopup] = useState(null);
   const [persistedBaskets, setPersistedBaskets] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -706,25 +618,32 @@ export default function App() {
 
     try {
       const persistedBasket = await persistBasket(scannedItems);
-
-      setPersistedBaskets((currentBaskets) => [
+      const nextBaskets = [
         persistedBasket,
-        ...currentBaskets.filter((basket) => basket.id !== persistedBasket.id),
-      ]);
+        ...persistedBaskets.filter((basket) => basket.id !== persistedBasket.id),
+      ];
+      const previousRewards = createRewardsSnapshot(persistedBaskets, STORE_NAME);
+      const nextRewards = createRewardsSnapshot(nextBaskets, STORE_NAME);
+      const previousUnlockedIds = new Set(
+        previousRewards.unlockedRewards.map((reward) => reward.id)
+      );
+      const newlyUnlockedReward = nextRewards.unlockedRewards
+        .filter((reward) => !previousUnlockedIds.has(reward.id))
+        .sort((left, right) => {
+          const priority = { discount: 3, points: 2, badge: 1 };
+          return (priority[right.type] || 0) - (priority[left.type] || 0);
+        })[0];
+
+      setPersistedBaskets(nextBaskets);
       setLastSyncedAt(new Date());
       setSyncStatus(
         basketDataMode === "supabase" ? "Synced live" : "Local fallback active"
       );
-      setStreakDays((currentDays) => currentDays + 1);
-      setRewardProgress((currentProgress) => Math.min(1000, currentProgress + 1));
-      setBasketsRemainingForStreak((currentValue) => Math.max(0, currentValue - 1));
-      sessionLoggedBasketsRef.current += 1;
 
-      if (sessionLoggedBasketsRef.current === 1) {
+      if (newlyUnlockedReward) {
         showAchievement({
-          title: "Basket Builder",
-          description:
-            "First basket logged today. Keep scanning to accelerate reward progress.",
+          title: `Reward unlocked: ${newlyUnlockedReward.title}`,
+          description: newlyUnlockedReward.description,
         });
       }
 
@@ -753,8 +672,8 @@ export default function App() {
       : rankingsRange === "month"
         ? "This Month"
         : "All Time";
-  const rewardProgressPercent = (rewardProgress / 1000) * 100;
   const dashboardSnapshot = createDashboardSnapshot(persistedBaskets, STORE_NAME);
+  const rewardsSnapshot = createRewardsSnapshot(persistedBaskets, STORE_NAME);
   const storeStats = dashboardSnapshot.storeStats;
   const topProductsToday = dashboardSnapshot.topProductsToday;
   const myStorePeakHours = dashboardSnapshot.myStorePeakHours;
@@ -764,6 +683,7 @@ export default function App() {
   const hqDistrictBreakdown = dashboardSnapshot.hqDistrictBreakdown;
   const hqPeakHours = dashboardSnapshot.hqPeakHours;
   const hqLiveFeed = dashboardSnapshot.hqLiveFeed;
+  const basketsNeededForStreak = Math.max(0, 5 - rewardsSnapshot.validBasketsToday);
   const syncMeta = lastSyncedAt
     ? `Last sync ${lastSyncedAt.toLocaleTimeString([], {
         hour: "2-digit",
@@ -2385,110 +2305,145 @@ export default function App() {
                 <div className="rewards-stack">
                   <section className="streak-banner">
                     <div className="streak-emoji">🔥</div>
-                    <div className="streak-title">{streakDays} Day Streak!</div>
+                    <div className="streak-title">{rewardsSnapshot.streakDays} Day Streak!</div>
                     <div className="streak-copy">
-                      Scan at least 5 baskets today to keep it alive
+                      Reliable basket data keeps your streak and rewards growing
                     </div>
                     <div className="streak-countdown">
-                      {basketsRemainingForStreak} more baskets today to maintain streak
+                      {basketsNeededForStreak > 0
+                        ? `${basketsNeededForStreak} more valid basket(s) today to keep the streak alive`
+                        : "Today's streak target is secured"}
                     </div>
                   </section>
 
                   <section className="panel">
                     <div className="section-head">
-                      <div className="section-title">Progress To Next Reward</div>
+                      <div className="section-title">Reward Snapshot</div>
+                      <div className="section-meta">Calculated from real basket activity</div>
                     </div>
                     <div className="panel-body">
-                      <div className="reward-level">
-                        <div className="reward-level-title">Current level: SILVER 🥈</div>
-                        <div className="reward-level-chip">{rewardProgress}/1000 baskets</div>
+                      <div
+                        className="stats-grid"
+                        style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+                      >
+                        <div className="stat-card">
+                          <div className="stat-label">Today's valid baskets</div>
+                          <div className="stat-value">{rewardsSnapshot.validBasketsToday}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">CCI baskets captured</div>
+                          <div className="stat-value">{rewardsSnapshot.cciBasketsToday}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">Data quality</div>
+                          <div className="stat-value">{rewardsSnapshot.dataQualityScore}%</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">District rank</div>
+                          <div className="stat-value">#{rewardsSnapshot.currentRank}</div>
+                        </div>
+                      </div>
+
+                      <div className="reward-level" style={{ marginTop: "16px" }}>
+                        <div className="reward-level-title">Reward progress</div>
+                        <div className="reward-level-chip">
+                          {rewardsSnapshot.progressValue}/{rewardsSnapshot.progressTarget}
+                        </div>
                       </div>
                       <div className="reward-progress-track">
                         <div
                           className="reward-progress-fill"
-                          style={{ width: `${rewardProgressPercent}%` }}
+                          style={{ width: `${rewardsSnapshot.progressPercent}%` }}
                         />
                       </div>
                       <div className="reward-progress-copy">
-                        {1000 - rewardProgress} baskets until GOLD 🥇
+                        {rewardsSnapshot.nextRewardMessage}
                       </div>
                       <div className="reward-preview">
-                        <div className="reward-preview-title">Gold reward preview</div>
+                        <div className="reward-preview-title">Next reward to unlock</div>
                         <div className="reward-preview-copy">
-                          10% discount on next CCI order + Priority delivery scheduling
+                          {rewardsSnapshot.nextReward
+                            ? `${rewardsSnapshot.nextReward.title} — ${rewardsSnapshot.nextReward.description}`
+                            : "All configured rewards are currently unlocked."}
                         </div>
                       </div>
                     </div>
                   </section>
 
-                  <section className="panel claim-card">
-                    <div className="panel-body">
-                      <div className="claim-card-title">
-                        {CURRENT_REWARD.title}
-                      </div>
-                      <div className="hq-copy">
-                        Current unlocked reward for {STORE_NAME}. Claim it when you are
-                        ready to place the next order.
-                      </div>
-                      {hasClaimedReward ? (
+                  {rewardsSnapshot.activeDiscount ? (
+                    <section className="panel claim-card">
+                      <div className="panel-body">
+                        <div className="claim-card-title">
+                          {rewardsSnapshot.activeDiscount.title}
+                        </div>
+                        <div className="hq-copy">
+                          Reward unlocked for {STORE_NAME}. Use this on the next CCI
+                          order placed through the demo flow.
+                        </div>
                         <div className="claim-code">
-                          <div className="claim-code-label">Claim code</div>
-                          <div className="claim-code-value">{CURRENT_REWARD.code}</div>
+                          <div className="claim-code-label">Reward code</div>
+                          <div className="claim-code-value">
+                            {rewardsSnapshot.activeDiscount.rewardCode}
+                          </div>
                           <div className="claim-validity">
-                            {CURRENT_REWARD.validUntil}
+                            Unlocked from real basket activity
                           </div>
                         </div>
-                      ) : (
-                        <button
-                          className="claim-button"
-                          type="button"
-                          onClick={() => setHasClaimedReward(true)}
-                        >
-                          CLAIM DISCOUNT
-                        </button>
-                      )}
-                    </div>
-                  </section>
+                      </div>
+                    </section>
+                  ) : null}
 
                   <section className="panel">
                     <div className="section-head">
-                      <div className="section-title">Achievements</div>
-                      <div className="section-meta">Store progress only</div>
+                      <div className="section-title">Unlocked Badges</div>
+                      <div className="section-meta">{rewardsSnapshot.totalPoints} total points</div>
                     </div>
                     <div className="panel-body">
                       <div className="achievements-grid">
-                        {ACHIEVEMENTS.map((achievement) => (
-                          <div
-                            className={`achievement-card ${
-                              achievement.unlocked ? "" : "locked"
-                            }`}
-                            key={achievement.title}
-                          >
-                            <div className="achievement-icon">{achievement.icon}</div>
-                            <div className="achievement-title">
-                              {achievement.title}
+                        {rewardsSnapshot.unlockedBadges.length > 0 ? (
+                          rewardsSnapshot.unlockedBadges.map((badge) => (
+                            <div className="achievement-card" key={badge.id}>
+                              <div className="achievement-icon">🏅</div>
+                              <div className="achievement-title">{badge.title}</div>
+                              <div className="achievement-subtitle">
+                                {badge.description}
+                              </div>
                             </div>
+                          ))
+                        ) : (
+                          <div className="achievement-card locked" style={{ gridColumn: "1 / -1" }}>
+                            <div className="achievement-icon">🔒</div>
+                            <div className="achievement-title">No badges yet</div>
                             <div className="achievement-subtitle">
-                              {achievement.subtitle}
+                              Complete higher-quality baskets to unlock your first badge.
                             </div>
                           </div>
-                        ))}
+                        )}
                       </div>
                     </div>
                   </section>
 
                   <section className="panel">
                     <div className="section-head">
-                      <div className="section-title">Reward History</div>
+                      <div className="section-title">Reward Activity</div>
                     </div>
                     <div className="panel-body">
                       <ul className="history-list">
-                        {REWARD_HISTORY.map((reward) => (
-                          <li className="history-item" key={`${reward.title}-${reward.date}`}>
-                            <div className="history-title">{reward.title}</div>
-                            <div className="history-date">{reward.date}</div>
+                        {rewardsSnapshot.rewardHistory.length > 0 ? (
+                          rewardsSnapshot.rewardHistory.map((reward) => (
+                            <li className="history-item" key={reward.id}>
+                              <div className="history-title">{reward.title}</div>
+                              <div className="history-date">{reward.description}</div>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="history-item">
+                            <div className="history-title">No reward unlocks yet</div>
+                            <div className="history-date">
+                              The next milestone will appear here as soon as it unlocks.
+                            </div>
                           </li>
-                        ))}
+                        )}
                       </ul>
                     </div>
                   </section>
