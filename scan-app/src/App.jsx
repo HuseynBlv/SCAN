@@ -19,6 +19,7 @@ import {
   persistBasket,
   subscribeToBasketChanges,
 } from "./services/basketService";
+import { createRecommendedActions } from "./services/recommendations";
 import { createRewardsSnapshot } from "./services/rewards";
 
 const OPEN_FOOD_FACTS_API = "https://world.openfoodfacts.org/api/v2/product";
@@ -261,6 +262,7 @@ export default function App() {
     basketDataMode === "supabase" ? "Connecting..." : "Local fallback active"
   );
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [expandedRecommendationId, setExpandedRecommendationId] = useState(null);
 
   const showAchievement = (achievement) => {
     window.clearTimeout(achievementTimerRef.current);
@@ -674,6 +676,7 @@ export default function App() {
         : "All Time";
   const dashboardSnapshot = createDashboardSnapshot(persistedBaskets, STORE_NAME);
   const rewardsSnapshot = createRewardsSnapshot(persistedBaskets, STORE_NAME);
+  const recommendedActions = createRecommendedActions(persistedBaskets);
   const storeStats = dashboardSnapshot.storeStats;
   const topProductsToday = dashboardSnapshot.topProductsToday;
   const myStorePeakHours = dashboardSnapshot.myStorePeakHours;
@@ -1699,6 +1702,140 @@ export default function App() {
           margin-bottom: 16px;
         }
 
+        .recommendations-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .recommendation-card {
+          border-radius: 22px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: linear-gradient(180deg, #fff, #fbfcfe);
+          padding: 18px;
+          box-shadow: 0 12px 28px rgba(17, 17, 17, 0.05);
+        }
+
+        .recommendation-topline {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .recommendation-priority,
+        .recommendation-type {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .recommendation-priority.high {
+          background: rgba(230, 28, 36, 0.12);
+          color: var(--scan-red);
+        }
+
+        .recommendation-priority.medium {
+          background: rgba(245, 166, 35, 0.14);
+          color: #b06d00;
+        }
+
+        .recommendation-priority.low {
+          background: rgba(82, 121, 255, 0.12);
+          color: #3956c8;
+        }
+
+        .recommendation-type {
+          background: rgba(17, 17, 17, 0.05);
+          color: #636b77;
+        }
+
+        .recommendation-title {
+          font-size: 1.02rem;
+          font-weight: 800;
+          line-height: 1.3;
+          margin-bottom: 10px;
+        }
+
+        .recommendation-copy {
+          font-size: 0.88rem;
+          line-height: 1.5;
+          color: #5d6571;
+          margin-bottom: 10px;
+        }
+
+        .recommendation-label {
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 6px;
+        }
+
+        .recommendation-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-top: 12px;
+          flex-wrap: wrap;
+        }
+
+        .recommendation-confidence {
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: #4f5763;
+        }
+
+        .recommendation-button {
+          border: none;
+          border-radius: 14px;
+          padding: 10px 12px;
+          background: rgba(230, 28, 36, 0.08);
+          color: var(--scan-red);
+          font-size: 0.82rem;
+          font-weight: 800;
+        }
+
+        .recommendation-support {
+          margin-top: 14px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(17, 17, 17, 0.08);
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .recommendation-support-card {
+          padding: 10px 12px;
+          border-radius: 14px;
+          background: #f6f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.05);
+        }
+
+        .recommendation-support-label {
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: #7a828d;
+          margin-bottom: 4px;
+        }
+
+        .recommendation-support-value {
+          font-size: 0.88rem;
+          line-height: 1.4;
+          color: #303742;
+          font-weight: 700;
+        }
+
         .hq-chart-shell {
           width: 100%;
           height: 330px;
@@ -1980,6 +2117,10 @@ export default function App() {
         @media (max-width: 1120px) {
           .hq-metrics {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .recommendations-grid {
+            grid-template-columns: minmax(0, 1fr);
           }
 
           .hq-grid,
@@ -2638,6 +2779,119 @@ export default function App() {
                       <div className="hq-metric-value">{metric.value}</div>
                     </div>
                   ))}
+                </div>
+
+                <div className="hq-card">
+                  <div className="hq-card-title">Recommended Actions</div>
+                  <div className="hq-card-copy">
+                    Rule-based recommendations generated from observed basket behavior
+                    to help CCI decide what to do next.
+                  </div>
+                  <div className="recommendations-grid">
+                    {recommendedActions.map((recommendation) => {
+                      const isExpanded =
+                        expandedRecommendationId === recommendation.id;
+
+                      return (
+                        <div className="recommendation-card" key={recommendation.id}>
+                          <div className="recommendation-topline">
+                            <span
+                              className={`recommendation-priority ${recommendation.priority.toLowerCase()}`}
+                            >
+                              {recommendation.priority} Priority
+                            </span>
+                            <span className="recommendation-type">
+                              {recommendation.type}
+                            </span>
+                          </div>
+                          <div className="recommendation-title">
+                            {recommendation.title}
+                          </div>
+                          <div className="recommendation-label">Detected pattern</div>
+                          <div className="recommendation-copy">
+                            {recommendation.detectedPattern}
+                          </div>
+                          <div className="recommendation-label">Recommended action</div>
+                          <div className="recommendation-copy">
+                            {recommendation.recommendedAction}
+                          </div>
+                          <div className="recommendation-label">Expected business value</div>
+                          <div className="recommendation-copy">
+                            {recommendation.expectedBusinessValue}
+                          </div>
+                          <div className="recommendation-meta">
+                            <div className="recommendation-confidence">
+                              Confidence: {recommendation.confidence}
+                            </div>
+                            <button
+                              className="recommendation-button"
+                              type="button"
+                              onClick={() =>
+                                setExpandedRecommendationId((currentId) =>
+                                  currentId === recommendation.id
+                                    ? null
+                                    : recommendation.id
+                                )
+                              }
+                            >
+                              {isExpanded
+                                ? "Hide supporting data"
+                                : "View supporting data"}
+                            </button>
+                          </div>
+                          {isExpanded ? (
+                            <div className="recommendation-support">
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  Basket count
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.basketCount}
+                                </div>
+                              </div>
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  Store count
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.storeCount}
+                                </div>
+                              </div>
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  District
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.district}
+                                </div>
+                              </div>
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  Time window
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.timeWindow}
+                                </div>
+                              </div>
+                              {recommendation.supportingData.patternStrength ? (
+                                <div
+                                  className="recommendation-support-card"
+                                  style={{ gridColumn: "1 / -1" }}
+                                >
+                                  <div className="recommendation-support-label">
+                                    Pattern strength
+                                  </div>
+                                  <div className="recommendation-support-value">
+                                    {recommendation.supportingData.patternStrength}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="hq-grid">
