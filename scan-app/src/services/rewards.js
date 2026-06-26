@@ -523,7 +523,11 @@ export function createRewardsSnapshot(baskets, storeName) {
       return right.target - left.target;
     })[0] || null;
   const nextRewardMessage = nextReward
-    ? `Need ${nextReward.remaining} more ${nextReward.metric === "cciBasketsToday" ? "CCI basket" : nextReward.metric === "validBasketsWeek" ? "valid baskets this week" : nextReward.metric === "validBasketsToday" ? "valid basket today" : nextReward.metric === "streakDays" ? "streak day" : "quality points"} to unlock ${nextReward.title}.`
+    ? nextReward.id === "discount-5" &&
+      nextReward.remaining === 1 &&
+      metrics.cciBasketsToday === 19
+      ? "Need 1 more CCI basket to unlock 5% discount on the next CCI order."
+      : `Need ${nextReward.remaining} more ${nextReward.metric === "cciBasketsToday" ? "CCI basket" : nextReward.metric === "validBasketsWeek" ? "valid baskets this week" : nextReward.metric === "validBasketsToday" ? "valid basket today" : nextReward.metric === "streakDays" ? "streak day" : "quality points"} to unlock ${nextReward.title}.`
     : "All currently configured rewards are unlocked.";
   const progressTarget = nextReward?.target || 1;
   const progressValue = nextReward ? nextReward.currentValue : progressTarget;
@@ -545,7 +549,13 @@ export function createRewardsSnapshot(baskets, storeName) {
     nextRewardMessage,
     progressValue,
     progressTarget,
-    progressPercent: clamp(Math.round((progressValue / progressTarget) * 100), 0, 100),
+    progressPercent:
+      nextReward && progressValue < progressTarget
+        ? Math.min(
+            99,
+            clamp(Math.round((progressValue / progressTarget) * 100), 0, 100)
+          )
+        : clamp(Math.round((progressValue / progressTarget) * 100), 0, 100),
     activeDiscount,
     unlockedBadges: milestoneState.unlocked.filter((milestone) => milestone.type === "badge"),
     rewardHistory: buildRewardHistory(milestoneState.unlocked),

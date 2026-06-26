@@ -14,9 +14,21 @@ import {
 } from "recharts";
 import { createDashboardSnapshot } from "./services/analytics";
 import {
+  DEMO_STORES,
+  clearLocalDemoBaskets,
   fetchPersistedBaskets,
+  generateHistoricalDemoBaskets,
+  generateLiveDemoTransactions,
+  getActiveDemoStore,
+  getDemoAdminState,
   getBasketDataMode,
+  isDemoOfflineMode,
   persistBasket,
+  resetDemoData,
+  seedRealisticBasketData,
+  setActiveDemoStore,
+  setDemoOfflineMode,
+  syncOfflineDemoBaskets,
   subscribeToBasketChanges,
 } from "./services/basketService";
 import { createRecommendedActions } from "./services/recommendations";
@@ -30,10 +42,10 @@ const DEMO_STEP_DELAY_MS = 1500;
 const LOG_RESET_DELAY_MS = 1200;
 const ACHIEVEMENT_DURATION_MS = 3000;
 const SCAN_FEEDBACK_DURATION_MS = 950;
+const DEMO_KEY_WINDOW_MS = 1200;
 
 const PRIMARY_RED = "#E61C24";
 const SUCCESS_GREEN = "#19A55A";
-const STORE_NAME = "Store #47 — Narimanov";
 const HQ_REGION_NAME = "CCI HQ — Baku Region";
 
 const DEMO_SEQUENCE = [
@@ -59,6 +71,33 @@ const DEMO_SEQUENCE = [
       name: "Azerchay",
       brand: "Azerchay",
       quantity: "Black Tea",
+    },
+  },
+];
+
+const DEMO_ADMIN_SCAN_SEQUENCE = [
+  {
+    barcode: "5449000000996",
+    product: {
+      name: "Coca-Cola",
+      brand: "The Coca-Cola Company",
+      quantity: "500ml",
+    },
+  },
+  {
+    barcode: "5053990109332",
+    product: {
+      name: "Chips",
+      brand: "Lay's",
+      quantity: "45g",
+    },
+  },
+  {
+    barcode: "2000000001114",
+    product: {
+      name: "Sandwich",
+      brand: "Fresh Corner",
+      quantity: "1 pc",
     },
   },
 ];
@@ -240,6 +279,7 @@ export default function App() {
   const demoTimersRef = useRef([]);
   const scanFeedbackTimerRef = useRef(null);
   const basketRefreshTimerRef = useRef(null);
+  const demoKeyPressesRef = useRef([]);
 
   const [activeMode, setActiveMode] = useState("cashier");
   const [activeCashierTab, setActiveCashierTab] = useState("scan");
@@ -256,6 +296,7 @@ export default function App() {
   const [isSavingBasket, setIsSavingBasket] = useState(false);
   const [achievementPopup, setAchievementPopup] = useState(null);
   const [persistedBaskets, setPersistedBaskets] = useState([]);
+  const [activeStore, setActiveStoreState] = useState(() => getActiveDemoStore());
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [syncStatus, setSyncStatus] = useState(
@@ -263,6 +304,12 @@ export default function App() {
   );
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [expandedRecommendationId, setExpandedRecommendationId] = useState(null);
+  const [isDemoAdminOpen, setIsDemoAdminOpen] = useState(() =>
+    window.location.pathname === "/demo-admin"
+  );
+  const [demoRuntimeState, setDemoRuntimeState] = useState(() => getDemoAdminState());
+  const [demoAdminBusyAction, setDemoAdminBusyAction] = useState("");
+  const [demoAdminNotice, setDemoAdminNotice] = useState("");
 
   const showAchievement = (achievement) => {
     window.clearTimeout(achievementTimerRef.current);
@@ -294,30 +341,48 @@ export default function App() {
     window.navigator?.vibrate?.(24);
   };
 
-  const refreshPersistedBaskets = useEffectEvent(async ({ silent = false } = {}) => {
+  const refreshDemoRuntimeState = () => {
+    const nextState = getDemoAdminState();
+    setActiveStoreState(nextState.activeStore);
+    setDemoRuntimeState(nextState);
+    return nextState;
+  };
+
+  const refreshPersistedBaskets = async ({ silent = false } = {}) => {
     if (!silent) {
       setDataLoading(true);
     }
 
     try {
       const baskets = await fetchPersistedBaskets();
+      const runtimeState = refreshDemoRuntimeState();
       setPersistedBaskets(baskets);
       setDataError("");
       setLastSyncedAt(new Date());
       setSyncStatus(
-        basketDataMode === "supabase" ? "Synced live" : "Local fallback active"
+        runtimeState.offlineMode
+          ? "Offline demo mode"
+          : basketDataMode === "supabase"
+            ? "Synced live"
+            : "Local fallback active"
       );
     } catch (error) {
       setDataError(error?.message || "Unable to sync basket data.");
       setSyncStatus(
-        basketDataMode === "supabase" ? "Sync error" : "Local fallback active"
+        isDemoOfflineMode()
+          ? "Offline demo mode"
+          : basketDataMode === "supabase"
+            ? "Sync error"
+            : "Local fallback active"
       );
     } finally {
       if (!silent) {
         setDataLoading(false);
       }
     }
-  });
+  };
+
+  const refreshPersistedBasketsEvent = useEffectEvent(refreshPersistedBaskets);
 
   const processBarcode = useEffectEvent(async (barcode) => {
     const trimmedBarcode = barcode?.trim();
@@ -387,13 +452,89 @@ export default function App() {
     }
   });
 
-  const runDemoScanStep = (entry, isLast) => {
+  const completeBasket = async (itemsToPersist) => {
+    if (!itemsToPersist.length) {
+      return;
+    }
+
+    setPulseLogButton(false);
+    setIsSavingBasket(true);
+    setSyncStatus(
+      isDemoOfflineMode()
+        ? "Offline demo mode"
+        : basketDataMode === "supabase"
+          ? "Syncing..."
+          : "Saving locally..."
+    );
+    setDataError("");
+
+    try {
+      const persistedBasket = await persistBasket(itemsToPersist);
+      const nextBaskets = [
+        persistedBasket,
+        ...persistedBaskets.filter((basket) => basket.id !== persistedBasket.id),
+      ];
+      const previousRewards = createRewardsSnapshot(
+        persistedBaskets,
+        activeStore.name
+      );
+      const nextRewards = createRewardsSnapshot(nextBaskets, activeStore.name);
+      const previousUnlockedIds = new Set(
+        previousRewards.unlockedRewards.map((reward) => reward.id)
+      );
+      const newlyUnlockedReward = nextRewards.unlockedRewards
+        .filter((reward) => !previousUnlockedIds.has(reward.id))
+        .sort((left, right) => {
+          const priority = { discount: 3, points: 2, badge: 1 };
+          return (priority[right.type] || 0) - (priority[left.type] || 0);
+        })[0];
+
+      setPersistedBaskets(nextBaskets);
+      setLastSyncedAt(new Date());
+      refreshDemoRuntimeState();
+      setSyncStatus(
+        isDemoOfflineMode()
+          ? "Offline demo mode"
+          : basketDataMode === "supabase"
+            ? "Synced live"
+            : "Local fallback active"
+      );
+
+      if (newlyUnlockedReward) {
+        showAchievement({
+          title: `Reward unlocked: ${newlyUnlockedReward.title}`,
+          description: newlyUnlockedReward.description,
+        });
+      }
+
+      setScanStatus(
+        isDemoOfflineMode()
+          ? "Basket saved offline. Sync it from Demo Admin when ready."
+          : "Basket logged. Ready for next customer."
+      );
+      window.clearTimeout(logResetTimerRef.current);
+      logResetTimerRef.current = window.setTimeout(() => {
+        setScannedItems([]);
+        setScanStatus("Center the barcode in the frame.");
+        setScanFeedbackState("idle");
+      }, LOG_RESET_DELAY_MS);
+    } catch (error) {
+      setDataError(error?.message || "Unable to save the basket.");
+      setSyncStatus("Sync error");
+      setScanStatus("Basket save failed. Please try again.");
+    } finally {
+      setIsSavingBasket(false);
+    }
+  };
+
+  const runDemoScanStep = (entry, isLast, options = {}) => {
     setIsLookingUp(true);
     flashScanFeedback("processing", 0);
     setScanStatus("Barcode detected. Looking up product...");
 
     const resolveTimer = window.setTimeout(() => {
-      appendScannedItem(entry.barcode, entry.product);
+      const scannedItem = buildScannedItem(entry.barcode, entry.product);
+      setScannedItems((currentItems) => [scannedItem, ...currentItems]);
       setIsLookingUp(false);
       vibrateOnScan();
       flashScanFeedback("success");
@@ -406,10 +547,47 @@ export default function App() {
       if (isLast) {
         setDemoModeRunning(false);
         setPulseLogButton(true);
+
+        if (options.autoLog) {
+          const autoLogTimer = window.setTimeout(() => {
+            void completeBasket(options.sequenceItems || []);
+          }, 520);
+
+          demoTimersRef.current.push(autoLogTimer);
+        }
       }
     }, 450);
 
     demoTimersRef.current.push(resolveTimer);
+  };
+
+  const startSimulatedScanSequence = (sequence, options = {}) => {
+    if (demoModeRunning) {
+      return;
+    }
+
+    demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    demoTimersRef.current = [];
+    setScannedItems([]);
+    setPulseLogButton(false);
+    setDemoModeRunning(true);
+    flashScanFeedback("idle");
+    setScanStatus(options.initialStatus || "Demo mode: simulating cashier flow...");
+    setActiveMode("cashier");
+    setActiveCashierTab("scan");
+
+    const sequenceItems = sequence.map((entry) => buildScannedItem(entry.barcode, entry.product));
+
+    sequence.forEach((entry, index) => {
+      const timerId = window.setTimeout(() => {
+        runDemoScanStep(entry, index === sequence.length - 1, {
+          autoLog: options.autoLog,
+          sequenceItems,
+        });
+      }, DEMO_STEP_DELAY_MS * index);
+
+      demoTimersRef.current.push(timerId);
+    });
   };
 
   useEffect(() => {
@@ -429,6 +607,38 @@ export default function App() {
       window.clearTimeout(scanFeedbackTimerRef.current);
       window.clearTimeout(basketRefreshTimerRef.current);
       demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncRoutePanel = () => {
+      setIsDemoAdminOpen(window.location.pathname === "/demo-admin");
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key.toLowerCase() !== "d") {
+        return;
+      }
+
+      const now = Date.now();
+      const nextPresses = [...demoKeyPressesRef.current, now].filter(
+        (timestamp) => now - timestamp <= DEMO_KEY_WINDOW_MS
+      );
+
+      demoKeyPressesRef.current = nextPresses;
+
+      if (nextPresses.length >= 3) {
+        setIsDemoAdminOpen(true);
+        demoKeyPressesRef.current = [];
+      }
+    };
+
+    window.addEventListener("popstate", syncRoutePanel);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("popstate", syncRoutePanel);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -550,7 +760,7 @@ export default function App() {
 
   useEffect(() => {
     window.queueMicrotask(() => {
-      void refreshPersistedBaskets();
+      void refreshPersistedBasketsEvent();
     });
 
     const unsubscribe = subscribeToBasketChanges(
@@ -558,7 +768,7 @@ export default function App() {
         setSyncStatus("Syncing...");
         window.clearTimeout(basketRefreshTimerRef.current);
         basketRefreshTimerRef.current = window.setTimeout(() => {
-          void refreshPersistedBaskets({ silent: true });
+          void refreshPersistedBasketsEvent({ silent: true });
         }, 250);
       },
       (error) => {
@@ -586,25 +796,38 @@ export default function App() {
     });
   };
 
-  const handleDemoMode = () => {
-    if (demoModeRunning) {
-      return;
+  const handleDemoAdminClose = () => {
+    setIsDemoAdminOpen(false);
+
+    if (window.location.pathname === "/demo-admin") {
+      window.history.replaceState({}, "", "/");
     }
+  };
 
-    demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
-    demoTimersRef.current = [];
-    setScannedItems([]);
-    setPulseLogButton(false);
-    setDemoModeRunning(true);
-    flashScanFeedback("idle");
-    setScanStatus("Demo mode: simulating cashier flow...");
+  const runDemoAdminAction = async (actionId, action) => {
+    setDemoAdminBusyAction(actionId);
+    setDemoAdminNotice("");
 
-    DEMO_SEQUENCE.forEach((entry, index) => {
-      const timerId = window.setTimeout(() => {
-        runDemoScanStep(entry, index === DEMO_SEQUENCE.length - 1);
-      }, DEMO_STEP_DELAY_MS * index);
+    try {
+      const message = await action();
+      await refreshPersistedBaskets({ silent: true });
+      setDemoAdminNotice(message);
+    } catch (error) {
+      setDemoAdminNotice(error?.message || "Demo admin action failed.");
+    } finally {
+      setDemoAdminBusyAction("");
+    }
+  };
 
-      demoTimersRef.current.push(timerId);
+  const applyActiveStore = (store) => {
+    setActiveDemoStore(store);
+    const nextState = refreshDemoRuntimeState();
+    setDemoAdminNotice(`Active demo store switched to ${nextState.activeStore.name}.`);
+  };
+
+  const handleDemoMode = () => {
+    startSimulatedScanSequence(DEMO_SEQUENCE, {
+      initialStatus: "Demo mode: simulating cashier flow...",
     });
   };
 
@@ -613,69 +836,21 @@ export default function App() {
       return;
     }
 
-    setPulseLogButton(false);
-    setIsSavingBasket(true);
-    setSyncStatus(basketDataMode === "supabase" ? "Syncing..." : "Saving locally...");
-    setDataError("");
-
-    try {
-      const persistedBasket = await persistBasket(scannedItems);
-      const nextBaskets = [
-        persistedBasket,
-        ...persistedBaskets.filter((basket) => basket.id !== persistedBasket.id),
-      ];
-      const previousRewards = createRewardsSnapshot(persistedBaskets, STORE_NAME);
-      const nextRewards = createRewardsSnapshot(nextBaskets, STORE_NAME);
-      const previousUnlockedIds = new Set(
-        previousRewards.unlockedRewards.map((reward) => reward.id)
-      );
-      const newlyUnlockedReward = nextRewards.unlockedRewards
-        .filter((reward) => !previousUnlockedIds.has(reward.id))
-        .sort((left, right) => {
-          const priority = { discount: 3, points: 2, badge: 1 };
-          return (priority[right.type] || 0) - (priority[left.type] || 0);
-        })[0];
-
-      setPersistedBaskets(nextBaskets);
-      setLastSyncedAt(new Date());
-      setSyncStatus(
-        basketDataMode === "supabase" ? "Synced live" : "Local fallback active"
-      );
-
-      if (newlyUnlockedReward) {
-        showAchievement({
-          title: `Reward unlocked: ${newlyUnlockedReward.title}`,
-          description: newlyUnlockedReward.description,
-        });
-      }
-
-      setScanStatus("Basket logged. Ready for next customer.");
-      window.clearTimeout(logResetTimerRef.current);
-      logResetTimerRef.current = window.setTimeout(() => {
-        setScannedItems([]);
-        setScanStatus("Center the barcode in the frame.");
-        setScanFeedbackState("idle");
-      }, LOG_RESET_DELAY_MS);
-    } catch (error) {
-      setDataError(error?.message || "Unable to save the basket.");
-      setSyncStatus("Sync error");
-      setScanStatus("Basket save failed. Please try again.");
-    } finally {
-      setIsSavingBasket(false);
-    }
+    await completeBasket(scannedItems);
   };
 
   const currentDistrictRows = DISTRICT_RANKINGS[rankingsRange];
   const currentCityRows = CITY_LEADERBOARD[rankingsRange];
   const currentCityRank = CURRENT_STORE_CITY_RANK[rankingsRange];
+  const activeStoreShortName = activeStore.name.split("—")[0].trim();
   const rankingsRangeLabel =
     rankingsRange === "week"
       ? "This Week"
       : rankingsRange === "month"
         ? "This Month"
         : "All Time";
-  const dashboardSnapshot = createDashboardSnapshot(persistedBaskets, STORE_NAME);
-  const rewardsSnapshot = createRewardsSnapshot(persistedBaskets, STORE_NAME);
+  const dashboardSnapshot = createDashboardSnapshot(persistedBaskets, activeStore.name);
+  const rewardsSnapshot = createRewardsSnapshot(persistedBaskets, activeStore.name);
   const recommendedActions = createRecommendedActions(persistedBaskets);
   const storeStats = dashboardSnapshot.storeStats;
   const topProductsToday = dashboardSnapshot.topProductsToday;
@@ -691,10 +866,12 @@ export default function App() {
     ? `Last sync ${lastSyncedAt.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
-      })}`
-    : basketDataMode === "supabase"
-      ? "Waiting for first sync"
-      : "Supabase env vars not configured";
+      })}${demoRuntimeState.pendingCount ? ` • ${demoRuntimeState.pendingCount} pending offline` : ""}`
+    : demoRuntimeState.offlineMode
+      ? `Offline demo mode • ${demoRuntimeState.pendingCount} basket(s) waiting to sync`
+      : basketDataMode === "supabase"
+        ? "Waiting for first sync"
+        : "Supabase env vars not configured";
 
   return (
     <div className="app-shell">
@@ -1261,6 +1438,140 @@ export default function App() {
 
         .demo-button:disabled {
           opacity: 0.72;
+        }
+
+        .demo-admin-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 45;
+          background: rgba(10, 12, 16, 0.38);
+          backdrop-filter: blur(4px);
+        }
+
+        .demo-admin-panel {
+          position: fixed;
+          top: 18px;
+          right: 18px;
+          z-index: 46;
+          width: min(92vw, 420px);
+          max-height: calc(100vh - 36px);
+          overflow: auto;
+          padding: 18px;
+          border-radius: 24px;
+          background: rgba(255, 255, 255, 0.98);
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          box-shadow: 0 26px 56px rgba(17, 17, 17, 0.22);
+        }
+
+        .demo-admin-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .demo-admin-title {
+          font-size: 1.1rem;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .demo-admin-copy,
+        .demo-admin-status,
+        .demo-admin-label {
+          font-size: 0.85rem;
+          line-height: 1.45;
+          color: var(--scan-muted);
+        }
+
+        .demo-admin-close {
+          border: none;
+          border-radius: 14px;
+          padding: 10px 12px;
+          background: rgba(17, 17, 17, 0.06);
+          color: #3d434d;
+          font-size: 0.8rem;
+          font-weight: 800;
+        }
+
+        .demo-admin-state {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .demo-admin-chip {
+          padding: 12px;
+          border-radius: 16px;
+          background: #f7f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+        }
+
+        .demo-admin-chip strong {
+          display: block;
+          font-size: 0.92rem;
+          color: var(--scan-ink);
+          margin-bottom: 4px;
+        }
+
+        .demo-admin-selects {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .demo-admin-select {
+          width: 100%;
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          border-radius: 14px;
+          padding: 12px 14px;
+          background: #fff;
+        }
+
+        .demo-admin-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .demo-admin-action {
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          border-radius: 16px;
+          padding: 12px 12px;
+          background: #fff;
+          color: var(--scan-ink);
+          text-align: left;
+          font-size: 0.82rem;
+          font-weight: 700;
+          line-height: 1.35;
+        }
+
+        .demo-admin-action.primary {
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.03));
+          border-color: rgba(230, 28, 36, 0.18);
+        }
+
+        .demo-admin-action.warn {
+          background: rgba(255, 246, 246, 0.9);
+          border-color: rgba(230, 28, 36, 0.18);
+        }
+
+        .demo-admin-action:disabled {
+          opacity: 0.62;
+        }
+
+        .demo-admin-footer {
+          margin-top: 14px;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: #f7f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          font-size: 0.84rem;
+          line-height: 1.45;
+          color: #3a4250;
         }
 
         .stats-grid {
@@ -2143,6 +2454,261 @@ export default function App() {
         </div>
       ) : null}
 
+      {isDemoAdminOpen ? (
+        <>
+          <div
+            className="demo-admin-backdrop"
+            onClick={handleDemoAdminClose}
+            aria-hidden="true"
+          />
+          <aside className="demo-admin-panel" role="dialog" aria-modal="true">
+            <div className="demo-admin-head">
+              <div>
+                <div className="demo-admin-title">Demo Control Panel</div>
+                <div className="demo-admin-copy">
+                  Hidden bootcamp safeguards for SCAN. Access with
+                  {" "}
+                  <code>/demo-admin</code>
+                  {" "}
+                  or press D three times.
+                </div>
+              </div>
+              <button
+                className="demo-admin-close"
+                type="button"
+                onClick={handleDemoAdminClose}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="demo-admin-state">
+              <div className="demo-admin-chip">
+                <strong>{demoRuntimeState.activeStore.name}</strong>
+                <div className="demo-admin-status">Active demo store</div>
+              </div>
+              <div className="demo-admin-chip">
+                <strong>
+                  {demoRuntimeState.offlineMode
+                    ? "Offline demo mode"
+                    : basketDataMode === "supabase"
+                      ? "Supabase live"
+                      : "Local fallback"}
+                </strong>
+                <div className="demo-admin-status">
+                  {demoRuntimeState.pendingCount} pending basket(s)
+                </div>
+              </div>
+              <div className="demo-admin-chip">
+                <strong>{rewardsSnapshot.progressPercent}% ready</strong>
+                <div className="demo-admin-status">
+                  {rewardsSnapshot.nextRewardMessage}
+                </div>
+              </div>
+              <div className="demo-admin-chip">
+                <strong>{persistedBaskets.length} visible baskets</strong>
+                <div className="demo-admin-status">
+                  HQ feed, analytics, and rewards update from this same data.
+                </div>
+              </div>
+            </div>
+
+            <div className="demo-admin-label">Switch active demo store</div>
+            <div className="demo-admin-selects">
+              <select
+                className="demo-admin-select"
+                value={activeStore.name}
+                onChange={(event) => {
+                  const selectedStore = DEMO_STORES.find(
+                    (store) => store.name === event.target.value
+                  );
+
+                  if (selectedStore) {
+                    applyActiveStore(selectedStore);
+                  }
+                }}
+              >
+                {DEMO_STORES.map((store) => (
+                  <option key={store.name} value={store.name}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="demo-admin-select"
+                value={activeStore.district}
+                onChange={(event) =>
+                  applyActiveStore({
+                    name: `${activeStoreShortName} — ${event.target.value}`,
+                    district: event.target.value,
+                  })
+                }
+              >
+                {["Yasamal", "Narimanov", "Nizami", "Khatai", "Sabail"].map(
+                  (district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="demo-admin-grid">
+              <button
+                className="demo-admin-action primary"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("reset", async () => {
+                    resetDemoData();
+                    return "Demo data reset. Active store restored and offline mode cleared.";
+                  })
+                }
+              >
+                Reset demo data
+              </button>
+              <button
+                className="demo-admin-action primary"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("seed", async () => {
+                    seedRealisticBasketData();
+                    return "Seeded realistic basket history across Yasamal, Narimanov, Nizami, Khatai, and Sabail.";
+                  })
+                }
+              >
+                Seed realistic basket data
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("live-10", async () => {
+                    generateLiveDemoTransactions(10);
+                    return "Generated 10 fresh live transactions for the HQ feed.";
+                  })
+                }
+              >
+                Generate 10 live transactions
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("history-100", async () => {
+                    generateHistoricalDemoBaskets(100);
+                    return "Generated 100 historical baskets with realistic district and daypart patterns.";
+                  })
+                }
+              >
+                Generate 100 historical baskets
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() => {
+                  startSimulatedScanSequence(DEMO_ADMIN_SCAN_SEQUENCE, {
+                    initialStatus: "Demo admin: simulating Coca-Cola + chips + sandwich...",
+                  });
+                  setDemoAdminNotice(
+                    "Simulated cashier scan started. The LOG BASKET button will pulse when ready."
+                  );
+                }}
+              >
+                Simulate scanning Coca-Cola + chips + sandwich
+              </button>
+              <button
+                className="demo-admin-action primary"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() => {
+                  startSimulatedScanSequence(DEMO_ADMIN_SCAN_SEQUENCE, {
+                    autoLog: true,
+                    initialStatus: "Demo admin: simulating reward unlock flow...",
+                  });
+                  setDemoAdminNotice(
+                    "Reward unlock simulation started. SCAN will auto-log the basket at the end."
+                  );
+                }}
+              >
+                Simulate reward unlock
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("offline-on", async () => {
+                    setDemoOfflineMode(true);
+                    refreshDemoRuntimeState();
+                    return "Offline demo mode enabled. New baskets will queue locally until you sync.";
+                  })
+                }
+              >
+                Simulate offline mode
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("offline-sync", async () => {
+                    setDemoOfflineMode(false);
+                    const result = await syncOfflineDemoBaskets();
+                    refreshDemoRuntimeState();
+                    return result.synced > 0
+                      ? `Synced ${result.synced} queued basket(s) after offline mode.`
+                      : result.skipped > 0
+                        ? `Offline mode disabled. ${result.skipped} basket(s) are still local because Supabase sync is unavailable.`
+                        : "Offline mode disabled. No queued baskets were waiting to sync.";
+                  })
+                }
+              >
+                Simulate sync after offline mode
+              </button>
+              <button
+                className="demo-admin-action warn"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("clear-local", async () => {
+                    clearLocalDemoBaskets();
+                    return "Cleared local demo baskets. Remote Supabase history was left untouched.";
+                  })
+                }
+              >
+                Clear all baskets
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() => {
+                  setActiveMode("hq");
+                  setDemoAdminNotice(
+                    "HQ view focused. Recommended Actions and live feed will reflect the latest demo data."
+                  );
+                }}
+              >
+                Focus HQ dashboard
+              </button>
+            </div>
+
+            <div className="demo-admin-footer">
+              {demoAdminBusyAction
+                ? `Running ${demoAdminBusyAction.replace("-", " ")}...`
+                : demoAdminNotice ||
+                  "Tip: use the reward unlock simulation right before the demo so the achievement popup and HQ live feed land together."}
+            </div>
+          </aside>
+        </>
+      ) : null}
+
       <main className={`screen ${activeMode === "hq" ? "hq-screen" : ""}`}>
         <header className="topbar">
           <div className="topbar-row">
@@ -2151,7 +2717,7 @@ export default function App() {
               <div className="logo-copy">SCAN</div>
             </div>
             <div className={`store-pill ${activeMode === "hq" ? "hq-pill" : ""}`}>
-              {activeMode === "hq" ? HQ_REGION_NAME : STORE_NAME}
+              {activeMode === "hq" ? HQ_REGION_NAME : activeStore.name}
             </div>
           </div>
 
@@ -2289,7 +2855,7 @@ export default function App() {
                   <section className="panel">
                     <div className="section-head">
                       <div className="section-title">My Store Snapshot</div>
-                      <div className="section-meta">Only {STORE_NAME} data</div>
+                      <div className="section-meta">Only {activeStore.name} data</div>
                     </div>
                     <div className="panel-body">
                       <div className="stats-grid">
@@ -2518,7 +3084,7 @@ export default function App() {
                           {rewardsSnapshot.activeDiscount.title}
                         </div>
                         <div className="hq-copy">
-                          Reward unlocked for {STORE_NAME}. Use this on the next CCI
+                          Reward unlocked for {activeStore.name}. Use this on the next CCI
                           order placed through the demo flow.
                         </div>
                         <div className="claim-code">
@@ -2684,7 +3250,7 @@ export default function App() {
                               </div>
                               <div className="leaderboard-store">
                                 <div className="leaderboard-store-name">
-                                  <span>{row.store}</span>
+                                  <span>{row.isYou ? activeStoreShortName : row.store}</span>
                                   {row.isYou ? <span className="you-tag">YOU</span> : null}
                                 </div>
                                 <div className="leaderboard-delta">(+{row.delta} today)</div>
@@ -2723,7 +3289,7 @@ export default function App() {
                               You are #{currentCityRank.rank} in Baku overall
                             </div>
                             <div className="city-rank-copy">
-                              {STORE_NAME} currently has {currentCityRank.baskets} baskets
+                              {activeStore.name} currently has {currentCityRank.baskets} baskets
                               in this view, even though it is outside the top 10 city
                               leaderboard.
                             </div>
@@ -2736,7 +3302,7 @@ export default function App() {
                               </div>
                               <div className="leaderboard-store">
                                 <div className="leaderboard-store-name">
-                                  <span>Store #47 — Narimanov</span>
+                                  <span>{activeStore.name}</span>
                                   <span className="you-tag">YOU</span>
                                 </div>
                                 <div className="leaderboard-delta">
