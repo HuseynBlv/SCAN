@@ -198,6 +198,14 @@ const FALLBACK_PRODUCTS = {
   },
 };
 
+const DEMO_STORE_DETAILS = {
+  Yasamal: { id: "SCAN-YAS-014", label: "YAS" },
+  Narimanov: { id: "SCAN-NAR-047", label: "NAR" },
+  Nizami: { id: "SCAN-NIZ-031", label: "NIZ" },
+  Khatai: { id: "SCAN-KHA-008", label: "KHA" },
+  Sabail: { id: "SCAN-SAB-022", label: "SAB" },
+};
+
 const RETAIL_BARCODE_FORMATS = [
   BarcodeFormat.EAN_13,
   BarcodeFormat.EAN_8,
@@ -227,6 +235,28 @@ function buildScannedItem(barcode, productDetails) {
     customName: productDetails.name === "Unknown Product" ? "" : productDetails.name,
     isUnknown: productDetails.name === "Unknown Product",
   };
+}
+
+function isSameDayValue(leftValue, rightValue = new Date()) {
+  const left = new Date(leftValue);
+  const right = new Date(rightValue);
+
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function secondsSince(dateValue, nowValue) {
+  if (!dateValue) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.floor((nowValue.getTime() - new Date(dateValue).getTime()) / 1000)
+  );
 }
 
 function AchievementOverlay({ achievement }) {
@@ -277,9 +307,18 @@ export default function App() {
   const logResetTimerRef = useRef(null);
   const achievementTimerRef = useRef(null);
   const demoTimersRef = useRef([]);
+  const demoScriptTimersRef = useRef([]);
   const scanFeedbackTimerRef = useRef(null);
   const basketRefreshTimerRef = useRef(null);
+  const retrySyncTimerRef = useRef(null);
+  const successStateTimerRef = useRef(null);
   const demoKeyPressesRef = useRef([]);
+  const dashboardFlashTimerRef = useRef(null);
+  const previousDashboardStateRef = useRef({
+    latestFeedId: "",
+    metricValues: [],
+    recommendationSignatures: [],
+  });
 
   const [activeMode, setActiveMode] = useState("cashier");
   const [activeCashierTab, setActiveCashierTab] = useState("scan");
@@ -292,6 +331,7 @@ export default function App() {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [scanFeedbackState, setScanFeedbackState] = useState("idle");
   const [demoModeRunning, setDemoModeRunning] = useState(false);
+  const [demoScriptRunning, setDemoScriptRunning] = useState(false);
   const [pulseLogButton, setPulseLogButton] = useState(false);
   const [isSavingBasket, setIsSavingBasket] = useState(false);
   const [achievementPopup, setAchievementPopup] = useState(null);
@@ -310,6 +350,13 @@ export default function App() {
   const [demoRuntimeState, setDemoRuntimeState] = useState(() => getDemoAdminState());
   const [demoAdminBusyAction, setDemoAdminBusyAction] = useState("");
   const [demoAdminNotice, setDemoAdminNotice] = useState("");
+  const [clockNow, setClockNow] = useState(() => new Date());
+  const [basketSuccessState, setBasketSuccessState] = useState(null);
+  const [dashboardFlashState, setDashboardFlashState] = useState({
+    feedId: "",
+    metricLabels: [],
+    recommendationIds: [],
+  });
 
   const showAchievement = (achievement) => {
     window.clearTimeout(achievementTimerRef.current);
@@ -356,6 +403,7 @@ export default function App() {
     try {
       const baskets = await fetchPersistedBaskets();
       const runtimeState = refreshDemoRuntimeState();
+      window.clearTimeout(retrySyncTimerRef.current);
       setPersistedBaskets(baskets);
       setDataError("");
       setLastSyncedAt(new Date());
@@ -372,9 +420,16 @@ export default function App() {
         isDemoOfflineMode()
           ? "Offline demo mode"
           : basketDataMode === "supabase"
-            ? "Sync error"
+            ? "Sync failed, retrying..."
             : "Local fallback active"
       );
+
+      if (basketDataMode === "supabase" && !isDemoOfflineMode()) {
+        window.clearTimeout(retrySyncTimerRef.current);
+        retrySyncTimerRef.current = window.setTimeout(() => {
+          void refreshPersistedBaskets({ silent: true });
+        }, 4000);
+      }
     } finally {
       if (!silent) {
         setDataLoading(false);
@@ -428,7 +483,7 @@ export default function App() {
 
       setScanStatus(
         productDetails.name === "Unknown Product"
-          ? `We couldn't match that barcode. Add a name manually.`
+          ? "Barcode not found. Add the product name manually to keep the basket complete."
           : `Added ${productDetails.name}. Ready for the next item.`
       );
     } catch {
@@ -443,7 +498,7 @@ export default function App() {
       flashScanFeedback("success");
       setScanStatus(
         fallbackProduct.name === "Unknown Product"
-          ? "Lookup failed. You can still add the product manually."
+          ? "Barcode not found. You can still add the product manually."
           : `Added ${fallbackProduct.name} from the offline catalog.`
       );
     } finally {
@@ -474,6 +529,8 @@ export default function App() {
         persistedBasket,
         ...persistedBaskets.filter((basket) => basket.id !== persistedBasket.id),
       ];
+      const previousRecommendations = createRecommendedActions(persistedBaskets);
+      const nextRecommendations = createRecommendedActions(nextBaskets);
       const previousRewards = createRewardsSnapshot(
         persistedBaskets,
         activeStore.name
@@ -488,6 +545,9 @@ export default function App() {
           const priority = { discount: 3, points: 2, badge: 1 };
           return (priority[right.type] || 0) - (priority[left.type] || 0);
         })[0];
+      const generatedNewInsight =
+        nextRecommendations[0]?.id !== previousRecommendations[0]?.id ||
+        nextRecommendations[0]?.title !== previousRecommendations[0]?.title;
 
       setPersistedBaskets(nextBaskets);
       setLastSyncedAt(new Date());
@@ -506,6 +566,20 @@ export default function App() {
           description: newlyUnlockedReward.description,
         });
       }
+
+      window.clearTimeout(successStateTimerRef.current);
+      setBasketSuccessState({
+        title: isDemoOfflineMode() ? "Basket completed offline" : "Basket completed",
+        steps: [
+          "Basket completed",
+          isDemoOfflineMode() ? "Offline mode active — basket waiting" : "Sent to CCI dashboard",
+          "Reward progress updated",
+          generatedNewInsight ? "New insight generated" : "Dashboard refreshed",
+        ],
+      });
+      successStateTimerRef.current = window.setTimeout(() => {
+        setBasketSuccessState(null);
+      }, 5200);
 
       setScanStatus(
         isDemoOfflineMode()
@@ -591,6 +665,16 @@ export default function App() {
   };
 
   useEffect(() => {
+    const clockTimer = window.setInterval(() => {
+      setClockNow(new Date());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(clockTimer);
+    };
+  }, []);
+
+  useEffect(() => {
     splashFadeTimerRef.current = window.setTimeout(() => {
       setSplashFading(true);
     }, SPLASH_DURATION_MS - SPLASH_FADE_MS);
@@ -606,7 +690,11 @@ export default function App() {
       window.clearTimeout(achievementTimerRef.current);
       window.clearTimeout(scanFeedbackTimerRef.current);
       window.clearTimeout(basketRefreshTimerRef.current);
+      window.clearTimeout(retrySyncTimerRef.current);
+      window.clearTimeout(successStateTimerRef.current);
+      window.clearTimeout(dashboardFlashTimerRef.current);
       demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      demoScriptTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
     };
   }, []);
 
@@ -773,7 +861,7 @@ export default function App() {
       },
       (error) => {
         setDataError(error?.message || "Realtime sync is unavailable.");
-        setSyncStatus("Sync error");
+        setSyncStatus("Sync failed, retrying...");
       }
     );
 
@@ -831,6 +919,55 @@ export default function App() {
     });
   };
 
+  const handleDemoScriptMode = () => {
+    if (demoScriptRunning || demoModeRunning) {
+      return;
+    }
+
+    demoScriptTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    demoScriptTimersRef.current = [];
+    setDemoScriptRunning(true);
+    setBasketSuccessState({
+      title: "Demo script mode",
+      steps: [
+        "Show store dashboard",
+        "Scan Coca-Cola + chips + sandwich",
+        "Complete basket and update rewards",
+        "Switch to HQ dashboard for the live insight",
+      ],
+    });
+    setActiveMode("cashier");
+    setActiveCashierTab("store");
+
+    const queueScriptStep = (delay, callback) => {
+      const timerId = window.setTimeout(callback, delay);
+      demoScriptTimersRef.current.push(timerId);
+    };
+
+    queueScriptStep(1600, () => {
+      setActiveCashierTab("scan");
+      startSimulatedScanSequence(DEMO_ADMIN_SCAN_SEQUENCE, {
+        autoLog: true,
+        initialStatus: "Demo script: scanning a live basket...",
+      });
+    });
+    queueScriptStep(7600, () => {
+      setActiveCashierTab("rewards");
+      setScanStatus("Reward progress updated. SCAN is ready to show HQ impact.");
+    });
+    queueScriptStep(9800, () => {
+      setActiveMode("hq");
+    });
+    queueScriptStep(11400, () => {
+      const liveRecommendationId =
+        previousDashboardStateRef.current.recommendationSignatures[0]?.split(":")[0] ||
+        null;
+      setExpandedRecommendationId(liveRecommendationId);
+      setDemoScriptRunning(false);
+      setBasketSuccessState(null);
+    });
+  };
+
   const handleLogBasket = async () => {
     if (!scannedItems.length) {
       return;
@@ -843,6 +980,8 @@ export default function App() {
   const currentCityRows = CITY_LEADERBOARD[rankingsRange];
   const currentCityRank = CURRENT_STORE_CITY_RANK[rankingsRange];
   const activeStoreShortName = activeStore.name.split("—")[0].trim();
+  const activeStoreDetails =
+    DEMO_STORE_DETAILS[activeStore.district] || { id: "SCAN-LIVE-001", label: "LIVE" };
   const rankingsRangeLabel =
     rankingsRange === "week"
       ? "This Week"
@@ -861,17 +1000,97 @@ export default function App() {
   const hqDistrictBreakdown = dashboardSnapshot.hqDistrictBreakdown;
   const hqPeakHours = dashboardSnapshot.hqPeakHours;
   const hqLiveFeed = dashboardSnapshot.hqLiveFeed;
+  const storeBaskets = persistedBaskets.filter((basket) => basket.store_name === activeStore.name);
+  const hasStoreData = storeBaskets.length > 0;
+  const hasNetworkData = persistedBaskets.length > 0;
+  const todayStoreBaskets = storeBaskets.filter((basket) =>
+    isSameDayValue(basket.created_at, clockNow)
+  );
+  const syncedTodayCount = todayStoreBaskets.filter(
+    (basket) => basket.sync_state !== "pending"
+  ).length;
+  const effectiveStoreStats = hasStoreData
+    ? storeStats
+    : { today: 0, week: 0, month: 0 };
+  const highConfidenceRecommendations = recommendedActions.filter(
+    (recommendation) =>
+      recommendation.confidence === "High" && !recommendation.id.startsWith("seed-")
+  );
+  const lastSyncSeconds = secondsSince(lastSyncedAt, clockNow);
   const basketsNeededForStreak = Math.max(0, 5 - rewardsSnapshot.validBasketsToday);
-  const syncMeta = lastSyncedAt
-    ? `Last sync ${lastSyncedAt.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}${demoRuntimeState.pendingCount ? ` • ${demoRuntimeState.pendingCount} pending offline` : ""}`
+  const syncHeadline = dataError
+    ? basketDataMode === "supabase"
+      ? "Supabase unavailable"
+      : "Local storage issue"
     : demoRuntimeState.offlineMode
-      ? `Offline demo mode • ${demoRuntimeState.pendingCount} basket(s) waiting to sync`
+      ? "Offline — baskets waiting"
       : basketDataMode === "supabase"
-        ? "Waiting for first sync"
-        : "Supabase env vars not configured";
+        ? "Online — synced"
+        : "Online — local demo";
+  const syncSummary = demoRuntimeState.offlineMode
+    ? `${demoRuntimeState.pendingCount} basket(s) waiting for sync`
+    : `Synced ${syncedTodayCount} basket${syncedTodayCount === 1 ? "" : "s"} today`;
+  const syncMeta = dataError
+    ? basketDataMode === "supabase"
+      ? "Sync failed, retrying. HQ updates will resume automatically."
+      : "Local fallback is active. Refresh if the problem persists."
+    : lastSyncSeconds !== null
+      ? `Last sync: ${lastSyncSeconds} second${lastSyncSeconds === 1 ? "" : "s"} ago`
+      : demoRuntimeState.offlineMode
+        ? "Offline mode active"
+        : basketDataMode === "supabase"
+          ? "Waiting for first sync"
+          : "Supabase env vars not configured";
+
+  useEffect(() => {
+    const currentMetricValues = hqMetrics.map((metric) => `${metric.label}:${metric.value}`);
+    const currentRecommendationSignatures = recommendedActions.map(
+      (recommendation) =>
+        `${recommendation.id}:${recommendation.title}:${recommendation.confidence}`
+    );
+    const latestFeedId = hqLiveFeed[0]?.id || "";
+    const previousState = previousDashboardStateRef.current;
+
+    if (
+      previousState.latestFeedId &&
+      latestFeedId &&
+      previousState.latestFeedId !== latestFeedId
+    ) {
+      const metricLabels = hqMetrics
+        .filter(
+          (metric, index) =>
+            previousState.metricValues[index] !== `${metric.label}:${metric.value}`
+        )
+        .map((metric) => metric.label);
+      const recommendationIds = recommendedActions
+        .filter(
+          (recommendation, index) =>
+            previousState.recommendationSignatures[index] !==
+            `${recommendation.id}:${recommendation.title}:${recommendation.confidence}`
+        )
+        .map((recommendation) => recommendation.id);
+
+      window.clearTimeout(dashboardFlashTimerRef.current);
+      setDashboardFlashState({
+        feedId: latestFeedId,
+        metricLabels,
+        recommendationIds,
+      });
+      dashboardFlashTimerRef.current = window.setTimeout(() => {
+        setDashboardFlashState({
+          feedId: "",
+          metricLabels: [],
+          recommendationIds: [],
+        });
+      }, 2600);
+    }
+
+    previousDashboardStateRef.current = {
+      latestFeedId,
+      metricValues: currentMetricValues,
+      recommendationSignatures: currentRecommendationSignatures,
+    };
+  }, [hqLiveFeed, hqMetrics, recommendedActions]);
 
   return (
     <div className="app-shell">
@@ -1104,6 +1323,64 @@ export default function App() {
           font-size: 0.8rem;
           color: var(--scan-muted);
           line-height: 1.4;
+        }
+
+        .sync-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          width: 100%;
+        }
+
+        .sync-stat {
+          min-width: 0;
+        }
+
+        .sync-label {
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: #7a7f87;
+          margin-bottom: 6px;
+        }
+
+        .sync-value {
+          font-size: 0.86rem;
+          line-height: 1.4;
+          font-weight: 700;
+          color: #23272d;
+        }
+
+        .demo-label-strip {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .demo-label-card {
+          padding: 12px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          box-shadow: 0 12px 24px rgba(17, 17, 17, 0.04);
+        }
+
+        .demo-label-card strong {
+          display: block;
+          font-size: 0.86rem;
+          line-height: 1.35;
+          color: var(--scan-ink);
+        }
+
+        .demo-label-card span {
+          display: block;
+          margin-top: 6px;
+          font-size: 0.74rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--scan-muted);
         }
 
         .panel {
@@ -1369,6 +1646,20 @@ export default function App() {
           color: var(--scan-muted);
         }
 
+        .item-alert {
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: rgba(230, 28, 36, 0.08);
+          color: var(--scan-red);
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
         .unknown-input {
           width: 100%;
           border: 1px solid var(--scan-red-border);
@@ -1396,6 +1687,53 @@ export default function App() {
           bottom: 20px;
         }
 
+        .success-card {
+          margin-top: 12px;
+          padding: 16px;
+          border-radius: 20px;
+          background: linear-gradient(180deg, rgba(25, 165, 90, 0.12), rgba(25, 165, 90, 0.03));
+          border: 1px solid rgba(25, 165, 90, 0.2);
+          box-shadow: 0 14px 28px rgba(25, 165, 90, 0.08);
+        }
+
+        .success-title {
+          font-size: 0.96rem;
+          font-weight: 800;
+          color: #0d7d42;
+          margin-bottom: 12px;
+        }
+
+        .success-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .success-list li {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 0.86rem;
+          color: #225b3d;
+          font-weight: 700;
+        }
+
+        .success-list li::before {
+          content: "✓";
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: rgba(25, 165, 90, 0.16);
+          color: #0f9c53;
+          font-size: 0.8rem;
+          flex: 0 0 20px;
+        }
+
         .cta-button {
           width: 100%;
           border: none;
@@ -1421,10 +1759,6 @@ export default function App() {
         }
 
         .demo-button {
-          position: fixed;
-          right: 18px;
-          bottom: 102px;
-          z-index: 18;
           border: none;
           border-radius: 999px;
           padding: 11px 14px;
@@ -1438,6 +1772,21 @@ export default function App() {
 
         .demo-button:disabled {
           opacity: 0.72;
+        }
+
+        .demo-fab-stack {
+          position: fixed;
+          right: 18px;
+          bottom: 102px;
+          z-index: 18;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          align-items: flex-end;
+        }
+
+        .demo-button.script-button {
+          background: linear-gradient(135deg, var(--scan-red), #f85761);
         }
 
         .demo-admin-backdrop {
@@ -1586,6 +1935,12 @@ export default function App() {
           border-radius: 18px;
           background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.02));
           border: 1px solid rgba(230, 28, 36, 0.12);
+        }
+
+        .flash-update {
+          animation: flashSurface 2.1s ease;
+          border-color: rgba(230, 28, 36, 0.24);
+          box-shadow: 0 0 0 1px rgba(230, 28, 36, 0.08), 0 16px 34px rgba(230, 28, 36, 0.12);
         }
 
         .stat-label,
@@ -1794,6 +2149,13 @@ export default function App() {
           margin-top: 8px;
           font-size: 0.84rem;
           color: #397254;
+        }
+
+        .alert-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #5b6673;
+          margin-top: 8px;
         }
 
         .achievements-grid {
@@ -2025,6 +2387,7 @@ export default function App() {
           background: linear-gradient(180deg, #fff, #fbfcfe);
           padding: 18px;
           box-shadow: 0 12px 28px rgba(17, 17, 17, 0.05);
+          transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
         }
 
         .recommendation-topline {
@@ -2214,6 +2577,26 @@ export default function App() {
           animation: feedSlide 320ms ease-out;
         }
 
+        .empty-state-block {
+          padding: 18px;
+          border-radius: 18px;
+          background: #f7f8fb;
+          border: 1px dashed rgba(17, 17, 17, 0.12);
+        }
+
+        .empty-state-title {
+          font-size: 0.95rem;
+          font-weight: 800;
+          margin-bottom: 8px;
+          color: #242a33;
+        }
+
+        .empty-state-copy {
+          font-size: 0.88rem;
+          line-height: 1.5;
+          color: #66707f;
+        }
+
         .hq-feed-time {
           font-size: 0.78rem;
           font-weight: 800;
@@ -2400,6 +2783,17 @@ export default function App() {
           }
         }
 
+        @keyframes flashSurface {
+          0% {
+            transform: translateY(0);
+            background: rgba(230, 28, 36, 0.16);
+          }
+          100% {
+            transform: translateY(0);
+            background: transparent;
+          }
+        }
+
         @keyframes confettiFall {
           0% {
             opacity: 0;
@@ -2437,6 +2831,13 @@ export default function App() {
           .hq-grid,
           .hq-shell {
             grid-template-columns: minmax(0, 1fr);
+          }
+        }
+
+        @media (max-width: 760px) {
+          .sync-grid,
+          .demo-label-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
       `}</style>
@@ -2750,12 +3151,58 @@ export default function App() {
                 }`}
                 aria-hidden="true"
               />
-              <span className="sync-title">{syncStatus}</span>
+              <span className="sync-title">{syncHeadline}</span>
             </div>
-            <div className="sync-copy">
-              {dataError ? dataError : syncMeta}
+            <div className="sync-grid">
+              <div className="sync-stat">
+                <div className="sync-label">Status</div>
+                <div className="sync-value">{syncSummary}</div>
+              </div>
+              <div className="sync-stat">
+                <div className="sync-label">Connection</div>
+                <div className="sync-value">{dataError ? syncStatus : syncMeta}</div>
+              </div>
+              <div className="sync-stat">
+                <div className="sync-label">Mode</div>
+                <div className="sync-value">
+                  {dataError
+                    ? "Supabase unavailable"
+                    : demoRuntimeState.offlineMode
+                      ? "Offline mode active"
+                      : basketDataMode === "supabase"
+                        ? "Real-time dashboard sync"
+                        : "Local demo fallback"}
+                </div>
+              </div>
             </div>
           </div>
+
+          {activeMode === "cashier" ? (
+            <div className="demo-label-strip">
+              <div className="demo-label-card">
+                <strong>{activeStoreDetails.id}</strong>
+                <span>Store ID</span>
+              </div>
+              <div className="demo-label-card">
+                <strong>{activeStore.district}</strong>
+                <span>District</span>
+              </div>
+              <div className="demo-label-card">
+                <strong>{effectiveStoreStats.today > 0 ? "Active today" : "Ready for first basket"}</strong>
+                <span>Store status</span>
+              </div>
+              <div className="demo-label-card">
+                <strong>
+                  {lastSyncSeconds !== null
+                    ? `${lastSyncSeconds}s ago`
+                    : demoRuntimeState.offlineMode
+                      ? "Offline"
+                      : "Pending"}
+                </strong>
+                <span>Last sync</span>
+              </div>
+            </div>
+          ) : null}
         </header>
 
         <div className="mode-scene" key={activeMode}>
@@ -2818,21 +3265,35 @@ export default function App() {
                               <div className="item-meta">{item.brand}</div>
                               <div className="item-meta">{item.quantity}</div>
                               {item.isUnknown ? (
-                                <input
-                                  className="unknown-input"
-                                  type="text"
-                                  placeholder="Type product name manually"
-                                  value={item.customName}
-                                  onChange={(event) =>
-                                    updateUnknownProductName(item.id, event.target.value)
-                                  }
-                                />
+                                <>
+                                  <div className="item-alert">Barcode not found</div>
+                                  <input
+                                    className="unknown-input"
+                                    type="text"
+                                    placeholder="Type product name manually"
+                                    value={item.customName}
+                                    onChange={(event) =>
+                                      updateUnknownProductName(item.id, event.target.value)
+                                    }
+                                  />
+                                </>
                               ) : null}
                             </div>
                           </li>
                         ))}
                       </ul>
                     )}
+
+                    {basketSuccessState ? (
+                      <div className="success-card" style={{ margin: "0 12px 12px" }}>
+                        <div className="success-title">{basketSuccessState.title}</div>
+                        <ul className="success-list">
+                          {basketSuccessState.steps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </section>
 
                   {scannedItems.length > 0 ? (
@@ -2858,20 +3319,29 @@ export default function App() {
                       <div className="section-meta">Only {activeStore.name} data</div>
                     </div>
                     <div className="panel-body">
-                      <div className="stats-grid">
-                        <div className="stat-card">
-                          <div className="stat-label">Today's baskets</div>
-                          <div className="stat-value">{storeStats.today}</div>
+                      {hasStoreData ? (
+                        <div className="stats-grid">
+                          <div className="stat-card">
+                            <div className="stat-label">Today's baskets</div>
+                            <div className="stat-value">{effectiveStoreStats.today}</div>
+                          </div>
+                          <div className="stat-card">
+                            <div className="stat-label">This week</div>
+                            <div className="stat-value">{effectiveStoreStats.week}</div>
+                          </div>
+                          <div className="stat-card">
+                            <div className="stat-label">This month</div>
+                            <div className="stat-value">{effectiveStoreStats.month}</div>
+                          </div>
                         </div>
-                        <div className="stat-card">
-                          <div className="stat-label">This week</div>
-                          <div className="stat-value">{storeStats.week}</div>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No baskets yet</div>
+                          <div className="empty-state-copy">
+                            Start scanning to generate insights for {activeStore.name}.
+                          </div>
                         </div>
-                        <div className="stat-card">
-                          <div className="stat-label">This month</div>
-                          <div className="stat-value">{storeStats.month}</div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </section>
 
@@ -2881,39 +3351,48 @@ export default function App() {
                       <div className="section-meta">Most scanned in this store</div>
                     </div>
                     <div className="panel-body">
-                      <div className="chart-shell">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={topProductsToday}
-                            layout="vertical"
-                            margin={{ top: 4, right: 12, left: 18, bottom: 4 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
-                            <XAxis type="number" tickLine={false} axisLine={false} />
-                            <YAxis
-                              type="category"
-                              dataKey="name"
-                              width={110}
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{ fontSize: 12, fill: "#4f4f4f" }}
-                            />
-                            <Tooltip
-                              cursor={{ fill: "rgba(230, 28, 36, 0.06)" }}
-                              contentStyle={{
-                                borderRadius: "14px",
-                                border: "1px solid rgba(17,17,17,0.08)",
-                                boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
-                              }}
-                            />
-                            <Bar
-                              dataKey="scans"
-                              radius={[0, 10, 10, 0]}
-                              fill={PRIMARY_RED}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
+                      {hasStoreData ? (
+                        <div className="chart-shell">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={topProductsToday}
+                              layout="vertical"
+                              margin={{ top: 4, right: 12, left: 18, bottom: 4 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                              <XAxis type="number" tickLine={false} axisLine={false} />
+                              <YAxis
+                                type="category"
+                                dataKey="name"
+                                width={110}
+                                tickLine={false}
+                                axisLine={false}
+                                tick={{ fontSize: 12, fill: "#4f4f4f" }}
+                              />
+                              <Tooltip
+                                cursor={{ fill: "rgba(230, 28, 36, 0.06)" }}
+                                contentStyle={{
+                                  borderRadius: "14px",
+                                  border: "1px solid rgba(17,17,17,0.08)",
+                                  boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                                }}
+                              />
+                              <Bar
+                                dataKey="scans"
+                                radius={[0, 10, 10, 0]}
+                                fill={PRIMARY_RED}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No product trends yet</div>
+                          <div className="empty-state-copy">
+                            Start scanning to see which products move fastest in this store.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </section>
 
@@ -2923,49 +3402,60 @@ export default function App() {
                       <div className="section-meta">08:00 - 21:00</div>
                     </div>
                     <div className="panel-body">
-                      <div className="chart-shell line-shell">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart
-                            data={myStorePeakHours}
-                            margin={{ top: 8, right: 12, left: -8, bottom: 2 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
-                            <XAxis
-                              dataKey="hour"
-                              tickFormatter={(value) => `${value}:00`}
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{ fontSize: 12, fill: "#5b5b5b" }}
-                            />
-                            <YAxis
-                              tickLine={false}
-                              axisLine={false}
-                              tick={{ fontSize: 12, fill: "#5b5b5b" }}
-                            />
-                            <Tooltip
-                              formatter={(value) => [`${value} baskets`, "Volume"]}
-                              labelFormatter={(value) => `${value}:00`}
-                              contentStyle={{
-                                borderRadius: "14px",
-                                border: "1px solid rgba(17,17,17,0.08)",
-                                boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
-                              }}
-                            />
-                            <Line
-                              type="monotone"
-                              dataKey="baskets"
-                              stroke={PRIMARY_RED}
-                              strokeWidth={3}
-                              dot={{ r: 4, fill: PRIMARY_RED }}
-                              activeDot={{ r: 6 }}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="chart-footnote">
-                        Lunch and evening traffic stand out as the busiest periods in
-                        this store today.
-                      </div>
+                      {hasStoreData ? (
+                        <>
+                          <div className="chart-shell line-shell">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart
+                                data={myStorePeakHours}
+                                margin={{ top: 8, right: 12, left: -8, bottom: 2 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                                <XAxis
+                                  dataKey="hour"
+                                  tickFormatter={(value) => `${value}:00`}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                                />
+                                <YAxis
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                                />
+                                <Tooltip
+                                  formatter={(value) => [`${value} baskets`, "Volume"]}
+                                  labelFormatter={(value) => `${value}:00`}
+                                  contentStyle={{
+                                    borderRadius: "14px",
+                                    border: "1px solid rgba(17,17,17,0.08)",
+                                    boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                                  }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="baskets"
+                                  stroke={PRIMARY_RED}
+                                  strokeWidth={3}
+                                  dot={{ r: 4, fill: PRIMARY_RED }}
+                                  activeDot={{ r: 6 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="chart-footnote">
+                            Lunch and evening traffic stand out as the busiest periods in
+                            this store today.
+                          </div>
+                        </>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No peak-hour signal yet</div>
+                          <div className="empty-state-copy">
+                            A few completed baskets will reveal when this store is busiest.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </section>
 
@@ -2974,26 +3464,35 @@ export default function App() {
                       <div className="section-title">Top Pairs In My Store</div>
                     </div>
                     <div className="panel-body">
-                      <div className="pairs-wrap">
-                        <div className="pairs-copy">
-                          Your customers most often buy together:
-                        </div>
-                        {myStoreTopPairs.map((pair) => (
-                          <div className="pair-card" key={pair.title}>
-                            <div className="pair-topline">
-                              <div className="pair-title">{pair.title}</div>
-                              <div className="pair-percent">{pair.percentage}%</div>
-                            </div>
-                            <div className="pair-subtitle">{pair.subtitle}</div>
-                            <div className="pair-progress">
-                              <div
-                                className="pair-progress-fill"
-                                style={{ width: `${pair.percentage}%` }}
-                              />
-                            </div>
+                      {hasStoreData ? (
+                        <div className="pairs-wrap">
+                          <div className="pairs-copy">
+                            Your customers most often buy together:
                           </div>
-                        ))}
-                      </div>
+                          {myStoreTopPairs.map((pair) => (
+                            <div className="pair-card" key={pair.title}>
+                              <div className="pair-topline">
+                                <div className="pair-title">{pair.title}</div>
+                                <div className="pair-percent">{pair.percentage}%</div>
+                              </div>
+                              <div className="pair-subtitle">{pair.subtitle}</div>
+                              <div className="pair-progress">
+                                <div
+                                  className="pair-progress-fill"
+                                  style={{ width: `${pair.percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No pairings yet</div>
+                          <div className="empty-state-copy">
+                            Start scanning to learn what shoppers buy together in this store.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </section>
 
@@ -3001,7 +3500,9 @@ export default function App() {
                     <div className="panel-body" style={{ border: "2px solid rgba(230, 28, 36, 0.3)", borderRadius: "24px" }}>
                       <div className="champion-title">Restock Alert</div>
                       <div className="alert-copy">
-                        Coca-Cola 330ml selling fast — consider restocking soon
+                        {hasStoreData
+                          ? "Coca-Cola 330ml selling fast — consider restocking soon"
+                          : "Restock signals will appear here once this store has enough scan volume."}
                       </div>
                     </div>
                   </section>
@@ -3339,8 +3840,23 @@ export default function App() {
                 </div>
 
                 <div className="hq-metrics">
-                  {hqMetrics.map((metric) => (
-                    <div className="hq-metric-card" key={metric.label}>
+                  {(hasNetworkData
+                    ? hqMetrics
+                    : [
+                        { label: "Total baskets today", value: "0" },
+                        { label: "Active stores today", value: "0" },
+                        { label: "Most common basket pair", value: "Waiting for live data" },
+                        { label: "Fastest growing district", value: "No trend yet" },
+                      ]
+                  ).map((metric) => (
+                    <div
+                      className={`hq-metric-card ${
+                        dashboardFlashState.metricLabels.includes(metric.label)
+                          ? "flash-update"
+                          : ""
+                      }`}
+                      key={metric.label}
+                    >
                       <div className="hq-metric-label">{metric.label}</div>
                       <div className="hq-metric-value">{metric.value}</div>
                     </div>
@@ -3353,13 +3869,42 @@ export default function App() {
                     Rule-based recommendations generated from observed basket behavior
                     to help CCI decide what to do next.
                   </div>
+                  {!hasNetworkData ? (
+                    <div className="empty-state-block" style={{ marginBottom: "14px" }}>
+                      <div className="empty-state-title">Start scanning to generate insights</div>
+                      <div className="empty-state-copy">
+                        The HQ view will generate live recommendations as soon as stores
+                        begin sending baskets.
+                      </div>
+                    </div>
+                  ) : null}
+                  {hasNetworkData && highConfidenceRecommendations.length === 0 ? (
+                    <div className="empty-state-block" style={{ marginBottom: "14px" }}>
+                      <div className="empty-state-title">
+                        Not enough data for high-confidence recommendation
+                      </div>
+                      <div className="empty-state-copy">
+                        SCAN is still collecting enough basket coverage to promote a
+                        high-confidence action. The cards below are best-effort signals.
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="recommendations-grid">
                     {recommendedActions.map((recommendation) => {
                       const isExpanded =
                         expandedRecommendationId === recommendation.id;
 
                       return (
-                        <div className="recommendation-card" key={recommendation.id}>
+                        <div
+                          className={`recommendation-card ${
+                            dashboardFlashState.recommendationIds.includes(
+                              recommendation.id
+                            )
+                              ? "flash-update"
+                              : ""
+                          }`}
+                          key={recommendation.id}
+                        >
                           <div className="recommendation-topline">
                             <span
                               className={`recommendation-priority ${recommendation.priority.toLowerCase()}`}
@@ -3462,97 +4007,115 @@ export default function App() {
 
                 <div className="hq-grid">
                   <div className="hq-card">
-                    <div className="hq-card-title">
+                  <div className="hq-card-title">
                       What do customers buy with CCI products?
                     </div>
                     <div className="hq-card-copy">
                       Basket pair analysis across the full network of anonymized
                       stores.
                     </div>
-                    <div className="hq-chart-shell">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={hqPairAnalysis}
-                          layout="vertical"
-                          margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
-                        >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="rgba(17,17,17,0.08)"
-                          />
-                          <XAxis
-                            type="number"
-                            tickLine={false}
-                            axisLine={false}
-                            domain={[0, 100]}
-                            tickFormatter={(value) => `${value}%`}
-                          />
-                          <YAxis
-                            type="category"
-                            dataKey="label"
-                            width={170}
-                            tickLine={false}
-                            axisLine={false}
-                            tick={{ fontSize: 12, fill: "#4d545f" }}
-                          />
-                          <Tooltip
-                            formatter={(value, _name, item) => {
-                              const suffix = item.payload.suffix
-                                ? ` ${item.payload.suffix}`
-                                : "";
-                              return [`${value}%${suffix}`, "Share"];
-                            }}
-                            contentStyle={{
-                              borderRadius: "14px",
-                              border: "1px solid rgba(17,17,17,0.08)",
-                              boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
-                            }}
-                          />
-                          <Bar
-                            dataKey="percentage"
-                            radius={[0, 10, 10, 0]}
-                            fill={PRIMARY_RED}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {hasNetworkData ? (
+                      <div className="hq-chart-shell">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={hqPairAnalysis}
+                            layout="vertical"
+                            margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="rgba(17,17,17,0.08)"
+                            />
+                            <XAxis
+                              type="number"
+                              tickLine={false}
+                              axisLine={false}
+                              domain={[0, 100]}
+                              tickFormatter={(value) => `${value}%`}
+                            />
+                            <YAxis
+                              type="category"
+                              dataKey="label"
+                              width={170}
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 12, fill: "#4d545f" }}
+                            />
+                            <Tooltip
+                              formatter={(value, _name, item) => {
+                                const suffix = item.payload.suffix
+                                  ? ` ${item.payload.suffix}`
+                                  : "";
+                                return [`${value}%${suffix}`, "Share"];
+                              }}
+                              contentStyle={{
+                                borderRadius: "14px",
+                                border: "1px solid rgba(17,17,17,0.08)",
+                                boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                              }}
+                            />
+                            <Bar
+                              dataKey="percentage"
+                              radius={[0, 10, 10, 0]}
+                              fill={PRIMARY_RED}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="empty-state-block">
+                        <div className="empty-state-title">No baskets yet</div>
+                        <div className="empty-state-copy">
+                          Start scanning to generate live pair analysis for CCI products.
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="hq-card">
-                    <div className="hq-card-title">Geographic Breakdown</div>
-                    <div className="hq-card-copy">
-                      District comparison across all anonymized stores.
-                    </div>
-                    <table className="hq-table">
-                      <thead>
-                        <tr>
-                          <th>District</th>
-                          <th>Baskets</th>
-                          <th>Top Pair</th>
-                          <th>Trend</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hqDistrictBreakdown.map((row) => (
-                          <tr key={row.district}>
-                            <td>{row.district}</td>
-                            <td>{row.baskets}</td>
-                            <td>{row.topPair}</td>
-                            <td
-                              className={
-                                row.trend === "↓"
-                                  ? "hq-trend-down"
-                                  : row.trend === "→"
-                                    ? "hq-trend-neutral"
-                                    : "hq-trend-up"
-                              }
-                            >
-                              {row.trend}
-                            </td>
+                  <div className="hq-card-title">Geographic Breakdown</div>
+                  <div className="hq-card-copy">
+                    District comparison across all anonymized stores.
+                  </div>
+                    {hasNetworkData ? (
+                      <table className="hq-table">
+                        <thead>
+                          <tr>
+                            <th>District</th>
+                            <th>Baskets</th>
+                            <th>Top Pair</th>
+                            <th>Trend</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {hqDistrictBreakdown.map((row) => (
+                            <tr key={row.district}>
+                              <td>{row.district}</td>
+                              <td>{row.baskets}</td>
+                              <td>{row.topPair}</td>
+                              <td
+                                className={
+                                  row.trend === "↓"
+                                    ? "hq-trend-down"
+                                    : row.trend === "→"
+                                      ? "hq-trend-neutral"
+                                      : "hq-trend-up"
+                                }
+                              >
+                                {row.trend}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="empty-state-block">
+                        <div className="empty-state-title">No district comparison yet</div>
+                        <div className="empty-state-copy">
+                          SCAN needs a few live baskets before district trends become meaningful.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -3562,46 +4125,55 @@ export default function App() {
                     Aggregated basket volume across all stores combined, with clear
                     lunch and evening surges.
                   </div>
-                  <div className="hq-chart-shell" style={{ height: "280px" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={hqPeakHours}
-                        margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="rgba(17,17,17,0.08)"
-                        />
-                        <XAxis
-                          dataKey="hour"
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 12, fill: "#5c6370" }}
-                        />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 12, fill: "#5c6370" }}
-                        />
-                        <Tooltip
-                          formatter={(value) => [`${value} baskets`, "Volume"]}
-                          contentStyle={{
-                            borderRadius: "14px",
-                            border: "1px solid rgba(17,17,17,0.08)",
-                            boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="baskets"
-                          stroke={PRIMARY_RED}
-                          strokeWidth={3}
-                          dot={{ r: 4, fill: PRIMARY_RED }}
-                          activeDot={{ r: 6 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {hasNetworkData ? (
+                    <div className="hq-chart-shell" style={{ height: "280px" }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={hqPeakHours}
+                          margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="rgba(17,17,17,0.08)"
+                          />
+                          <XAxis
+                            dataKey="hour"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#5c6370" }}
+                          />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#5c6370" }}
+                          />
+                          <Tooltip
+                            formatter={(value) => [`${value} baskets`, "Volume"]}
+                            contentStyle={{
+                              borderRadius: "14px",
+                              border: "1px solid rgba(17,17,17,0.08)",
+                              boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="baskets"
+                            stroke={PRIMARY_RED}
+                            strokeWidth={3}
+                            dot={{ r: 4, fill: PRIMARY_RED }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="empty-state-block">
+                      <div className="empty-state-title">No traffic pattern yet</div>
+                      <div className="empty-state-copy">
+                        Once stores begin logging baskets, peak-hour traffic will appear here.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3615,14 +4187,29 @@ export default function App() {
                 </div>
 
                 <div className="hq-feed">
-                  {hqLiveFeed.map((entry) => (
-                    <div className="hq-feed-item" key={entry.id}>
-                      <div className="hq-feed-time">{entry.time}</div>
-                      <div className="hq-feed-line">
-                        District: {entry.district} — {entry.items}
+                  {hqLiveFeed.length > 0 ? (
+                    hqLiveFeed.map((entry) => (
+                      <div
+                        className={`hq-feed-item ${
+                          dashboardFlashState.feedId === entry.id ? "flash-update" : ""
+                        }`}
+                        key={entry.id}
+                      >
+                        <div className="hq-feed-time">{entry.time}</div>
+                        <div className="hq-feed-line">
+                          District: {entry.district} — {entry.items}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state-block">
+                      <div className="empty-state-title">No baskets yet</div>
+                      <div className="empty-state-copy">
+                        Live transactions will appear here the moment a store logs its
+                        first basket.
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
 
                 <div className="hq-sidebar-note">
@@ -3638,14 +4225,24 @@ export default function App() {
       {activeMode === "cashier" ? (
         <>
           {activeCashierTab === "scan" ? (
-            <button
-              className="demo-button"
-              type="button"
-              disabled={demoModeRunning}
-              onClick={handleDemoMode}
-            >
-              {demoModeRunning ? "RUNNING DEMO..." : "DEMO MODE"}
-            </button>
+            <div className="demo-fab-stack">
+              <button
+                className="demo-button script-button"
+                type="button"
+                disabled={demoModeRunning || demoScriptRunning}
+                onClick={handleDemoScriptMode}
+              >
+                {demoScriptRunning ? "RUNNING SCRIPT..." : "SCRIPT MODE"}
+              </button>
+              <button
+                className="demo-button"
+                type="button"
+                disabled={demoModeRunning || demoScriptRunning}
+                onClick={handleDemoMode}
+              >
+                {demoModeRunning ? "RUNNING DEMO..." : "DEMO MODE"}
+              </button>
+            </div>
           ) : null}
           <nav className="bottom-nav" aria-label="Primary">
             <button
