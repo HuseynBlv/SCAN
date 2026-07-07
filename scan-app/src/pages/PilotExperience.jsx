@@ -1,0 +1,4191 @@
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { BarcodeFormat, BrowserMultiFormatOneDReader } from "@zxing/browser";
+import { DecodeHintType } from "@zxing/library";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { createDashboardSnapshot } from "../services/analytics";
+import {
+  DEMO_STORES,
+  clearLocalDemoBaskets,
+  fetchPersistedBaskets,
+  generateHistoricalDemoBaskets,
+  generateLiveDemoTransactions,
+  getActiveDemoStore,
+  getDemoAdminState,
+  getBasketDataMode,
+  isDemoOfflineMode,
+  persistBasket,
+  resetDemoData,
+  seedRealisticBasketData,
+  setActiveDemoStore,
+  setDemoOfflineMode,
+  syncOfflineDemoBaskets,
+  subscribeToBasketChanges,
+} from "../services/basketService";
+import { createRecommendedActions } from "../services/recommendations";
+import { createRewardsSnapshot } from "../services/rewards";
+
+const OPEN_FOOD_FACTS_API = "https://world.openfoodfacts.org/api/v2/product";
+const DUPLICATE_SCAN_WINDOW_MS = 3000;
+const SPLASH_DURATION_MS = 2000;
+const SPLASH_FADE_MS = 420;
+const DEMO_STEP_DELAY_MS = 1500;
+const LOG_RESET_DELAY_MS = 1200;
+const ACHIEVEMENT_DURATION_MS = 3000;
+const SCAN_FEEDBACK_DURATION_MS = 950;
+const DEMO_KEY_WINDOW_MS = 1200;
+
+const PRIMARY_RED = "#E61C24";
+const SUCCESS_GREEN = "#19A55A";
+const HQ_REGION_NAME = "CCI HQ — Baku Region";
+
+const DEMO_SEQUENCE = [
+  {
+    barcode: "5449000000996",
+    product: {
+      name: "Coca-Cola",
+      brand: "The Coca-Cola Company",
+      quantity: "330ml",
+    },
+  },
+  {
+    barcode: "5053990109332",
+    product: {
+      name: "Lays Original",
+      brand: "Lay's",
+      quantity: "40g",
+    },
+  },
+  {
+    barcode: "4760062100018",
+    product: {
+      name: "Azerchay",
+      brand: "Azerchay",
+      quantity: "Black Tea",
+    },
+  },
+];
+
+const DEMO_ADMIN_SCAN_SEQUENCE = [
+  {
+    barcode: "5449000000996",
+    product: {
+      name: "Coca-Cola",
+      brand: "The Coca-Cola Company",
+      quantity: "500ml",
+    },
+  },
+  {
+    barcode: "5053990109332",
+    product: {
+      name: "Chips",
+      brand: "Lay's",
+      quantity: "45g",
+    },
+  },
+  {
+    barcode: "2000000001114",
+    product: {
+      name: "Sandwich",
+      brand: "Fresh Corner",
+      quantity: "1 pc",
+    },
+  },
+];
+
+const DISTRICT_RANKINGS = {
+  week: [
+    { rank: 1, store: "Store #12", baskets: 211, delta: 7, medal: "🥇" },
+    { rank: 2, store: "Store #47", baskets: 189, delta: 5, medal: "🥈", isYou: true },
+    { rank: 3, store: "Store #31", baskets: 162, delta: 3, medal: "🥉" },
+    { rank: 4, store: "Store #8", baskets: 138, delta: 2 },
+    { rank: 5, store: "Store #22", baskets: 129, delta: 4 },
+    { rank: 6, store: "Store #19", baskets: 112, delta: 1, muted: true },
+    { rank: 7, store: "Store #4", baskets: 95, delta: 2, muted: true },
+    { rank: 8, store: "Store #27", baskets: 84, delta: 1, muted: true },
+  ],
+  month: [
+    { rank: 1, store: "Store #12", baskets: 847, delta: 23, medal: "🥇" },
+    { rank: 2, store: "Store #47", baskets: 683, delta: 0, medal: "🥈", isYou: true },
+    { rank: 3, store: "Store #31", baskets: 541, delta: 8, medal: "🥉" },
+    { rank: 4, store: "Store #8", baskets: 423, delta: 5 },
+    { rank: 5, store: "Store #22", baskets: 387, delta: 11 },
+    { rank: 6, store: "Store #19", baskets: 314, delta: 3, muted: true },
+    { rank: 7, store: "Store #4", baskets: 276, delta: 2, muted: true },
+    { rank: 8, store: "Store #27", baskets: 241, delta: 4, muted: true },
+  ],
+  allTime: [
+    { rank: 1, store: "Store #12", baskets: 5821, delta: 23, medal: "🥇" },
+    { rank: 2, store: "Store #47", baskets: 5314, delta: 0, medal: "🥈", isYou: true },
+    { rank: 3, store: "Store #31", baskets: 4872, delta: 8, medal: "🥉" },
+    { rank: 4, store: "Store #8", baskets: 4317, delta: 5 },
+    { rank: 5, store: "Store #22", baskets: 4026, delta: 11 },
+    { rank: 6, store: "Store #19", baskets: 3614, delta: 3, muted: true },
+    { rank: 7, store: "Store #4", baskets: 3492, delta: 2, muted: true },
+    { rank: 8, store: "Store #27", baskets: 3276, delta: 4, muted: true },
+  ],
+};
+
+const CITY_LEADERBOARD = {
+  week: [
+    { rank: 1, store: "Store #3 — Nizami", baskets: 318, delta: 10 },
+    { rank: 2, store: "Store #15 — Yasamal", baskets: 302, delta: 7 },
+    { rank: 3, store: "Store #12 — Narimanov", baskets: 296, delta: 7 },
+    { rank: 4, store: "Store #28 — Khatai", baskets: 281, delta: 6 },
+    { rank: 5, store: "Store #6 — Sabail", baskets: 267, delta: 5 },
+    { rank: 6, store: "Store #44 — Binagadi", baskets: 259, delta: 4 },
+    { rank: 7, store: "Store #18 — Narimanov", baskets: 248, delta: 3 },
+    { rank: 8, store: "Store #31 — Khatai", baskets: 243, delta: 3 },
+    { rank: 9, store: "Store #9 — Yasamal", baskets: 231, delta: 2 },
+    { rank: 10, store: "Store #22 — Surakhani", baskets: 226, delta: 4 },
+  ],
+  month: [
+    { rank: 1, store: "Store #3 — Nizami", baskets: 1298, delta: 31 },
+    { rank: 2, store: "Store #15 — Yasamal", baskets: 1212, delta: 24 },
+    { rank: 3, store: "Store #12 — Narimanov", baskets: 1187, delta: 23 },
+    { rank: 4, store: "Store #28 — Khatai", baskets: 1108, delta: 19 },
+    { rank: 5, store: "Store #6 — Sabail", baskets: 1051, delta: 16 },
+    { rank: 6, store: "Store #44 — Binagadi", baskets: 996, delta: 12 },
+    { rank: 7, store: "Store #18 — Narimanov", baskets: 954, delta: 14 },
+    { rank: 8, store: "Store #31 — Khatai", baskets: 911, delta: 8 },
+    { rank: 9, store: "Store #9 — Yasamal", baskets: 886, delta: 10 },
+    { rank: 10, store: "Store #22 — Surakhani", baskets: 861, delta: 11 },
+  ],
+  allTime: [
+    { rank: 1, store: "Store #3 — Nizami", baskets: 9834, delta: 31 },
+    { rank: 2, store: "Store #15 — Yasamal", baskets: 9520, delta: 24 },
+    { rank: 3, store: "Store #12 — Narimanov", baskets: 9413, delta: 23 },
+    { rank: 4, store: "Store #28 — Khatai", baskets: 9118, delta: 19 },
+    { rank: 5, store: "Store #6 — Sabail", baskets: 8872, delta: 16 },
+    { rank: 6, store: "Store #44 — Binagadi", baskets: 8631, delta: 12 },
+    { rank: 7, store: "Store #18 — Narimanov", baskets: 8440, delta: 14 },
+    { rank: 8, store: "Store #31 — Khatai", baskets: 8234, delta: 8 },
+    { rank: 9, store: "Store #9 — Yasamal", baskets: 8012, delta: 10 },
+    { rank: 10, store: "Store #22 — Surakhani", baskets: 7827, delta: 11 },
+  ],
+};
+
+const CURRENT_STORE_CITY_RANK = {
+  week: { rank: 53, baskets: 189, delta: 5 },
+  month: { rank: 47, baskets: 683, delta: 0 },
+  allTime: { rank: 49, baskets: 5314, delta: 0 },
+};
+
+const FALLBACK_PRODUCTS = {
+  "5449000000996": {
+    name: "Coca-Cola",
+    brand: "The Coca-Cola Company",
+    quantity: "330ml",
+  },
+  "5053990109332": {
+    name: "Lays Original",
+    brand: "Lay's",
+    quantity: "40g",
+  },
+  "4760062100018": {
+    name: "Azerchay",
+    brand: "Azerchay",
+    quantity: "Black Tea",
+  },
+};
+
+const DEMO_STORE_DETAILS = {
+  Yasamal: { id: "SCAN-YAS-014", label: "YAS" },
+  Narimanov: { id: "SCAN-NAR-047", label: "NAR" },
+  Nizami: { id: "SCAN-NIZ-031", label: "NIZ" },
+  Khatai: { id: "SCAN-KHA-008", label: "KHA" },
+  Sabail: { id: "SCAN-SAB-022", label: "SAB" },
+};
+
+const RETAIL_BARCODE_FORMATS = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.ITF,
+  BarcodeFormat.CODABAR,
+];
+
+function normalizeProduct(product = {}) {
+  return {
+    name: product.product_name?.trim() || "Unknown Product",
+    brand: product.brands?.trim() || "Brand unavailable",
+    quantity: product.quantity?.trim() || "Quantity unavailable",
+  };
+}
+
+function buildScannedItem(barcode, productDetails) {
+  return {
+    id: `${barcode}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    barcode,
+    name: productDetails.name,
+    brand: productDetails.brand,
+    quantity: productDetails.quantity,
+    customName: productDetails.name === "Unknown Product" ? "" : productDetails.name,
+    isUnknown: productDetails.name === "Unknown Product",
+  };
+}
+
+function isSameDayValue(leftValue, rightValue = new Date()) {
+  const left = new Date(leftValue);
+  const right = new Date(rightValue);
+
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function secondsSince(dateValue, nowValue) {
+  if (!dateValue) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.floor((nowValue.getTime() - new Date(dateValue).getTime()) / 1000)
+  );
+}
+
+function AchievementOverlay({ achievement }) {
+  const confettiPieces = Array.from({ length: 18 }, (_, index) => ({
+    id: index,
+    left: `${(index * 11) % 100}%`,
+    delay: `${(index % 6) * 0.08}s`,
+    rotate: `${index * 19}deg`,
+    color: index % 3 === 0 ? "#ffffff" : index % 3 === 1 ? "#ffd166" : "#ff6b6b",
+  }));
+
+  return (
+    <div className="achievement-overlay" role="status" aria-live="assertive">
+      <div className="achievement-confetti" aria-hidden="true">
+        {confettiPieces.map((piece) => (
+          <span
+            className="confetti-piece"
+            key={piece.id}
+            style={{
+              left: piece.left,
+              animationDelay: piece.delay,
+              transform: `rotate(${piece.rotate})`,
+              background: piece.color,
+            }}
+          />
+        ))}
+      </div>
+      <div className="achievement-card-pop">
+        <div className="achievement-pop-kicker">Achievement Unlocked! 🏆</div>
+        <div className="achievement-pop-title">{achievement.title}</div>
+        <div className="achievement-pop-copy">{achievement.description}</div>
+      </div>
+    </div>
+  );
+}
+
+export default function PilotExperience({ routeMode = "cashier" }) {
+  const basketDataMode = getBasketDataMode();
+  const videoRef = useRef(null);
+  const readerRef = useRef(null);
+  const controlsRef = useRef(null);
+  const recentScansRef = useRef(new Map());
+  const pendingBarcodesRef = useRef(new Set());
+  const mountedRef = useRef(false);
+  const isLookingUpRef = useRef(false);
+  const splashFadeTimerRef = useRef(null);
+  const splashHideTimerRef = useRef(null);
+  const logResetTimerRef = useRef(null);
+  const achievementTimerRef = useRef(null);
+  const demoTimersRef = useRef([]);
+  const demoScriptTimersRef = useRef([]);
+  const scanFeedbackTimerRef = useRef(null);
+  const basketRefreshTimerRef = useRef(null);
+  const retrySyncTimerRef = useRef(null);
+  const successStateTimerRef = useRef(null);
+  const demoKeyPressesRef = useRef([]);
+  const dashboardFlashTimerRef = useRef(null);
+  const previousDashboardStateRef = useRef({
+    latestFeedId: "",
+    metricValues: [],
+    recommendationSignatures: [],
+  });
+
+  const activeMode = routeMode;
+  const setActiveMode = () => {};
+  const [activeCashierTab, setActiveCashierTab] = useState("scan");
+  const [rankingsRange, setRankingsRange] = useState("month");
+  const [rankingsScope, setRankingsScope] = useState("district");
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashFading, setSplashFading] = useState(false);
+  const [scanStatus, setScanStatus] = useState("Starting camera...");
+  const [scannedItems, setScannedItems] = useState([]);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [scanFeedbackState, setScanFeedbackState] = useState("idle");
+  const [demoModeRunning, setDemoModeRunning] = useState(false);
+  const [demoScriptRunning, setDemoScriptRunning] = useState(false);
+  const [pulseLogButton, setPulseLogButton] = useState(false);
+  const [isSavingBasket, setIsSavingBasket] = useState(false);
+  const [achievementPopup, setAchievementPopup] = useState(null);
+  const [persistedBaskets, setPersistedBaskets] = useState([]);
+  const [activeStore, setActiveStoreState] = useState(() => getActiveDemoStore());
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
+  const [syncStatus, setSyncStatus] = useState(
+    basketDataMode === "supabase" ? "Connecting..." : "Local fallback active"
+  );
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [expandedRecommendationId, setExpandedRecommendationId] = useState(null);
+  const [isDemoAdminOpen, setIsDemoAdminOpen] = useState(() =>
+    window.location.pathname === "/demo-admin"
+  );
+  const [demoRuntimeState, setDemoRuntimeState] = useState(() => getDemoAdminState());
+  const [demoAdminBusyAction, setDemoAdminBusyAction] = useState("");
+  const [demoAdminNotice, setDemoAdminNotice] = useState("");
+  const [clockNow, setClockNow] = useState(() => new Date());
+  const [basketSuccessState, setBasketSuccessState] = useState(null);
+  const [dashboardFlashState, setDashboardFlashState] = useState({
+    feedId: "",
+    metricLabels: [],
+    recommendationIds: [],
+  });
+
+  const showAchievement = (achievement) => {
+    window.clearTimeout(achievementTimerRef.current);
+    setAchievementPopup(achievement);
+    achievementTimerRef.current = window.setTimeout(() => {
+      setAchievementPopup(null);
+    }, ACHIEVEMENT_DURATION_MS);
+  };
+
+  const appendScannedItem = (barcode, productDetails) => {
+    setScannedItems((currentItems) => [
+      buildScannedItem(barcode, productDetails),
+      ...currentItems,
+    ]);
+  };
+
+  const flashScanFeedback = (nextState, duration = SCAN_FEEDBACK_DURATION_MS) => {
+    window.clearTimeout(scanFeedbackTimerRef.current);
+    setScanFeedbackState(nextState);
+
+    if (duration) {
+      scanFeedbackTimerRef.current = window.setTimeout(() => {
+        setScanFeedbackState("idle");
+      }, duration);
+    }
+  };
+
+  const vibrateOnScan = () => {
+    window.navigator?.vibrate?.(24);
+  };
+
+  const refreshDemoRuntimeState = () => {
+    const nextState = getDemoAdminState();
+    setActiveStoreState(nextState.activeStore);
+    setDemoRuntimeState(nextState);
+    return nextState;
+  };
+
+  const refreshPersistedBaskets = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setDataLoading(true);
+    }
+
+    try {
+      const baskets = await fetchPersistedBaskets();
+      const runtimeState = refreshDemoRuntimeState();
+      window.clearTimeout(retrySyncTimerRef.current);
+      setPersistedBaskets(baskets);
+      setDataError("");
+      setLastSyncedAt(new Date());
+      setSyncStatus(
+        runtimeState.offlineMode
+          ? "Offline demo mode"
+          : basketDataMode === "supabase"
+            ? "Synced live"
+            : "Local fallback active"
+      );
+    } catch (error) {
+      setDataError(error?.message || "Unable to sync basket data.");
+      setSyncStatus(
+        isDemoOfflineMode()
+          ? "Offline demo mode"
+          : basketDataMode === "supabase"
+            ? "Sync failed, retrying..."
+            : "Local fallback active"
+      );
+
+      if (basketDataMode === "supabase" && !isDemoOfflineMode()) {
+        window.clearTimeout(retrySyncTimerRef.current);
+        retrySyncTimerRef.current = window.setTimeout(() => {
+          void refreshPersistedBaskets({ silent: true });
+        }, 4000);
+      }
+    } finally {
+      if (!silent) {
+        setDataLoading(false);
+      }
+    }
+  };
+
+  const refreshPersistedBasketsEvent = useEffectEvent(refreshPersistedBaskets);
+
+  const processBarcode = useEffectEvent(async (barcode) => {
+    const trimmedBarcode = barcode?.trim();
+
+    if (!trimmedBarcode || pendingBarcodesRef.current.has(trimmedBarcode)) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastSeenAt = recentScansRef.current.get(trimmedBarcode);
+
+    if (lastSeenAt && now - lastSeenAt < DUPLICATE_SCAN_WINDOW_MS) {
+      return;
+    }
+
+    recentScansRef.current.set(trimmedBarcode, now);
+    pendingBarcodesRef.current.add(trimmedBarcode);
+    setIsLookingUp(true);
+    flashScanFeedback("processing", 0);
+    setScanStatus("Barcode detected. Looking up product...");
+
+    try {
+      const response = await fetch(
+        `${OPEN_FOOD_FACTS_API}/${encodeURIComponent(trimmedBarcode)}`,
+        {
+          headers: { Accept: "application/json" },
+        }
+      );
+      const data = await response.json();
+      const fallbackProduct = FALLBACK_PRODUCTS[trimmedBarcode];
+      const productDetails =
+        response.ok && data?.status === 1 && data?.product
+          ? normalizeProduct(data.product)
+          : fallbackProduct || {
+              name: "Unknown Product",
+              brand: "Manual entry needed",
+              quantity: "Unknown quantity",
+            };
+
+      appendScannedItem(trimmedBarcode, productDetails);
+      vibrateOnScan();
+      flashScanFeedback("success");
+
+      setScanStatus(
+        productDetails.name === "Unknown Product"
+          ? "Barcode not found. Add the product name manually to keep the basket complete."
+          : `Added ${productDetails.name}. Ready for the next item.`
+      );
+    } catch {
+      const fallbackProduct = FALLBACK_PRODUCTS[trimmedBarcode] || {
+        name: "Unknown Product",
+        brand: "Lookup failed",
+        quantity: "Unknown quantity",
+      };
+
+      appendScannedItem(trimmedBarcode, fallbackProduct);
+      vibrateOnScan();
+      flashScanFeedback("success");
+      setScanStatus(
+        fallbackProduct.name === "Unknown Product"
+          ? "Barcode not found. You can still add the product manually."
+          : `Added ${fallbackProduct.name} from the offline catalog.`
+      );
+    } finally {
+      pendingBarcodesRef.current.delete(trimmedBarcode);
+      setIsLookingUp(false);
+    }
+  });
+
+  const completeBasket = async (itemsToPersist) => {
+    if (!itemsToPersist.length) {
+      return;
+    }
+
+    setPulseLogButton(false);
+    setIsSavingBasket(true);
+    setSyncStatus(
+      isDemoOfflineMode()
+        ? "Offline demo mode"
+        : basketDataMode === "supabase"
+          ? "Syncing..."
+          : "Saving locally..."
+    );
+    setDataError("");
+
+    try {
+      const persistedBasket = await persistBasket(itemsToPersist);
+      const nextBaskets = [
+        persistedBasket,
+        ...persistedBaskets.filter((basket) => basket.id !== persistedBasket.id),
+      ];
+      const previousRecommendations = createRecommendedActions(persistedBaskets);
+      const nextRecommendations = createRecommendedActions(nextBaskets);
+      const previousRewards = createRewardsSnapshot(
+        persistedBaskets,
+        activeStore.name
+      );
+      const nextRewards = createRewardsSnapshot(nextBaskets, activeStore.name);
+      const previousUnlockedIds = new Set(
+        previousRewards.unlockedRewards.map((reward) => reward.id)
+      );
+      const newlyUnlockedReward = nextRewards.unlockedRewards
+        .filter((reward) => !previousUnlockedIds.has(reward.id))
+        .sort((left, right) => {
+          const priority = { discount: 3, points: 2, badge: 1 };
+          return (priority[right.type] || 0) - (priority[left.type] || 0);
+        })[0];
+      const generatedNewInsight =
+        nextRecommendations[0]?.id !== previousRecommendations[0]?.id ||
+        nextRecommendations[0]?.title !== previousRecommendations[0]?.title;
+
+      setPersistedBaskets(nextBaskets);
+      setLastSyncedAt(new Date());
+      refreshDemoRuntimeState();
+      setSyncStatus(
+        isDemoOfflineMode()
+          ? "Offline demo mode"
+          : basketDataMode === "supabase"
+            ? "Synced live"
+            : "Local fallback active"
+      );
+
+      if (newlyUnlockedReward) {
+        showAchievement({
+          title: `Reward unlocked: ${newlyUnlockedReward.title}`,
+          description: newlyUnlockedReward.description,
+        });
+      }
+
+      window.clearTimeout(successStateTimerRef.current);
+      setBasketSuccessState({
+        title: isDemoOfflineMode() ? "Basket completed offline" : "Basket completed",
+        steps: [
+          "Basket completed",
+          isDemoOfflineMode() ? "Offline mode active — basket waiting" : "Sent to CCI dashboard",
+          "Reward progress updated",
+          generatedNewInsight ? "New insight generated" : "Dashboard refreshed",
+        ],
+      });
+      successStateTimerRef.current = window.setTimeout(() => {
+        setBasketSuccessState(null);
+      }, 5200);
+
+      setScanStatus(
+        isDemoOfflineMode()
+          ? "Basket saved offline. Sync it from Demo Admin when ready."
+          : "Basket logged. Ready for next customer."
+      );
+      window.clearTimeout(logResetTimerRef.current);
+      logResetTimerRef.current = window.setTimeout(() => {
+        setScannedItems([]);
+        setScanStatus("Center the barcode in the frame.");
+        setScanFeedbackState("idle");
+      }, LOG_RESET_DELAY_MS);
+    } catch (error) {
+      setDataError(error?.message || "Unable to save the basket.");
+      setSyncStatus("Sync error");
+      setScanStatus("Basket save failed. Please try again.");
+    } finally {
+      setIsSavingBasket(false);
+    }
+  };
+
+  const runDemoScanStep = (entry, isLast, options = {}) => {
+    setIsLookingUp(true);
+    flashScanFeedback("processing", 0);
+    setScanStatus("Barcode detected. Looking up product...");
+
+    const resolveTimer = window.setTimeout(() => {
+      const scannedItem = buildScannedItem(entry.barcode, entry.product);
+      setScannedItems((currentItems) => [scannedItem, ...currentItems]);
+      setIsLookingUp(false);
+      vibrateOnScan();
+      flashScanFeedback("success");
+      setScanStatus(
+        isLast
+          ? `Added ${entry.product.name}. Demo basket ready to log.`
+          : `Added ${entry.product.name}. Continuing demo scan...`
+      );
+
+      if (isLast) {
+        setDemoModeRunning(false);
+        setPulseLogButton(true);
+
+        if (options.autoLog) {
+          const autoLogTimer = window.setTimeout(() => {
+            void completeBasket(options.sequenceItems || []);
+          }, 520);
+
+          demoTimersRef.current.push(autoLogTimer);
+        }
+      }
+    }, 450);
+
+    demoTimersRef.current.push(resolveTimer);
+  };
+
+  const startSimulatedScanSequence = (sequence, options = {}) => {
+    if (demoModeRunning) {
+      return;
+    }
+
+    demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    demoTimersRef.current = [];
+    setScannedItems([]);
+    setPulseLogButton(false);
+    setDemoModeRunning(true);
+    flashScanFeedback("idle");
+    setScanStatus(options.initialStatus || "Demo mode: simulating cashier flow...");
+    setActiveMode("cashier");
+    setActiveCashierTab("scan");
+
+    const sequenceItems = sequence.map((entry) => buildScannedItem(entry.barcode, entry.product));
+
+    sequence.forEach((entry, index) => {
+      const timerId = window.setTimeout(() => {
+        runDemoScanStep(entry, index === sequence.length - 1, {
+          autoLog: options.autoLog,
+          sequenceItems,
+        });
+      }, DEMO_STEP_DELAY_MS * index);
+
+      demoTimersRef.current.push(timerId);
+    });
+  };
+
+  useEffect(() => {
+    const clockTimer = window.setInterval(() => {
+      setClockNow(new Date());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(clockTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    splashFadeTimerRef.current = window.setTimeout(() => {
+      setSplashFading(true);
+    }, SPLASH_DURATION_MS - SPLASH_FADE_MS);
+
+    splashHideTimerRef.current = window.setTimeout(() => {
+      setShowSplash(false);
+    }, SPLASH_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(splashFadeTimerRef.current);
+      window.clearTimeout(splashHideTimerRef.current);
+      window.clearTimeout(logResetTimerRef.current);
+      window.clearTimeout(achievementTimerRef.current);
+      window.clearTimeout(scanFeedbackTimerRef.current);
+      window.clearTimeout(basketRefreshTimerRef.current);
+      window.clearTimeout(retrySyncTimerRef.current);
+      window.clearTimeout(successStateTimerRef.current);
+      window.clearTimeout(dashboardFlashTimerRef.current);
+      demoTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      demoScriptTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncRoutePanel = () => {
+      setIsDemoAdminOpen(window.location.pathname === "/demo-admin");
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key.toLowerCase() !== "d") {
+        return;
+      }
+
+      const now = Date.now();
+      const nextPresses = [...demoKeyPressesRef.current, now].filter(
+        (timestamp) => now - timestamp <= DEMO_KEY_WINDOW_MS
+      );
+
+      demoKeyPressesRef.current = nextPresses;
+
+      if (nextPresses.length >= 3) {
+        setIsDemoAdminOpen(true);
+        demoKeyPressesRef.current = [];
+      }
+    };
+
+    window.addEventListener("popstate", syncRoutePanel);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("popstate", syncRoutePanel);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    isLookingUpRef.current = isLookingUp;
+  }, [isLookingUp]);
+
+  useEffect(() => {
+    const recentScans = recentScansRef.current;
+    const pendingBarcodes = pendingBarcodesRef.current;
+
+    if (showSplash || activeMode !== "cashier" || activeCashierTab !== "scan") {
+      mountedRef.current = false;
+      controlsRef.current?.stop?.();
+      readerRef.current?.reset?.();
+      return undefined;
+    }
+
+    mountedRef.current = true;
+
+    const startScanner = async () => {
+      try {
+        setScanStatus("Loading barcode scanner...");
+        const reader = new BrowserMultiFormatOneDReader(
+          new Map([[DecodeHintType.POSSIBLE_FORMATS, RETAIL_BARCODE_FORMATS]]),
+          {
+            delayBetweenScanAttempts: 70,
+            delayBetweenScanSuccess: 350,
+            tryPlayVideoTimeout: 3000,
+          }
+        );
+        readerRef.current = reader;
+
+        if (!mountedRef.current || !videoRef.current) {
+          return;
+        }
+
+        setScanFeedbackState("idle");
+        setScanStatus("Center the barcode in the frame.");
+
+        const controls = await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 24, max: 30 },
+            },
+          },
+          videoRef.current,
+          (result, error) => {
+            if (result) {
+              void processBarcode(result.getText());
+              return;
+            }
+
+            if (error?.name === "NotFoundException") {
+              return;
+            }
+
+            if (error && mountedRef.current && !isLookingUpRef.current) {
+              setScanStatus("Align the barcode and hold steady.");
+            }
+          }
+        );
+
+        controlsRef.current = controls;
+
+        try {
+          const selectVideoTrack = (track) => track.kind === "video";
+          const capabilities = controls.streamVideoCapabilitiesGet?.(selectVideoTrack);
+          const advancedConstraints = {};
+
+          if (
+            Array.isArray(capabilities?.focusMode) &&
+            capabilities.focusMode.includes("continuous")
+          ) {
+            advancedConstraints.focusMode = "continuous";
+          }
+
+          if (
+            Array.isArray(capabilities?.exposureMode) &&
+            capabilities.exposureMode.includes("continuous")
+          ) {
+            advancedConstraints.exposureMode = "continuous";
+          }
+
+          if (Object.keys(advancedConstraints).length > 0) {
+            await controls.streamVideoConstraintsApply?.(
+              { advanced: [advancedConstraints] },
+              selectVideoTrack
+            );
+          }
+        } catch {
+          // Ignore unsupported camera capabilities and continue with defaults.
+        }
+      } catch (error) {
+        if (mountedRef.current) {
+          setScanFeedbackState("idle");
+          setScanStatus(
+            error?.message ||
+              "Camera unavailable. Please allow camera access and refresh."
+          );
+        }
+      }
+    };
+
+    startScanner();
+
+    return () => {
+      mountedRef.current = false;
+      controlsRef.current?.stop?.();
+      readerRef.current?.reset?.();
+      recentScans.clear();
+      pendingBarcodes.clear();
+    };
+  }, [activeMode, activeCashierTab, showSplash]);
+
+  useEffect(() => {
+    window.queueMicrotask(() => {
+      void refreshPersistedBasketsEvent();
+    });
+
+    const unsubscribe = subscribeToBasketChanges(
+      () => {
+        setSyncStatus("Syncing...");
+        window.clearTimeout(basketRefreshTimerRef.current);
+        basketRefreshTimerRef.current = window.setTimeout(() => {
+          void refreshPersistedBasketsEvent({ silent: true });
+        }, 250);
+      },
+      (error) => {
+        setDataError(error?.message || "Realtime sync is unavailable.");
+        setSyncStatus("Sync failed, retrying...");
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const updateUnknownProductName = (id, nextName) => {
+    setScannedItems((currentItems) =>
+      currentItems.map((item) =>
+        item.id === id ? { ...item, customName: nextName } : item
+      )
+    );
+  };
+
+  const handleDemoAdminClose = () => {
+    setIsDemoAdminOpen(false);
+
+    if (window.location.pathname === "/demo-admin") {
+      window.history.replaceState({}, "", "/");
+    }
+  };
+
+  const runDemoAdminAction = async (actionId, action) => {
+    setDemoAdminBusyAction(actionId);
+    setDemoAdminNotice("");
+
+    try {
+      const message = await action();
+      await refreshPersistedBaskets({ silent: true });
+      setDemoAdminNotice(message);
+    } catch (error) {
+      setDemoAdminNotice(error?.message || "Demo admin action failed.");
+    } finally {
+      setDemoAdminBusyAction("");
+    }
+  };
+
+  const applyActiveStore = (store) => {
+    setActiveDemoStore(store);
+    const nextState = refreshDemoRuntimeState();
+    setDemoAdminNotice(`Active demo store switched to ${nextState.activeStore.name}.`);
+  };
+
+  const handleDemoMode = () => {
+    startSimulatedScanSequence(DEMO_SEQUENCE, {
+      initialStatus: "Demo mode: simulating cashier flow...",
+    });
+  };
+
+  const handleDemoScriptMode = () => {
+    if (demoScriptRunning || demoModeRunning) {
+      return;
+    }
+
+    demoScriptTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    demoScriptTimersRef.current = [];
+    setDemoScriptRunning(true);
+    setBasketSuccessState({
+      title: "Demo script mode",
+      steps: [
+        "Show store dashboard",
+        "Scan Coca-Cola + chips + sandwich",
+        "Complete basket and update rewards",
+        "Switch to HQ dashboard for the live insight",
+      ],
+    });
+    setActiveMode("cashier");
+    setActiveCashierTab("store");
+
+    const queueScriptStep = (delay, callback) => {
+      const timerId = window.setTimeout(callback, delay);
+      demoScriptTimersRef.current.push(timerId);
+    };
+
+    queueScriptStep(1600, () => {
+      setActiveCashierTab("scan");
+      startSimulatedScanSequence(DEMO_ADMIN_SCAN_SEQUENCE, {
+        autoLog: true,
+        initialStatus: "Demo script: scanning a live basket...",
+      });
+    });
+    queueScriptStep(7600, () => {
+      setActiveCashierTab("rewards");
+      setScanStatus("Reward progress updated. SCAN is ready to show HQ impact.");
+    });
+    queueScriptStep(9800, () => {
+      setActiveMode("hq");
+    });
+    queueScriptStep(11400, () => {
+      const liveRecommendationId =
+        previousDashboardStateRef.current.recommendationSignatures[0]?.split(":")[0] ||
+        null;
+      setExpandedRecommendationId(liveRecommendationId);
+      setDemoScriptRunning(false);
+      setBasketSuccessState(null);
+    });
+  };
+
+  const handleLogBasket = async () => {
+    if (!scannedItems.length) {
+      return;
+    }
+
+    await completeBasket(scannedItems);
+  };
+
+  const currentDistrictRows = DISTRICT_RANKINGS[rankingsRange];
+  const currentCityRows = CITY_LEADERBOARD[rankingsRange];
+  const currentCityRank = CURRENT_STORE_CITY_RANK[rankingsRange];
+  const activeStoreShortName = activeStore.name.split("—")[0].trim();
+  const activeStoreDetails =
+    DEMO_STORE_DETAILS[activeStore.district] || { id: "SCAN-LIVE-001", label: "LIVE" };
+  const rankingsRangeLabel =
+    rankingsRange === "week"
+      ? "This Week"
+      : rankingsRange === "month"
+        ? "This Month"
+        : "All Time";
+  const dashboardSnapshot = createDashboardSnapshot(persistedBaskets, activeStore.name);
+  const rewardsSnapshot = createRewardsSnapshot(persistedBaskets, activeStore.name);
+  const recommendedActions = createRecommendedActions(persistedBaskets);
+  const storeStats = dashboardSnapshot.storeStats;
+  const topProductsToday = dashboardSnapshot.topProductsToday;
+  const myStorePeakHours = dashboardSnapshot.myStorePeakHours;
+  const myStoreTopPairs = dashboardSnapshot.myStoreTopPairs;
+  const hqMetrics = dashboardSnapshot.hqMetrics;
+  const hqPairAnalysis = dashboardSnapshot.hqPairAnalysis;
+  const hqDistrictBreakdown = dashboardSnapshot.hqDistrictBreakdown;
+  const hqPeakHours = dashboardSnapshot.hqPeakHours;
+  const hqLiveFeed = dashboardSnapshot.hqLiveFeed;
+  const storeBaskets = persistedBaskets.filter((basket) => basket.store_name === activeStore.name);
+  const hasStoreData = storeBaskets.length > 0;
+  const hasNetworkData = persistedBaskets.length > 0;
+  const todayStoreBaskets = storeBaskets.filter((basket) =>
+    isSameDayValue(basket.created_at, clockNow)
+  );
+  const syncedTodayCount = todayStoreBaskets.filter(
+    (basket) => basket.sync_state !== "pending"
+  ).length;
+  const effectiveStoreStats = hasStoreData
+    ? storeStats
+    : { today: 0, week: 0, month: 0 };
+  const highConfidenceRecommendations = recommendedActions.filter(
+    (recommendation) =>
+      recommendation.confidence === "High" && !recommendation.id.startsWith("seed-")
+  );
+  const lastSyncSeconds = secondsSince(lastSyncedAt, clockNow);
+  const basketsNeededForStreak = Math.max(0, 5 - rewardsSnapshot.validBasketsToday);
+  const syncHeadline = dataError
+    ? basketDataMode === "supabase"
+      ? "Supabase unavailable"
+      : "Local storage issue"
+    : demoRuntimeState.offlineMode
+      ? "Offline — baskets waiting"
+      : basketDataMode === "supabase"
+        ? "Online — synced"
+        : "Online — local demo";
+  const syncSummary = demoRuntimeState.offlineMode
+    ? `${demoRuntimeState.pendingCount} basket(s) waiting for sync`
+    : `Synced ${syncedTodayCount} basket${syncedTodayCount === 1 ? "" : "s"} today`;
+  const syncMeta = dataError
+    ? basketDataMode === "supabase"
+      ? "Sync failed, retrying. HQ updates will resume automatically."
+      : "Local fallback is active. Refresh if the problem persists."
+    : lastSyncSeconds !== null
+      ? `Last sync: ${lastSyncSeconds} second${lastSyncSeconds === 1 ? "" : "s"} ago`
+      : demoRuntimeState.offlineMode
+        ? "Offline mode active"
+        : basketDataMode === "supabase"
+          ? "Waiting for first sync"
+          : "Supabase env vars not configured";
+
+  useEffect(() => {
+    const currentMetricValues = hqMetrics.map((metric) => `${metric.label}:${metric.value}`);
+    const currentRecommendationSignatures = recommendedActions.map(
+      (recommendation) =>
+        `${recommendation.id}:${recommendation.title}:${recommendation.confidence}`
+    );
+    const latestFeedId = hqLiveFeed[0]?.id || "";
+    const previousState = previousDashboardStateRef.current;
+
+    if (
+      previousState.latestFeedId &&
+      latestFeedId &&
+      previousState.latestFeedId !== latestFeedId
+    ) {
+      const metricLabels = hqMetrics
+        .filter(
+          (metric, index) =>
+            previousState.metricValues[index] !== `${metric.label}:${metric.value}`
+        )
+        .map((metric) => metric.label);
+      const recommendationIds = recommendedActions
+        .filter(
+          (recommendation, index) =>
+            previousState.recommendationSignatures[index] !==
+            `${recommendation.id}:${recommendation.title}:${recommendation.confidence}`
+        )
+        .map((recommendation) => recommendation.id);
+
+      window.clearTimeout(dashboardFlashTimerRef.current);
+      setDashboardFlashState({
+        feedId: latestFeedId,
+        metricLabels,
+        recommendationIds,
+      });
+      dashboardFlashTimerRef.current = window.setTimeout(() => {
+        setDashboardFlashState({
+          feedId: "",
+          metricLabels: [],
+          recommendationIds: [],
+        });
+      }, 2600);
+    }
+
+    previousDashboardStateRef.current = {
+      latestFeedId,
+      metricValues: currentMetricValues,
+      recommendationSignatures: currentRecommendationSignatures,
+    };
+  }, [hqLiveFeed, hqMetrics, recommendedActions]);
+
+  return (
+    <div className="app-shell">
+      <style>{`
+        :root {
+          color-scheme: light;
+          --scan-red: ${PRIMARY_RED};
+          --scan-red-soft: rgba(230, 28, 36, 0.08);
+          --scan-red-border: rgba(230, 28, 36, 0.18);
+          --scan-red-dark: #a01118;
+          --scan-ink: #121212;
+          --scan-muted: #6b6b6b;
+          --scan-panel: #ffffff;
+          --scan-bg: #f5f6f8;
+          --scan-line: rgba(18, 18, 18, 0.07);
+          --scan-green: ${SUCCESS_GREEN};
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background:
+            radial-gradient(circle at top, rgba(230, 28, 36, 0.14), transparent 28%),
+            linear-gradient(180deg, #fcfcfd, #eff2f5 72%);
+          color: var(--scan-ink);
+        }
+
+        button,
+        input {
+          font: inherit;
+        }
+
+        .app-shell {
+          min-height: 100vh;
+          padding: 20px 16px 120px;
+        }
+
+        .screen {
+          width: 100%;
+          max-width: 430px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .screen.hq-screen {
+          max-width: 1320px;
+        }
+
+        .mode-scene {
+          animation: modeSwap 320ms ease;
+        }
+
+        .topbar {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .topbar-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .logo {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .logo-mark {
+          width: 40px;
+          height: 40px;
+          border-radius: 14px;
+          background: linear-gradient(180deg, #ff4d57, var(--scan-red));
+          color: #fff;
+          display: grid;
+          place-items: center;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          box-shadow: 0 10px 18px rgba(230, 28, 36, 0.24);
+        }
+
+        .logo-copy {
+          font-size: 1.25rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          color: var(--scan-red);
+        }
+
+        .store-pill {
+          max-width: 56%;
+          padding: 10px 12px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.78);
+          border: 1px solid var(--scan-red-border);
+          box-shadow: 0 10px 24px rgba(17, 17, 17, 0.06);
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: #4c4c4c;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .store-pill.hq-pill {
+          max-width: none;
+          color: var(--scan-red);
+          font-weight: 700;
+        }
+
+        .sync-strip {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 14px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid var(--scan-line);
+          box-shadow: 0 12px 28px rgba(17, 17, 17, 0.06);
+          flex-wrap: wrap;
+        }
+
+        .sync-strip.error {
+          border-color: rgba(230, 28, 36, 0.24);
+          background: rgba(255, 246, 246, 0.96);
+        }
+
+        .sync-status-row {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.84rem;
+          font-weight: 800;
+          color: var(--scan-ink);
+        }
+
+        .sync-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: var(--scan-green);
+          box-shadow: 0 0 0 4px rgba(25, 165, 90, 0.12);
+        }
+
+        .sync-dot.loading {
+          background: #f5a623;
+          box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.12);
+          animation: pulse 1.3s ease-in-out infinite;
+        }
+
+        .sync-dot.error {
+          background: var(--scan-red);
+          box-shadow: 0 0 0 4px rgba(230, 28, 36, 0.12);
+        }
+
+        .sync-copy {
+          font-size: 0.8rem;
+          color: var(--scan-muted);
+          line-height: 1.4;
+        }
+
+        .sync-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          width: 100%;
+        }
+
+        .sync-stat {
+          min-width: 0;
+        }
+
+        .sync-label {
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: #7a7f87;
+          margin-bottom: 6px;
+        }
+
+        .sync-value {
+          font-size: 0.86rem;
+          line-height: 1.4;
+          font-weight: 700;
+          color: #23272d;
+        }
+
+        .demo-label-strip {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .demo-label-card {
+          padding: 12px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.88);
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          box-shadow: 0 12px 24px rgba(17, 17, 17, 0.04);
+        }
+
+        .demo-label-card strong {
+          display: block;
+          font-size: 0.86rem;
+          line-height: 1.35;
+          color: var(--scan-ink);
+        }
+
+        .demo-label-card span {
+          display: block;
+          margin-top: 6px;
+          font-size: 0.74rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--scan-muted);
+        }
+
+        .panel {
+          background: var(--scan-panel);
+          border: 1px solid var(--scan-line);
+          border-radius: 24px;
+          box-shadow: 0 16px 36px rgba(17, 17, 17, 0.08);
+          overflow: hidden;
+        }
+
+        .panel-body {
+          padding: 18px;
+        }
+
+        .screen-stack,
+        .rewards-stack,
+        .rankings-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .camera-frame {
+          position: relative;
+          aspect-ratio: 3 / 4;
+          background:
+            linear-gradient(180deg, rgba(17, 17, 17, 0.02), rgba(17, 17, 17, 0.12)),
+            #1b1b1b;
+        }
+
+        .camera-frame video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .camera-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          padding: 18px;
+          pointer-events: none;
+        }
+
+        .status-badge {
+          align-self: flex-start;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          max-width: 82%;
+          padding: 10px 12px;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          font-size: 0.86rem;
+          line-height: 1.35;
+          color: #242424;
+          transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+        }
+
+        .status-badge.processing {
+          background: rgba(255, 245, 245, 0.94);
+          box-shadow: 0 10px 24px rgba(230, 28, 36, 0.14);
+        }
+
+        .spinner {
+          width: 16px;
+          height: 16px;
+          flex: 0 0 16px;
+          border-radius: 50%;
+          border: 2px solid rgba(230, 28, 36, 0.16);
+          border-top-color: var(--scan-red);
+          animation: spin 850ms linear infinite;
+        }
+
+        .scan-window {
+          align-self: center;
+          width: min(88%, 360px);
+          height: 142px;
+          border-radius: 22px;
+          border: 2px solid rgba(255, 255, 255, 0.96);
+          box-shadow: 0 0 0 999px rgba(17, 17, 17, 0.25);
+          position: relative;
+          transition: transform 200ms ease, border-color 180ms ease, box-shadow 180ms ease;
+        }
+
+        .scan-window::after {
+          content: "";
+          position: absolute;
+          left: 12px;
+          right: 12px;
+          top: 50%;
+          height: 2px;
+          background: rgba(230, 28, 36, 0.95);
+          box-shadow: 0 0 18px rgba(230, 28, 36, 0.5);
+          animation: pulse 1.9s ease-in-out infinite;
+        }
+
+        .scan-window.processing {
+          transform: scale(1.01);
+          border-color: rgba(255, 226, 228, 0.98);
+        }
+
+        .scan-window.success {
+          border-color: rgba(25, 165, 90, 0.98);
+          box-shadow:
+            0 0 0 999px rgba(17, 17, 17, 0.22),
+            0 0 0 6px rgba(25, 165, 90, 0.16);
+        }
+
+        .scan-window.success::after {
+          background: rgba(25, 165, 90, 0.95);
+          box-shadow: 0 0 18px rgba(25, 165, 90, 0.45);
+        }
+
+        .scan-corners {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+        }
+
+        .scan-corners span {
+          position: absolute;
+          width: 24px;
+          height: 24px;
+          border-color: rgba(255, 255, 255, 0.96);
+          border-style: solid;
+          border-width: 0;
+        }
+
+        .scan-corners span:nth-child(1) {
+          top: 10px;
+          left: 10px;
+          border-top-width: 4px;
+          border-left-width: 4px;
+          border-top-left-radius: 10px;
+        }
+
+        .scan-corners span:nth-child(2) {
+          top: 10px;
+          right: 10px;
+          border-top-width: 4px;
+          border-right-width: 4px;
+          border-top-right-radius: 10px;
+        }
+
+        .scan-corners span:nth-child(3) {
+          right: 10px;
+          bottom: 10px;
+          border-right-width: 4px;
+          border-bottom-width: 4px;
+          border-bottom-right-radius: 10px;
+        }
+
+        .scan-corners span:nth-child(4) {
+          left: 10px;
+          bottom: 10px;
+          border-bottom-width: 4px;
+          border-left-width: 4px;
+          border-bottom-left-radius: 10px;
+        }
+
+        .camera-guidance {
+          align-self: center;
+          max-width: 88%;
+          padding: 10px 12px;
+          border-radius: 14px;
+          background: rgba(17, 17, 17, 0.36);
+          color: rgba(255, 255, 255, 0.96);
+          font-size: 0.8rem;
+          line-height: 1.35;
+          text-align: center;
+        }
+
+        .section-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 18px 18px 10px;
+        }
+
+        .section-title,
+        .leaderboard-title {
+          font-size: 1rem;
+          font-weight: 800;
+        }
+
+        .section-meta {
+          font-size: 0.82rem;
+          color: var(--scan-muted);
+        }
+
+        .items-list,
+        .history-list,
+        .leaderboard-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .item-card,
+        .empty-card,
+        .pair-card,
+        .history-item,
+        .leaderboard-row {
+          border-radius: 18px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+        }
+
+        .item-card {
+          padding: 14px;
+          display: flex;
+          gap: 12px;
+          align-items: flex-start;
+        }
+
+        .checkmark {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 30px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: rgba(25, 165, 90, 0.12);
+          color: var(--scan-green);
+          font-size: 1rem;
+          font-weight: 800;
+        }
+
+        .item-body {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .item-name {
+          font-size: 0.98rem;
+          font-weight: 800;
+          line-height: 1.28;
+        }
+
+        .item-meta,
+        .hq-copy,
+        .pairs-copy,
+        .pair-subtitle,
+        .reward-progress-copy,
+        .reward-preview-copy,
+        .history-date,
+        .champion-copy,
+        .city-rank-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: var(--scan-muted);
+        }
+
+        .item-alert {
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: rgba(230, 28, 36, 0.08);
+          color: var(--scan-red);
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .unknown-input {
+          width: 100%;
+          border: 1px solid var(--scan-red-border);
+          border-radius: 14px;
+          padding: 12px 14px;
+          background: #fff9f9;
+          outline: none;
+        }
+
+        .unknown-input:focus {
+          border-color: var(--scan-red);
+          box-shadow: 0 0 0 4px rgba(230, 28, 36, 0.1);
+        }
+
+        .empty-card {
+          padding: 18px;
+          text-align: center;
+          color: var(--scan-muted);
+          font-size: 0.92rem;
+          line-height: 1.45;
+        }
+
+        .cta-wrap {
+          position: sticky;
+          bottom: 20px;
+        }
+
+        .success-card {
+          margin-top: 12px;
+          padding: 16px;
+          border-radius: 20px;
+          background: linear-gradient(180deg, rgba(25, 165, 90, 0.12), rgba(25, 165, 90, 0.03));
+          border: 1px solid rgba(25, 165, 90, 0.2);
+          box-shadow: 0 14px 28px rgba(25, 165, 90, 0.08);
+        }
+
+        .success-title {
+          font-size: 0.96rem;
+          font-weight: 800;
+          color: #0d7d42;
+          margin-bottom: 12px;
+        }
+
+        .success-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .success-list li {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 0.86rem;
+          color: #225b3d;
+          font-weight: 700;
+        }
+
+        .success-list li::before {
+          content: "✓";
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: rgba(25, 165, 90, 0.16);
+          color: #0f9c53;
+          font-size: 0.8rem;
+          flex: 0 0 20px;
+        }
+
+        .cta-button {
+          width: 100%;
+          border: none;
+          border-radius: 18px;
+          padding: 16px;
+          background: var(--scan-red);
+          color: #fff;
+          font-size: 0.96rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          box-shadow: 0 14px 28px rgba(230, 28, 36, 0.3);
+          transition: transform 180ms ease, box-shadow 180ms ease;
+        }
+
+        .cta-button.pulsing {
+          animation: pulseButton 1.2s ease-in-out infinite;
+        }
+
+        .cta-button:disabled {
+          opacity: 0.82;
+          transform: none;
+          box-shadow: 0 10px 20px rgba(230, 28, 36, 0.18);
+        }
+
+        .demo-button {
+          border: none;
+          border-radius: 999px;
+          padding: 11px 14px;
+          background: rgba(18, 20, 24, 0.95);
+          color: #fff;
+          font-size: 0.76rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          box-shadow: 0 14px 28px rgba(17, 17, 17, 0.24);
+        }
+
+        .demo-button:disabled {
+          opacity: 0.72;
+        }
+
+        .demo-fab-stack {
+          position: fixed;
+          right: 18px;
+          bottom: 102px;
+          z-index: 18;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          align-items: flex-end;
+        }
+
+        .demo-button.script-button {
+          background: linear-gradient(135deg, var(--scan-red), #f85761);
+        }
+
+        .demo-admin-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 45;
+          background: rgba(10, 12, 16, 0.38);
+          backdrop-filter: blur(4px);
+        }
+
+        .demo-admin-panel {
+          position: fixed;
+          top: 18px;
+          right: 18px;
+          z-index: 46;
+          width: min(92vw, 420px);
+          max-height: calc(100vh - 36px);
+          overflow: auto;
+          padding: 18px;
+          border-radius: 24px;
+          background: rgba(255, 255, 255, 0.98);
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          box-shadow: 0 26px 56px rgba(17, 17, 17, 0.22);
+        }
+
+        .demo-admin-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .demo-admin-title {
+          font-size: 1.1rem;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .demo-admin-copy,
+        .demo-admin-status,
+        .demo-admin-label {
+          font-size: 0.85rem;
+          line-height: 1.45;
+          color: var(--scan-muted);
+        }
+
+        .demo-admin-close {
+          border: none;
+          border-radius: 14px;
+          padding: 10px 12px;
+          background: rgba(17, 17, 17, 0.06);
+          color: #3d434d;
+          font-size: 0.8rem;
+          font-weight: 800;
+        }
+
+        .demo-admin-state {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .demo-admin-chip {
+          padding: 12px;
+          border-radius: 16px;
+          background: #f7f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+        }
+
+        .demo-admin-chip strong {
+          display: block;
+          font-size: 0.92rem;
+          color: var(--scan-ink);
+          margin-bottom: 4px;
+        }
+
+        .demo-admin-selects {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .demo-admin-select {
+          width: 100%;
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          border-radius: 14px;
+          padding: 12px 14px;
+          background: #fff;
+        }
+
+        .demo-admin-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .demo-admin-action {
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          border-radius: 16px;
+          padding: 12px 12px;
+          background: #fff;
+          color: var(--scan-ink);
+          text-align: left;
+          font-size: 0.82rem;
+          font-weight: 700;
+          line-height: 1.35;
+        }
+
+        .demo-admin-action.primary {
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.03));
+          border-color: rgba(230, 28, 36, 0.18);
+        }
+
+        .demo-admin-action.warn {
+          background: rgba(255, 246, 246, 0.9);
+          border-color: rgba(230, 28, 36, 0.18);
+        }
+
+        .demo-admin-action:disabled {
+          opacity: 0.62;
+        }
+
+        .demo-admin-footer {
+          margin-top: 14px;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: #f7f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          font-size: 0.84rem;
+          line-height: 1.45;
+          color: #3a4250;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .stat-card,
+        .hq-metric-card {
+          padding: 14px 12px;
+          border-radius: 18px;
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.08), rgba(230, 28, 36, 0.02));
+          border: 1px solid rgba(230, 28, 36, 0.12);
+        }
+
+        .flash-update {
+          animation: flashSurface 2.1s ease;
+          border-color: rgba(230, 28, 36, 0.24);
+          box-shadow: 0 0 0 1px rgba(230, 28, 36, 0.08), 0 16px 34px rgba(230, 28, 36, 0.12);
+        }
+
+        .stat-label,
+        .hq-metric-label {
+          font-size: 0.72rem;
+          line-height: 1.3;
+          color: var(--scan-muted);
+          margin-bottom: 10px;
+        }
+
+        .stat-value,
+        .hq-metric-value {
+          font-size: 1.3rem;
+          font-weight: 800;
+          color: var(--scan-red);
+        }
+
+        .chart-shell {
+          width: 100%;
+          height: 260px;
+        }
+
+        .chart-shell.line-shell {
+          height: 240px;
+        }
+
+        .chart-footnote {
+          margin-top: 10px;
+          font-size: 0.82rem;
+          color: var(--scan-muted);
+          line-height: 1.4;
+        }
+
+        .pairs-wrap {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .pair-card {
+          padding: 14px;
+        }
+
+        .pair-topline,
+        .reward-level,
+        .topbar-row,
+        .history-item,
+        .leaderboard-row,
+        .transaction-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .pair-title,
+        .history-title,
+        .achievement-title,
+        .hq-card-title {
+          font-size: 0.96rem;
+          font-weight: 800;
+        }
+
+        .pair-percent,
+        .city-rank-title {
+          font-size: 0.88rem;
+          font-weight: 800;
+          color: var(--scan-red);
+        }
+
+        .pair-progress,
+        .reward-progress-track {
+          width: 100%;
+          height: 10px;
+          border-radius: 999px;
+          background: rgba(17, 17, 17, 0.08);
+          overflow: hidden;
+        }
+
+        .pair-progress-fill,
+        .reward-progress-fill {
+          height: 100%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, var(--scan-red), #ff6c74);
+          transition: width 480ms ease;
+        }
+
+        .streak-banner,
+        .rank-card {
+          padding: 20px 18px;
+          border-radius: 24px;
+          background: linear-gradient(135deg, #ff5a63, var(--scan-red));
+          color: #fff;
+          box-shadow: 0 18px 38px rgba(230, 28, 36, 0.24);
+        }
+
+        .rank-card {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.16), rgba(230, 28, 36, 0.05));
+          color: var(--scan-ink);
+        }
+
+        .streak-emoji,
+        .rank-medal {
+          font-size: 2rem;
+          line-height: 1;
+          margin-bottom: 8px;
+        }
+
+        .streak-title,
+        .rank-title {
+          font-size: 1.5rem;
+          font-weight: 800;
+          margin-bottom: 6px;
+          line-height: 1.2;
+        }
+
+        .streak-copy,
+        .streak-countdown,
+        .rank-subtitle,
+        .rank-trend,
+        .hq-subcopy {
+          font-size: 0.94rem;
+          line-height: 1.45;
+        }
+
+        .streak-countdown,
+        .rank-trend {
+          font-weight: 700;
+        }
+
+        .reward-level-title {
+          font-size: 1.05rem;
+          font-weight: 800;
+        }
+
+        .reward-level-chip {
+          font-size: 0.82rem;
+          font-weight: 800;
+          color: var(--scan-red);
+          background: rgba(230, 28, 36, 0.08);
+          border: 1px solid rgba(230, 28, 36, 0.12);
+          border-radius: 999px;
+          padding: 8px 10px;
+        }
+
+        .reward-preview {
+          padding: 14px;
+          border-radius: 18px;
+          background: #f6f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+        }
+
+        .reward-preview-title,
+        .claim-code-label,
+        .champion-title,
+        .hq-label {
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 8px;
+        }
+
+        .claim-card {
+          background: linear-gradient(180deg, rgba(25, 165, 90, 0.1), rgba(25, 165, 90, 0.03));
+          border: 1px solid rgba(25, 165, 90, 0.2);
+        }
+
+        .claim-card-title {
+          font-size: 1rem;
+          font-weight: 800;
+          color: #0d7d42;
+          margin-bottom: 8px;
+        }
+
+        .claim-button {
+          border: none;
+          border-radius: 14px;
+          padding: 12px 14px;
+          background: #0f9c53;
+          color: #fff;
+          font-size: 0.86rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          margin-top: 14px;
+        }
+
+        .claim-code {
+          margin-top: 14px;
+          padding: 12px 14px;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.86);
+          border: 1px dashed rgba(15, 156, 83, 0.4);
+        }
+
+        .claim-code-value {
+          font-size: 1.05rem;
+          font-weight: 800;
+          color: #16663e;
+          letter-spacing: 0.05em;
+        }
+
+        .claim-validity {
+          margin-top: 8px;
+          font-size: 0.84rem;
+          color: #397254;
+        }
+
+        .alert-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #5b6673;
+          margin-top: 8px;
+        }
+
+        .achievements-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .achievement-card {
+          padding: 14px;
+          border-radius: 18px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+          min-height: 120px;
+        }
+
+        .achievement-card.locked {
+          background: #f3f4f6;
+          color: #8b8f95;
+        }
+
+        .achievement-icon {
+          font-size: 1.15rem;
+          margin-bottom: 10px;
+        }
+
+        .achievement-subtitle {
+          font-size: 0.82rem;
+          line-height: 1.4;
+          color: inherit;
+        }
+
+        .history-item {
+          padding: 14px;
+        }
+
+        .rank-card {
+          border: 1px solid rgba(230, 28, 36, 0.14);
+          box-shadow: 0 18px 36px rgba(230, 28, 36, 0.08);
+        }
+
+        .champion-preview {
+          padding: 14px;
+          border-radius: 18px;
+          background: #fff7f7;
+          border: 1px dashed rgba(230, 28, 36, 0.24);
+        }
+
+        .switch-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .switch-row.scope-row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .mini-switch {
+          border: 1px solid rgba(17, 17, 17, 0.08);
+          background: #fff;
+          color: var(--scan-muted);
+          border-radius: 14px;
+          padding: 11px 8px;
+          font-size: 0.78rem;
+          font-weight: 800;
+        }
+
+        .mini-switch.active {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.14), rgba(230, 28, 36, 0.06));
+          color: var(--scan-red);
+          border-color: rgba(230, 28, 36, 0.16);
+        }
+
+        .leaderboard-row {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          padding: 14px;
+        }
+
+        .leaderboard-row.you {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.12), rgba(230, 28, 36, 0.04));
+          border-color: rgba(230, 28, 36, 0.22);
+          box-shadow: inset 0 0 0 1px rgba(230, 28, 36, 0.08);
+        }
+
+        .leaderboard-row.muted {
+          opacity: 0.5;
+          background: #f4f5f7;
+        }
+
+        .leaderboard-rank {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.95rem;
+          font-weight: 800;
+          min-width: 64px;
+        }
+
+        .leaderboard-store-name {
+          font-size: 0.92rem;
+          font-weight: 800;
+          line-height: 1.3;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .you-tag {
+          font-size: 0.7rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          background: rgba(230, 28, 36, 0.1);
+          border-radius: 999px;
+          padding: 4px 6px;
+        }
+
+        .leaderboard-delta,
+        .leaderboard-score-label {
+          margin-top: 4px;
+          font-size: 0.8rem;
+          color: var(--scan-muted);
+        }
+
+        .leaderboard-score {
+          text-align: right;
+        }
+
+        .leaderboard-score-value {
+          font-size: 1rem;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .city-rank-card {
+          padding: 14px;
+          border-radius: 18px;
+          background: #f7f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          margin-top: 12px;
+        }
+
+        .hq-shell {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 18px;
+        }
+
+        .hq-main {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+          background: #ffffff;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          border-radius: 28px;
+          padding: 22px;
+          box-shadow: 0 18px 40px rgba(17, 17, 17, 0.08);
+        }
+
+        .hq-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          background: linear-gradient(180deg, #14181f, #1c222b);
+          color: #fff;
+          border-radius: 28px;
+          padding: 22px;
+          box-shadow: 0 18px 40px rgba(17, 17, 17, 0.16);
+        }
+
+        .hq-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+        }
+
+        .hq-header-copy {
+          max-width: 700px;
+        }
+
+        .hq-heading {
+          font-size: 2rem;
+          font-weight: 800;
+          line-height: 1.1;
+          margin-bottom: 8px;
+        }
+
+        .hq-metrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .hq-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+          gap: 18px;
+        }
+
+        .hq-card {
+          border-radius: 22px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: #fff;
+          padding: 18px;
+        }
+
+        .hq-card-copy {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #666c76;
+          margin-bottom: 16px;
+        }
+
+        .recommendations-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .recommendation-card {
+          border-radius: 22px;
+          border: 1px solid rgba(17, 17, 17, 0.06);
+          background: linear-gradient(180deg, #fff, #fbfcfe);
+          padding: 18px;
+          box-shadow: 0 12px 28px rgba(17, 17, 17, 0.05);
+          transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+        }
+
+        .recommendation-topline {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .recommendation-priority,
+        .recommendation-type {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .recommendation-priority.high {
+          background: rgba(230, 28, 36, 0.12);
+          color: var(--scan-red);
+        }
+
+        .recommendation-priority.medium {
+          background: rgba(245, 166, 35, 0.14);
+          color: #b06d00;
+        }
+
+        .recommendation-priority.low {
+          background: rgba(82, 121, 255, 0.12);
+          color: #3956c8;
+        }
+
+        .recommendation-type {
+          background: rgba(17, 17, 17, 0.05);
+          color: #636b77;
+        }
+
+        .recommendation-title {
+          font-size: 1.02rem;
+          font-weight: 800;
+          line-height: 1.3;
+          margin-bottom: 10px;
+        }
+
+        .recommendation-copy {
+          font-size: 0.88rem;
+          line-height: 1.5;
+          color: #5d6571;
+          margin-bottom: 10px;
+        }
+
+        .recommendation-label {
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--scan-red);
+          margin-bottom: 6px;
+        }
+
+        .recommendation-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-top: 12px;
+          flex-wrap: wrap;
+        }
+
+        .recommendation-confidence {
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: #4f5763;
+        }
+
+        .recommendation-button {
+          border: none;
+          border-radius: 14px;
+          padding: 10px 12px;
+          background: rgba(230, 28, 36, 0.08);
+          color: var(--scan-red);
+          font-size: 0.82rem;
+          font-weight: 800;
+        }
+
+        .recommendation-support {
+          margin-top: 14px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(17, 17, 17, 0.08);
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .recommendation-support-card {
+          padding: 10px 12px;
+          border-radius: 14px;
+          background: #f6f8fb;
+          border: 1px solid rgba(17, 17, 17, 0.05);
+        }
+
+        .recommendation-support-label {
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: #7a828d;
+          margin-bottom: 4px;
+        }
+
+        .recommendation-support-value {
+          font-size: 0.88rem;
+          line-height: 1.4;
+          color: #303742;
+          font-weight: 700;
+        }
+
+        .hq-chart-shell {
+          width: 100%;
+          height: 330px;
+        }
+
+        .hq-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .hq-table th,
+        .hq-table td {
+          padding: 12px 10px;
+          text-align: left;
+          border-bottom: 1px solid rgba(17, 17, 17, 0.06);
+          font-size: 0.9rem;
+        }
+
+        .hq-table th {
+          font-size: 0.78rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #7b818d;
+        }
+
+        .hq-trend-up {
+          color: #1d8e53;
+          font-weight: 800;
+        }
+
+        .hq-trend-neutral {
+          color: #75808f;
+          font-weight: 800;
+        }
+
+        .hq-trend-down {
+          color: #b85a46;
+          font-weight: 800;
+        }
+
+        .hq-sidebar-title {
+          font-size: 1rem;
+          font-weight: 800;
+          margin-bottom: 4px;
+        }
+
+        .hq-sidebar-copy {
+          font-size: 0.88rem;
+          line-height: 1.45;
+          color: rgba(255, 255, 255, 0.7);
+          margin-bottom: 14px;
+        }
+
+        .hq-feed {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .hq-feed-item {
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          animation: feedSlide 320ms ease-out;
+        }
+
+        .empty-state-block {
+          padding: 18px;
+          border-radius: 18px;
+          background: #f7f8fb;
+          border: 1px dashed rgba(17, 17, 17, 0.12);
+        }
+
+        .empty-state-title {
+          font-size: 0.95rem;
+          font-weight: 800;
+          margin-bottom: 8px;
+          color: #242a33;
+        }
+
+        .empty-state-copy {
+          font-size: 0.88rem;
+          line-height: 1.5;
+          color: #66707f;
+        }
+
+        .hq-feed-time {
+          font-size: 0.78rem;
+          font-weight: 800;
+          color: #ffb6bb;
+          margin-bottom: 6px;
+        }
+
+        .hq-feed-line {
+          font-size: 0.9rem;
+          line-height: 1.45;
+          color: #f5f7fa;
+        }
+
+        .hq-sidebar-note {
+          margin-top: auto;
+          padding-top: 6px;
+          font-size: 0.8rem;
+          line-height: 1.45;
+          color: rgba(255, 255, 255, 0.56);
+        }
+
+        .bottom-nav {
+          position: fixed;
+          left: 50%;
+          bottom: 18px;
+          transform: translateX(-50%);
+          width: min(92vw, 430px);
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 6px;
+          padding: 8px;
+          border-radius: 22px;
+          background: rgba(18, 20, 24, 0.95);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 18px 40px rgba(17, 17, 17, 0.22);
+        }
+
+        .nav-item {
+          border: none;
+          background: transparent;
+          color: rgba(255, 255, 255, 0.7);
+          border-radius: 16px;
+          padding: 11px 8px;
+          font-size: 0.75rem;
+          font-weight: 700;
+        }
+
+        .nav-item.active {
+          background: linear-gradient(135deg, rgba(230, 28, 36, 0.26), rgba(230, 28, 36, 0.14));
+          color: #fff;
+        }
+
+        .achievement-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          background: rgba(17, 17, 17, 0.44);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          backdrop-filter: blur(6px);
+        }
+
+        .achievement-confetti {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          pointer-events: none;
+        }
+
+        .confetti-piece {
+          position: absolute;
+          top: -30px;
+          width: 10px;
+          height: 22px;
+          border-radius: 4px;
+          animation: confettiFall 2.8s linear forwards;
+        }
+
+        .achievement-card-pop {
+          position: relative;
+          z-index: 1;
+          width: min(92vw, 420px);
+          padding: 28px 24px;
+          border-radius: 28px;
+          background: linear-gradient(180deg, rgba(230, 28, 36, 0.96), #c9151d);
+          color: #fff;
+          text-align: center;
+          box-shadow: 0 26px 56px rgba(17, 17, 17, 0.28);
+        }
+
+        .achievement-pop-kicker {
+          font-size: 0.84rem;
+          font-weight: 800;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          margin-bottom: 10px;
+        }
+
+        .achievement-pop-title {
+          font-size: 1.6rem;
+          font-weight: 800;
+          margin-bottom: 10px;
+        }
+
+        .achievement-pop-copy {
+          font-size: 0.98rem;
+          line-height: 1.5;
+          color: rgba(255, 255, 255, 0.92);
+        }
+
+        .splash-screen {
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          background: var(--scan-red);
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: opacity ${SPLASH_FADE_MS}ms ease;
+        }
+
+        .splash-screen.fade-out {
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .splash-inner {
+          text-align: center;
+          padding: 24px;
+        }
+
+        .splash-title {
+          font-size: clamp(2.6rem, 6vw, 4.2rem);
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          margin-bottom: 12px;
+        }
+
+        .splash-tagline {
+          font-size: 1rem;
+          line-height: 1.5;
+          color: rgba(255, 255, 255, 0.92);
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 0.4;
+            transform: translateY(-1px);
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(1px);
+          }
+        }
+
+        @keyframes pulseButton {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 14px 28px rgba(230, 28, 36, 0.3);
+          }
+          50% {
+            transform: scale(1.02);
+            box-shadow: 0 18px 34px rgba(230, 28, 36, 0.42);
+          }
+        }
+
+        @keyframes feedSlide {
+          0% {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes flashSurface {
+          0% {
+            transform: translateY(0);
+            background: rgba(230, 28, 36, 0.16);
+          }
+          100% {
+            transform: translateY(0);
+            background: transparent;
+          }
+        }
+
+        @keyframes confettiFall {
+          0% {
+            opacity: 0;
+            transform: translateY(0) rotate(0deg);
+          }
+          10% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(110vh) rotate(420deg);
+          }
+        }
+
+        @keyframes modeSwap {
+          0% {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @media (max-width: 1120px) {
+          .hq-metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .recommendations-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .hq-grid,
+          .hq-shell {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+
+        @media (max-width: 760px) {
+          .sync-grid,
+          .demo-label-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+      `}</style>
+
+      {achievementPopup ? <AchievementOverlay achievement={achievementPopup} /> : null}
+
+      {showSplash ? (
+        <div className={`splash-screen ${splashFading ? "fade-out" : ""}`}>
+          <div className="splash-inner">
+            <div className="splash-title">SCAN</div>
+            <div className="splash-tagline">
+              Basket Intelligence for Every Store
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isDemoAdminOpen ? (
+        <>
+          <div
+            className="demo-admin-backdrop"
+            onClick={handleDemoAdminClose}
+            aria-hidden="true"
+          />
+          <aside className="demo-admin-panel" role="dialog" aria-modal="true">
+            <div className="demo-admin-head">
+              <div>
+                <div className="demo-admin-title">Demo Control Panel</div>
+                <div className="demo-admin-copy">
+                  Hidden bootcamp safeguards for SCAN. Access with
+                  {" "}
+                  <code>/demo-admin</code>
+                  {" "}
+                  or press D three times.
+                </div>
+              </div>
+              <button
+                className="demo-admin-close"
+                type="button"
+                onClick={handleDemoAdminClose}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="demo-admin-state">
+              <div className="demo-admin-chip">
+                <strong>{demoRuntimeState.activeStore.name}</strong>
+                <div className="demo-admin-status">Active demo store</div>
+              </div>
+              <div className="demo-admin-chip">
+                <strong>
+                  {demoRuntimeState.offlineMode
+                    ? "Offline demo mode"
+                    : basketDataMode === "supabase"
+                      ? "Supabase live"
+                      : "Local fallback"}
+                </strong>
+                <div className="demo-admin-status">
+                  {demoRuntimeState.pendingCount} pending basket(s)
+                </div>
+              </div>
+              <div className="demo-admin-chip">
+                <strong>{rewardsSnapshot.progressPercent}% ready</strong>
+                <div className="demo-admin-status">
+                  {rewardsSnapshot.nextRewardMessage}
+                </div>
+              </div>
+              <div className="demo-admin-chip">
+                <strong>{persistedBaskets.length} visible baskets</strong>
+                <div className="demo-admin-status">
+                  HQ feed, analytics, and rewards update from this same data.
+                </div>
+              </div>
+            </div>
+
+            <div className="demo-admin-label">Switch active demo store</div>
+            <div className="demo-admin-selects">
+              <select
+                className="demo-admin-select"
+                value={activeStore.name}
+                onChange={(event) => {
+                  const selectedStore = DEMO_STORES.find(
+                    (store) => store.name === event.target.value
+                  );
+
+                  if (selectedStore) {
+                    applyActiveStore(selectedStore);
+                  }
+                }}
+              >
+                {DEMO_STORES.map((store) => (
+                  <option key={store.name} value={store.name}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="demo-admin-select"
+                value={activeStore.district}
+                onChange={(event) =>
+                  applyActiveStore({
+                    name: `${activeStoreShortName} — ${event.target.value}`,
+                    district: event.target.value,
+                  })
+                }
+              >
+                {["Yasamal", "Narimanov", "Nizami", "Khatai", "Sabail"].map(
+                  (district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="demo-admin-grid">
+              <button
+                className="demo-admin-action primary"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("reset", async () => {
+                    resetDemoData();
+                    return "Demo data reset. Active store restored and offline mode cleared.";
+                  })
+                }
+              >
+                Reset demo data
+              </button>
+              <button
+                className="demo-admin-action primary"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("seed", async () => {
+                    seedRealisticBasketData();
+                    return "Seeded realistic basket history across Yasamal, Narimanov, Nizami, Khatai, and Sabail.";
+                  })
+                }
+              >
+                Seed realistic basket data
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("live-10", async () => {
+                    generateLiveDemoTransactions(10);
+                    return "Generated 10 fresh live transactions for the HQ feed.";
+                  })
+                }
+              >
+                Generate 10 live transactions
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("history-100", async () => {
+                    generateHistoricalDemoBaskets(100);
+                    return "Generated 100 historical baskets with realistic district and daypart patterns.";
+                  })
+                }
+              >
+                Generate 100 historical baskets
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() => {
+                  startSimulatedScanSequence(DEMO_ADMIN_SCAN_SEQUENCE, {
+                    initialStatus: "Demo admin: simulating Coca-Cola + chips + sandwich...",
+                  });
+                  setDemoAdminNotice(
+                    "Simulated cashier scan started. The LOG BASKET button will pulse when ready."
+                  );
+                }}
+              >
+                Simulate scanning Coca-Cola + chips + sandwich
+              </button>
+              <button
+                className="demo-admin-action primary"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() => {
+                  startSimulatedScanSequence(DEMO_ADMIN_SCAN_SEQUENCE, {
+                    autoLog: true,
+                    initialStatus: "Demo admin: simulating reward unlock flow...",
+                  });
+                  setDemoAdminNotice(
+                    "Reward unlock simulation started. SCAN will auto-log the basket at the end."
+                  );
+                }}
+              >
+                Simulate reward unlock
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("offline-on", async () => {
+                    setDemoOfflineMode(true);
+                    refreshDemoRuntimeState();
+                    return "Offline demo mode enabled. New baskets will queue locally until you sync.";
+                  })
+                }
+              >
+                Simulate offline mode
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("offline-sync", async () => {
+                    setDemoOfflineMode(false);
+                    const result = await syncOfflineDemoBaskets();
+                    refreshDemoRuntimeState();
+                    return result.synced > 0
+                      ? `Synced ${result.synced} queued basket(s) after offline mode.`
+                      : result.skipped > 0
+                        ? `Offline mode disabled. ${result.skipped} basket(s) are still local because Supabase sync is unavailable.`
+                        : "Offline mode disabled. No queued baskets were waiting to sync.";
+                  })
+                }
+              >
+                Simulate sync after offline mode
+              </button>
+              <button
+                className="demo-admin-action warn"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() =>
+                  runDemoAdminAction("clear-local", async () => {
+                    clearLocalDemoBaskets();
+                    return "Cleared local demo baskets. Remote Supabase history was left untouched.";
+                  })
+                }
+              >
+                Clear all baskets
+              </button>
+              <button
+                className="demo-admin-action"
+                type="button"
+                disabled={Boolean(demoAdminBusyAction)}
+                onClick={() => {
+                  setActiveMode("hq");
+                  setDemoAdminNotice(
+                    "HQ view focused. Recommended Actions and live feed will reflect the latest demo data."
+                  );
+                }}
+              >
+                Focus HQ dashboard
+              </button>
+            </div>
+
+            <div className="demo-admin-footer">
+              {demoAdminBusyAction
+                ? `Running ${demoAdminBusyAction.replace("-", " ")}...`
+                : demoAdminNotice ||
+                  "Tip: use the reward unlock simulation right before the demo so the achievement popup and HQ live feed land together."}
+            </div>
+          </aside>
+        </>
+      ) : null}
+
+      <main className={`screen ${activeMode === "hq" ? "hq-screen" : ""}`}>
+        <header className="topbar">
+          <div className="topbar-row">
+            <div className="logo">
+              <div className="logo-mark">S</div>
+              <div className="logo-copy">SCAN</div>
+            </div>
+            <div className={`store-pill ${activeMode === "hq" ? "hq-pill" : ""}`}>
+              {activeMode === "hq" ? HQ_REGION_NAME : activeStore.name}
+            </div>
+          </div>
+
+          <div className={`sync-strip ${dataError ? "error" : ""}`}>
+            <div className="sync-status-row">
+              <span
+                className={`sync-dot ${
+                  dataError ? "error" : dataLoading ? "loading" : "live"
+                }`}
+                aria-hidden="true"
+              />
+              <span className="sync-title">{syncHeadline}</span>
+            </div>
+            <div className="sync-grid">
+              <div className="sync-stat">
+                <div className="sync-label">Status</div>
+                <div className="sync-value">{syncSummary}</div>
+              </div>
+              <div className="sync-stat">
+                <div className="sync-label">Connection</div>
+                <div className="sync-value">{dataError ? syncStatus : syncMeta}</div>
+              </div>
+              <div className="sync-stat">
+                <div className="sync-label">Mode</div>
+                <div className="sync-value">
+                  {dataError
+                    ? "Supabase unavailable"
+                    : demoRuntimeState.offlineMode
+                      ? "Offline mode active"
+                      : basketDataMode === "supabase"
+                        ? "Real-time dashboard sync"
+                        : "Local demo fallback"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {activeMode === "cashier" ? (
+            <div className="demo-label-strip">
+              <div className="demo-label-card">
+                <strong>{activeStoreDetails.id}</strong>
+                <span>Store ID</span>
+              </div>
+              <div className="demo-label-card">
+                <strong>{activeStore.district}</strong>
+                <span>District</span>
+              </div>
+              <div className="demo-label-card">
+                <strong>{effectiveStoreStats.today > 0 ? "Active today" : "Ready for first basket"}</strong>
+                <span>Store status</span>
+              </div>
+              <div className="demo-label-card">
+                <strong>
+                  {lastSyncSeconds !== null
+                    ? `${lastSyncSeconds}s ago`
+                    : demoRuntimeState.offlineMode
+                      ? "Offline"
+                      : "Pending"}
+                </strong>
+                <span>Last sync</span>
+              </div>
+            </div>
+          ) : null}
+        </header>
+
+        <div className="mode-scene" key={activeMode}>
+          {activeMode === "cashier" ? (
+            <div className="screen-stack">
+              {activeCashierTab === "scan" ? (
+                <>
+                  <section className="panel">
+                    <div className="camera-frame">
+                      <video ref={videoRef} muted playsInline />
+                      <div className="camera-overlay">
+                        <div
+                          className={`status-badge ${
+                            scanFeedbackState === "processing" ? "processing" : ""
+                          }`}
+                        >
+                          {isLookingUp ? (
+                            <span className="spinner" aria-hidden="true" />
+                          ) : null}
+                          <span>{scanStatus}</span>
+                        </div>
+                        <div className={`scan-window ${scanFeedbackState}`}>
+                          <div className="scan-corners" aria-hidden="true">
+                            <span />
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        </div>
+                        <div className="camera-guidance">
+                          Keep the code flat, fill the frame, and move closer for
+                          small items.
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Scanned Basket</div>
+                      <div className="section-meta">{scannedItems.length} item(s)</div>
+                    </div>
+
+                    {scannedItems.length === 0 ? (
+                      <div className="empty-card">
+                        Open the camera and scan a product barcode to start building the
+                        basket.
+                      </div>
+                    ) : (
+                      <ul className="items-list" style={{ padding: "0 12px 12px" }}>
+                        {scannedItems.map((item) => (
+                          <li className="item-card" key={item.id}>
+                            <div className="checkmark">✓</div>
+                            <div className="item-body">
+                              <div className="item-name">
+                                {item.isUnknown
+                                  ? item.customName.trim() || "Unknown Product"
+                                  : item.name}
+                              </div>
+                              <div className="item-meta">{item.brand}</div>
+                              <div className="item-meta">{item.quantity}</div>
+                              {item.isUnknown ? (
+                                <>
+                                  <div className="item-alert">Barcode not found</div>
+                                  <input
+                                    className="unknown-input"
+                                    type="text"
+                                    placeholder="Type product name manually"
+                                    value={item.customName}
+                                    onChange={(event) =>
+                                      updateUnknownProductName(item.id, event.target.value)
+                                    }
+                                  />
+                                </>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {basketSuccessState ? (
+                      <div className="success-card" style={{ margin: "0 12px 12px" }}>
+                        <div className="success-title">{basketSuccessState.title}</div>
+                        <ul className="success-list">
+                          {basketSuccessState.steps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </section>
+
+                  {scannedItems.length > 0 ? (
+                    <div className="cta-wrap">
+                      <button
+                        className={`cta-button ${pulseLogButton ? "pulsing" : ""}`}
+                        type="button"
+                        onClick={handleLogBasket}
+                        disabled={isSavingBasket}
+                      >
+                        {isSavingBasket ? "SAVING BASKET..." : "LOG BASKET"}
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {activeCashierTab === "store" ? (
+                <>
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">My Store Snapshot</div>
+                      <div className="section-meta">Only {activeStore.name} data</div>
+                    </div>
+                    <div className="panel-body">
+                      {hasStoreData ? (
+                        <div className="stats-grid">
+                          <div className="stat-card">
+                            <div className="stat-label">Today's baskets</div>
+                            <div className="stat-value">{effectiveStoreStats.today}</div>
+                          </div>
+                          <div className="stat-card">
+                            <div className="stat-label">This week</div>
+                            <div className="stat-value">{effectiveStoreStats.week}</div>
+                          </div>
+                          <div className="stat-card">
+                            <div className="stat-label">This month</div>
+                            <div className="stat-value">{effectiveStoreStats.month}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No baskets yet</div>
+                          <div className="empty-state-copy">
+                            Start scanning to generate insights for {activeStore.name}.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Top Products Today</div>
+                      <div className="section-meta">Most scanned in this store</div>
+                    </div>
+                    <div className="panel-body">
+                      {hasStoreData ? (
+                        <div className="chart-shell">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={topProductsToday}
+                              layout="vertical"
+                              margin={{ top: 4, right: 12, left: 18, bottom: 4 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                              <XAxis type="number" tickLine={false} axisLine={false} />
+                              <YAxis
+                                type="category"
+                                dataKey="name"
+                                width={110}
+                                tickLine={false}
+                                axisLine={false}
+                                tick={{ fontSize: 12, fill: "#4f4f4f" }}
+                              />
+                              <Tooltip
+                                cursor={{ fill: "rgba(230, 28, 36, 0.06)" }}
+                                contentStyle={{
+                                  borderRadius: "14px",
+                                  border: "1px solid rgba(17,17,17,0.08)",
+                                  boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                                }}
+                              />
+                              <Bar
+                                dataKey="scans"
+                                radius={[0, 10, 10, 0]}
+                                fill={PRIMARY_RED}
+                              />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No product trends yet</div>
+                          <div className="empty-state-copy">
+                            Start scanning to see which products move fastest in this store.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Peak Hours Today</div>
+                      <div className="section-meta">08:00 - 21:00</div>
+                    </div>
+                    <div className="panel-body">
+                      {hasStoreData ? (
+                        <>
+                          <div className="chart-shell line-shell">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart
+                                data={myStorePeakHours}
+                                margin={{ top: 8, right: 12, left: -8, bottom: 2 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(17,17,17,0.08)" />
+                                <XAxis
+                                  dataKey="hour"
+                                  tickFormatter={(value) => `${value}:00`}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                                />
+                                <YAxis
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tick={{ fontSize: 12, fill: "#5b5b5b" }}
+                                />
+                                <Tooltip
+                                  formatter={(value) => [`${value} baskets`, "Volume"]}
+                                  labelFormatter={(value) => `${value}:00`}
+                                  contentStyle={{
+                                    borderRadius: "14px",
+                                    border: "1px solid rgba(17,17,17,0.08)",
+                                    boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                                  }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="baskets"
+                                  stroke={PRIMARY_RED}
+                                  strokeWidth={3}
+                                  dot={{ r: 4, fill: PRIMARY_RED }}
+                                  activeDot={{ r: 6 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="chart-footnote">
+                            Lunch and evening traffic stand out as the busiest periods in
+                            this store today.
+                          </div>
+                        </>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No peak-hour signal yet</div>
+                          <div className="empty-state-copy">
+                            A few completed baskets will reveal when this store is busiest.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Top Pairs In My Store</div>
+                    </div>
+                    <div className="panel-body">
+                      {hasStoreData ? (
+                        <div className="pairs-wrap">
+                          <div className="pairs-copy">
+                            Your customers most often buy together:
+                          </div>
+                          {myStoreTopPairs.map((pair) => (
+                            <div className="pair-card" key={pair.title}>
+                              <div className="pair-topline">
+                                <div className="pair-title">{pair.title}</div>
+                                <div className="pair-percent">{pair.percentage}%</div>
+                              </div>
+                              <div className="pair-subtitle">{pair.subtitle}</div>
+                              <div className="pair-progress">
+                                <div
+                                  className="pair-progress-fill"
+                                  style={{ width: `${pair.percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="empty-state-block">
+                          <div className="empty-state-title">No pairings yet</div>
+                          <div className="empty-state-copy">
+                            Start scanning to learn what shoppers buy together in this store.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-body" style={{ border: "2px solid rgba(230, 28, 36, 0.3)", borderRadius: "24px" }}>
+                      <div className="champion-title">Restock Alert</div>
+                      <div className="alert-copy">
+                        {hasStoreData
+                          ? "Coca-Cola 330ml selling fast — consider restocking soon"
+                          : "Restock signals will appear here once this store has enough scan volume."}
+                      </div>
+                    </div>
+                  </section>
+                </>
+              ) : null}
+
+              {activeCashierTab === "rewards" ? (
+                <div className="rewards-stack">
+                  <section className="streak-banner">
+                    <div className="streak-emoji">🔥</div>
+                    <div className="streak-title">{rewardsSnapshot.streakDays} Day Streak!</div>
+                    <div className="streak-copy">
+                      Reliable basket data keeps your streak and rewards growing
+                    </div>
+                    <div className="streak-countdown">
+                      {basketsNeededForStreak > 0
+                        ? `${basketsNeededForStreak} more valid basket(s) today to keep the streak alive`
+                        : "Today's streak target is secured"}
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Reward Snapshot</div>
+                      <div className="section-meta">Calculated from real basket activity</div>
+                    </div>
+                    <div className="panel-body">
+                      <div
+                        className="stats-grid"
+                        style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+                      >
+                        <div className="stat-card">
+                          <div className="stat-label">Today's valid baskets</div>
+                          <div className="stat-value">{rewardsSnapshot.validBasketsToday}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">CCI baskets captured</div>
+                          <div className="stat-value">{rewardsSnapshot.cciBasketsToday}</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">Data quality</div>
+                          <div className="stat-value">{rewardsSnapshot.dataQualityScore}%</div>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-label">District rank</div>
+                          <div className="stat-value">#{rewardsSnapshot.currentRank}</div>
+                        </div>
+                      </div>
+
+                      <div className="reward-level" style={{ marginTop: "16px" }}>
+                        <div className="reward-level-title">Reward progress</div>
+                        <div className="reward-level-chip">
+                          {rewardsSnapshot.progressValue}/{rewardsSnapshot.progressTarget}
+                        </div>
+                      </div>
+                      <div className="reward-progress-track">
+                        <div
+                          className="reward-progress-fill"
+                          style={{ width: `${rewardsSnapshot.progressPercent}%` }}
+                        />
+                      </div>
+                      <div className="reward-progress-copy">
+                        {rewardsSnapshot.nextRewardMessage}
+                      </div>
+                      <div className="reward-preview">
+                        <div className="reward-preview-title">Next reward to unlock</div>
+                        <div className="reward-preview-copy">
+                          {rewardsSnapshot.nextReward
+                            ? `${rewardsSnapshot.nextReward.title} — ${rewardsSnapshot.nextReward.description}`
+                            : "All configured rewards are currently unlocked."}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {rewardsSnapshot.activeDiscount ? (
+                    <section className="panel claim-card">
+                      <div className="panel-body">
+                        <div className="claim-card-title">
+                          {rewardsSnapshot.activeDiscount.title}
+                        </div>
+                        <div className="hq-copy">
+                          Reward unlocked for {activeStore.name}. Use this on the next CCI
+                          order placed through the demo flow.
+                        </div>
+                        <div className="claim-code">
+                          <div className="claim-code-label">Reward code</div>
+                          <div className="claim-code-value">
+                            {rewardsSnapshot.activeDiscount.rewardCode}
+                          </div>
+                          <div className="claim-validity">
+                            Unlocked from real basket activity
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Unlocked Badges</div>
+                      <div className="section-meta">{rewardsSnapshot.totalPoints} total points</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="achievements-grid">
+                        {rewardsSnapshot.unlockedBadges.length > 0 ? (
+                          rewardsSnapshot.unlockedBadges.map((badge) => (
+                            <div className="achievement-card" key={badge.id}>
+                              <div className="achievement-icon">🏅</div>
+                              <div className="achievement-title">{badge.title}</div>
+                              <div className="achievement-subtitle">
+                                {badge.description}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="achievement-card locked" style={{ gridColumn: "1 / -1" }}>
+                            <div className="achievement-icon">🔒</div>
+                            <div className="achievement-title">No badges yet</div>
+                            <div className="achievement-subtitle">
+                              Complete higher-quality baskets to unlock your first badge.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Reward Activity</div>
+                    </div>
+                    <div className="panel-body">
+                      <ul className="history-list">
+                        {rewardsSnapshot.rewardHistory.length > 0 ? (
+                          rewardsSnapshot.rewardHistory.map((reward) => (
+                            <li className="history-item" key={reward.id}>
+                              <div className="history-title">{reward.title}</div>
+                              <div className="history-date">{reward.description}</div>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="history-item">
+                            <div className="history-title">No reward unlocks yet</div>
+                            <div className="history-date">
+                              The next milestone will appear here as soon as it unlocks.
+                            </div>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {activeCashierTab === "rankings" ? (
+                <div className="rankings-stack">
+                  <section className="rank-card">
+                    <div className="rank-medal">🥈</div>
+                    <div className="rank-title">You are #2 in Narimanov District</div>
+                    <div className="rank-subtitle">164 baskets behind #1</div>
+                    <div className="rank-trend">You moved up 2 places this week ↑</div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="panel-body">
+                      <div className="champion-preview">
+                        <div className="champion-title">District Champion Preview</div>
+                        <div className="champion-copy">
+                          Reach #1 to unlock District Champion badge + free case of
+                          Coca-Cola.
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="section-title">Leaderboard Range</div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="switch-row">
+                        <button
+                          className={`mini-switch ${rankingsRange === "week" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsRange("week")}
+                        >
+                          This Week
+                        </button>
+                        <button
+                          className={`mini-switch ${rankingsRange === "month" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsRange("month")}
+                        >
+                          This Month
+                        </button>
+                        <button
+                          className={`mini-switch ${rankingsRange === "allTime" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsRange("allTime")}
+                        >
+                          All Time
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <div className="section-head">
+                      <div className="leaderboard-title">
+                        {rankingsScope === "district"
+                          ? `🏆 Narimanov District — ${rankingsRangeLabel}`
+                          : "🏙️ Baku City Leaderboard"}
+                      </div>
+                    </div>
+                    <div className="panel-body">
+                      <div className="switch-row scope-row">
+                        <button
+                          className={`mini-switch ${rankingsScope === "district" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsScope("district")}
+                        >
+                          District
+                        </button>
+                        <button
+                          className={`mini-switch ${rankingsScope === "city" ? "active" : ""}`}
+                          type="button"
+                          onClick={() => setRankingsScope("city")}
+                        >
+                          City
+                        </button>
+                      </div>
+
+                      {rankingsScope === "district" ? (
+                        <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
+                          {currentDistrictRows.map((row) => (
+                            <li
+                              className={`leaderboard-row ${row.isYou ? "you" : ""} ${
+                                row.muted ? "muted" : ""
+                              }`}
+                              key={`${rankingsRange}-${row.store}`}
+                            >
+                              <div className="leaderboard-rank">
+                                <span>#{row.rank}</span>
+                                <span>{row.medal || ""}</span>
+                              </div>
+                              <div className="leaderboard-store">
+                                <div className="leaderboard-store-name">
+                                  <span>{row.isYou ? activeStoreShortName : row.store}</span>
+                                  {row.isYou ? <span className="you-tag">YOU</span> : null}
+                                </div>
+                                <div className="leaderboard-delta">(+{row.delta} today)</div>
+                              </div>
+                              <div className="leaderboard-score">
+                                <div className="leaderboard-score-value">{row.baskets}</div>
+                                <div className="leaderboard-score-label">baskets</div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <>
+                          <ul className="leaderboard-list" style={{ marginTop: "14px" }}>
+                            {currentCityRows.map((row) => (
+                              <li className="leaderboard-row" key={`${rankingsRange}-${row.store}`}>
+                                <div className="leaderboard-rank">
+                                  <span>#{row.rank}</span>
+                                </div>
+                                <div className="leaderboard-store">
+                                  <div className="leaderboard-store-name">
+                                    <span>{row.store}</span>
+                                  </div>
+                                  <div className="leaderboard-delta">(+{row.delta} today)</div>
+                                </div>
+                                <div className="leaderboard-score">
+                                  <div className="leaderboard-score-value">{row.baskets}</div>
+                                  <div className="leaderboard-score-label">baskets</div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+
+                          <div className="city-rank-card">
+                            <div className="city-rank-title">
+                              You are #{currentCityRank.rank} in Baku overall
+                            </div>
+                            <div className="city-rank-copy">
+                              {activeStore.name} currently has {currentCityRank.baskets} baskets
+                              in this view, even though it is outside the top 10 city
+                              leaderboard.
+                            </div>
+                          </div>
+
+                          <ul className="leaderboard-list" style={{ marginTop: "12px" }}>
+                            <li className="leaderboard-row you">
+                              <div className="leaderboard-rank">
+                                <span>#{currentCityRank.rank}</span>
+                              </div>
+                              <div className="leaderboard-store">
+                                <div className="leaderboard-store-name">
+                                  <span>{activeStore.name}</span>
+                                  <span className="you-tag">YOU</span>
+                                </div>
+                                <div className="leaderboard-delta">
+                                  (+{currentCityRank.delta} today)
+                                </div>
+                              </div>
+                              <div className="leaderboard-score">
+                                <div className="leaderboard-score-value">
+                                  {currentCityRank.baskets}
+                                </div>
+                                <div className="leaderboard-score-label">baskets</div>
+                              </div>
+                            </li>
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <section className="hq-shell">
+              <div className="hq-main">
+                <div className="hq-header">
+                  <div className="hq-header-copy">
+                    <div className="hq-label">CCI Headquarters Intelligence</div>
+                    <div className="hq-heading">SCAN Network Dashboard</div>
+                    <div className="hq-subcopy">
+                      Live basket intelligence across all active stores in Baku,
+                      focused on what customers buy with CCI products.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hq-metrics">
+                  {(hasNetworkData
+                    ? hqMetrics
+                    : [
+                        { label: "Total baskets today", value: "0" },
+                        { label: "Active stores today", value: "0" },
+                        { label: "Most common basket pair", value: "Waiting for live data" },
+                        { label: "Fastest growing district", value: "No trend yet" },
+                      ]
+                  ).map((metric) => (
+                    <div
+                      className={`hq-metric-card ${
+                        dashboardFlashState.metricLabels.includes(metric.label)
+                          ? "flash-update"
+                          : ""
+                      }`}
+                      key={metric.label}
+                    >
+                      <div className="hq-metric-label">{metric.label}</div>
+                      <div className="hq-metric-value">{metric.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hq-card">
+                  <div className="hq-card-title">Recommended Actions</div>
+                  <div className="hq-card-copy">
+                    Rule-based recommendations generated from observed basket behavior
+                    to help CCI decide what to do next.
+                  </div>
+                  {!hasNetworkData ? (
+                    <div className="empty-state-block" style={{ marginBottom: "14px" }}>
+                      <div className="empty-state-title">Start scanning to generate insights</div>
+                      <div className="empty-state-copy">
+                        The HQ view will generate live recommendations as soon as stores
+                        begin sending baskets.
+                      </div>
+                    </div>
+                  ) : null}
+                  {hasNetworkData && highConfidenceRecommendations.length === 0 ? (
+                    <div className="empty-state-block" style={{ marginBottom: "14px" }}>
+                      <div className="empty-state-title">
+                        Not enough data for high-confidence recommendation
+                      </div>
+                      <div className="empty-state-copy">
+                        SCAN is still collecting enough basket coverage to promote a
+                        high-confidence action. The cards below are best-effort signals.
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="recommendations-grid">
+                    {recommendedActions.map((recommendation) => {
+                      const isExpanded =
+                        expandedRecommendationId === recommendation.id;
+
+                      return (
+                        <div
+                          className={`recommendation-card ${
+                            dashboardFlashState.recommendationIds.includes(
+                              recommendation.id
+                            )
+                              ? "flash-update"
+                              : ""
+                          }`}
+                          key={recommendation.id}
+                        >
+                          <div className="recommendation-topline">
+                            <span
+                              className={`recommendation-priority ${recommendation.priority.toLowerCase()}`}
+                            >
+                              {recommendation.priority} Priority
+                            </span>
+                            <span className="recommendation-type">
+                              {recommendation.type}
+                            </span>
+                          </div>
+                          <div className="recommendation-title">
+                            {recommendation.title}
+                          </div>
+                          <div className="recommendation-label">Detected pattern</div>
+                          <div className="recommendation-copy">
+                            {recommendation.detectedPattern}
+                          </div>
+                          <div className="recommendation-label">Recommended action</div>
+                          <div className="recommendation-copy">
+                            {recommendation.recommendedAction}
+                          </div>
+                          <div className="recommendation-label">Expected business value</div>
+                          <div className="recommendation-copy">
+                            {recommendation.expectedBusinessValue}
+                          </div>
+                          <div className="recommendation-meta">
+                            <div className="recommendation-confidence">
+                              Confidence: {recommendation.confidence}
+                            </div>
+                            <button
+                              className="recommendation-button"
+                              type="button"
+                              onClick={() =>
+                                setExpandedRecommendationId((currentId) =>
+                                  currentId === recommendation.id
+                                    ? null
+                                    : recommendation.id
+                                )
+                              }
+                            >
+                              {isExpanded
+                                ? "Hide supporting data"
+                                : "View supporting data"}
+                            </button>
+                          </div>
+                          {isExpanded ? (
+                            <div className="recommendation-support">
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  Basket count
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.basketCount}
+                                </div>
+                              </div>
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  Store count
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.storeCount}
+                                </div>
+                              </div>
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  District
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.district}
+                                </div>
+                              </div>
+                              <div className="recommendation-support-card">
+                                <div className="recommendation-support-label">
+                                  Time window
+                                </div>
+                                <div className="recommendation-support-value">
+                                  {recommendation.supportingData.timeWindow}
+                                </div>
+                              </div>
+                              {recommendation.supportingData.patternStrength ? (
+                                <div
+                                  className="recommendation-support-card"
+                                  style={{ gridColumn: "1 / -1" }}
+                                >
+                                  <div className="recommendation-support-label">
+                                    Pattern strength
+                                  </div>
+                                  <div className="recommendation-support-value">
+                                    {recommendation.supportingData.patternStrength}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="hq-grid">
+                  <div className="hq-card">
+                  <div className="hq-card-title">
+                      What do customers buy with CCI products?
+                    </div>
+                    <div className="hq-card-copy">
+                      Basket pair analysis across the full network of anonymized
+                      stores.
+                    </div>
+                    {hasNetworkData ? (
+                      <div className="hq-chart-shell">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={hqPairAnalysis}
+                            layout="vertical"
+                            margin={{ top: 6, right: 18, left: 28, bottom: 6 }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="rgba(17,17,17,0.08)"
+                            />
+                            <XAxis
+                              type="number"
+                              tickLine={false}
+                              axisLine={false}
+                              domain={[0, 100]}
+                              tickFormatter={(value) => `${value}%`}
+                            />
+                            <YAxis
+                              type="category"
+                              dataKey="label"
+                              width={170}
+                              tickLine={false}
+                              axisLine={false}
+                              tick={{ fontSize: 12, fill: "#4d545f" }}
+                            />
+                            <Tooltip
+                              formatter={(value, _name, item) => {
+                                const suffix = item.payload.suffix
+                                  ? ` ${item.payload.suffix}`
+                                  : "";
+                                return [`${value}%${suffix}`, "Share"];
+                              }}
+                              contentStyle={{
+                                borderRadius: "14px",
+                                border: "1px solid rgba(17,17,17,0.08)",
+                                boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                              }}
+                            />
+                            <Bar
+                              dataKey="percentage"
+                              radius={[0, 10, 10, 0]}
+                              fill={PRIMARY_RED}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="empty-state-block">
+                        <div className="empty-state-title">No baskets yet</div>
+                        <div className="empty-state-copy">
+                          Start scanning to generate live pair analysis for CCI products.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="hq-card">
+                  <div className="hq-card-title">Geographic Breakdown</div>
+                  <div className="hq-card-copy">
+                    District comparison across all anonymized stores.
+                  </div>
+                    {hasNetworkData ? (
+                      <table className="hq-table">
+                        <thead>
+                          <tr>
+                            <th>District</th>
+                            <th>Baskets</th>
+                            <th>Top Pair</th>
+                            <th>Trend</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hqDistrictBreakdown.map((row) => (
+                            <tr key={row.district}>
+                              <td>{row.district}</td>
+                              <td>{row.baskets}</td>
+                              <td>{row.topPair}</td>
+                              <td
+                                className={
+                                  row.trend === "↓"
+                                    ? "hq-trend-down"
+                                    : row.trend === "→"
+                                      ? "hq-trend-neutral"
+                                      : "hq-trend-up"
+                                }
+                              >
+                                {row.trend}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="empty-state-block">
+                        <div className="empty-state-title">No district comparison yet</div>
+                        <div className="empty-state-copy">
+                          SCAN needs a few live baskets before district trends become meaningful.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="hq-card">
+                  <div className="hq-card-title">Peak Hours</div>
+                  <div className="hq-card-copy">
+                    Aggregated basket volume across all stores combined, with clear
+                    lunch and evening surges.
+                  </div>
+                  {hasNetworkData ? (
+                    <div className="hq-chart-shell" style={{ height: "280px" }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={hqPeakHours}
+                          margin={{ top: 8, right: 18, left: 2, bottom: 6 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="rgba(17,17,17,0.08)"
+                          />
+                          <XAxis
+                            dataKey="hour"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#5c6370" }}
+                          />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fontSize: 12, fill: "#5c6370" }}
+                          />
+                          <Tooltip
+                            formatter={(value) => [`${value} baskets`, "Volume"]}
+                            contentStyle={{
+                              borderRadius: "14px",
+                              border: "1px solid rgba(17,17,17,0.08)",
+                              boxShadow: "0 12px 24px rgba(17,17,17,0.08)",
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="baskets"
+                            stroke={PRIMARY_RED}
+                            strokeWidth={3}
+                            dot={{ r: 4, fill: PRIMARY_RED }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="empty-state-block">
+                      <div className="empty-state-title">No traffic pattern yet</div>
+                      <div className="empty-state-copy">
+                        Once stores begin logging baskets, peak-hour traffic will appear here.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <aside className="hq-sidebar">
+                <div>
+                  <div className="hq-sidebar-title">Live Transaction Feed</div>
+                  <div className="hq-sidebar-copy">
+                    New anonymized baskets stream in every few seconds from the
+                    active network.
+                  </div>
+                </div>
+
+                <div className="hq-feed">
+                  {hqLiveFeed.length > 0 ? (
+                    hqLiveFeed.map((entry) => (
+                      <div
+                        className={`hq-feed-item ${
+                          dashboardFlashState.feedId === entry.id ? "flash-update" : ""
+                        }`}
+                        key={entry.id}
+                      >
+                        <div className="hq-feed-time">{entry.time}</div>
+                        <div className="hq-feed-line">
+                          District: {entry.district} — {entry.items}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state-block">
+                      <div className="empty-state-title">No baskets yet</div>
+                      <div className="empty-state-copy">
+                        Live transactions will appear here the moment a store logs its
+                        first basket.
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="hq-sidebar-note">
+                  Privacy mode is enabled. Headquarters sees district-level
+                  activity and anonymized store performance only.
+                </div>
+              </aside>
+            </section>
+          )}
+        </div>
+      </main>
+
+      {activeMode === "cashier" ? (
+        <>
+          {activeCashierTab === "scan" ? (
+            <div className="demo-fab-stack">
+              <button
+                className="demo-button script-button"
+                type="button"
+                disabled={demoModeRunning || demoScriptRunning}
+                onClick={handleDemoScriptMode}
+              >
+                {demoScriptRunning ? "RUNNING SCRIPT..." : "SCRIPT MODE"}
+              </button>
+              <button
+                className="demo-button"
+                type="button"
+                disabled={demoModeRunning || demoScriptRunning}
+                onClick={handleDemoMode}
+              >
+                {demoModeRunning ? "RUNNING DEMO..." : "DEMO MODE"}
+              </button>
+            </div>
+          ) : null}
+          <nav className="bottom-nav" aria-label="Primary">
+            <button
+              className={`nav-item ${activeCashierTab === "scan" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("scan")}
+            >
+              Scan
+            </button>
+            <button
+              className={`nav-item ${activeCashierTab === "store" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("store")}
+            >
+              My Store
+            </button>
+            <button
+              className={`nav-item ${activeCashierTab === "rewards" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("rewards")}
+            >
+              Rewards
+            </button>
+            <button
+              className={`nav-item ${activeCashierTab === "rankings" ? "active" : ""}`}
+              type="button"
+              onClick={() => setActiveCashierTab("rankings")}
+            >
+              Rankings
+            </button>
+          </nav>
+        </>
+      ) : null}
+    </div>
+  );
+}

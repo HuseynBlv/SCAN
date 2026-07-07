@@ -4,7 +4,8 @@
 
 begin;
 
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.stores (
   id uuid primary key default gen_random_uuid(),
@@ -387,14 +388,14 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   return query
   update public.stores
   set last_seen = now()
   where upper(public.stores.store_code) = upper(trim(p_store_code))
-    and public.stores.pin_hash = encode(digest(p_pin, 'sha256'), 'hex')
+    and public.stores.pin_hash = encode(extensions.digest(p_pin::text, 'sha256'::text), 'hex')
     and public.stores.is_active = true
   returning
     public.stores.id,
@@ -427,9 +428,9 @@ insert into public.stores (
   is_active
 )
 values
-  ('Store #47 — Narimanov', 'NAR-047', 'Store #47', 'Narimanov', 'Demo Owner', '+994501112233', encode(digest('0470', 'sha256'), 'hex'), true),
-  ('Store #14 — Yasamal', 'YAS-014', 'Store #14', 'Yasamal', 'Demo Owner', '+994501112244', encode(digest('0140', 'sha256'), 'hex'), true),
-  ('Store #31 — Khatai', 'KHA-031', 'Store #31', 'Khatai', 'Demo Owner', '+994501112255', encode(digest('0310', 'sha256'), 'hex'), true)
+  ('Store #47 — Narimanov', 'NAR-047', 'Store #47', 'Narimanov', 'Demo Owner', '+994501112233', encode(extensions.digest('0470'::text, 'sha256'::text), 'hex'), true),
+  ('Store #14 — Yasamal', 'YAS-014', 'Store #14', 'Yasamal', 'Demo Owner', '+994501112244', encode(extensions.digest('0140'::text, 'sha256'::text), 'hex'), true),
+  ('Store #31 — Khatai', 'KHA-031', 'Store #31', 'Khatai', 'Demo Owner', '+994501112255', encode(extensions.digest('0310'::text, 'sha256'::text), 'hex'), true)
 on conflict (store_code)
 do update set
   name = excluded.name,
