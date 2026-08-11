@@ -1,3 +1,0 @@
-export default function KPICards() {
-  return null;
-}
