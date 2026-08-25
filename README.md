@@ -1,10 +1,19 @@
 # SCAN
 
-> Basket Intelligence for Every Store
+> Sales & Consumption Analytics Network
 
-SCAN is a hackathon prototype for **CCI** that turns barcode scans into live basket intelligence.
+SCAN is an analytics and data-collaboration layer that turns transaction data already
+created by a retailer's checkout system into decision-ready basket intelligence for the
+retailer and approved aggregate insights for **CCI Sales and Marketing**.
 
-The app is designed around two complementary experiences:
+The product has pivoted away from cashier-operated phone scanning. Active backend
+development is in [`scan-api/`](scan-api/); the existing React scanner in [`scan-app/`](scan-app/)
+is retained as a legacy prototype while its useful HQ interface is evolved for the new
+workflow.
+
+## Legacy hackathon prototype
+
+The original prototype was designed around two complementary experiences:
 
 - **Cashier View** for a store owner or cashier using a phone at the counter
 - **HQ View** for a CCI team member monitoring aggregated trends across stores
@@ -151,6 +160,19 @@ It is optimized for:
 - storytelling
 - UI polish
 - live demos
+
+## Pivoted backend — Phase 0
+
+Development of the retailer-export version now lives in [`scan-api/`](scan-api/). The new
+Spring Boot service accepts configurable CSV/XLSX transaction exports, creates audited and
+idempotent imports, reconstructs receipts, supports explicit product mapping, and exposes
+aggregate-only deterministic analytics.
+
+The original React scanner remains intact while the backend data path is validated. See:
+
+- [`scan-api/README.md`](scan-api/README.md)
+- [`docs/pilot-data-contract.md`](docs/pilot-data-contract.md)
+- [`docs/analytics-definitions.md`](docs/analytics-definitions.md)
 
 ## Credits
 
