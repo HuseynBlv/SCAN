@@ -28,6 +28,16 @@ public final class ProductMappingDtos {
     public record ManualMappingRequest(@NotNull UUID canonicalProductId) {
     }
 
+    public record CatalogImportResponse(
+        int rows,
+        int createdCanonicalProducts,
+        int existingCanonicalProducts,
+        int createdRetailerProducts,
+        int createdMappings,
+        int existingMappings
+    ) {
+    }
+
     public record CanonicalProductResponse(
         UUID id,
         String normalizedName,

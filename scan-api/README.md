@@ -1,10 +1,11 @@
-# SCAN API — Phase 0
+# SCAN API
 
 This Spring Boot service is the first backend for the pivoted SCAN product. It accepts
 retailer transaction exports, validates and normalizes them into receipt baskets, maps
 retailer products to a canonical catalog, and exposes aggregate-only analytics.
 
-The existing React scanner prototype is deliberately unchanged.
+The React dashboard consumes these aggregate results. The original scanner is preserved
+behind an explicit legacy flag.
 
 ## Requirements
 
@@ -28,6 +29,10 @@ Generate the coverage report with:
 mvn verify
 open target/site/jacoco/index.html
 ```
+
+`mvn verify` also enforces baseline coverage floors of 80% of lines and 55% of branches.
+These are regression guards, not proof that every business rule is correct; focused tests
+cover receipt idempotency, mapping consistency, analytics values, and API permissions.
 
 ## Run with PostgreSQL
 
@@ -72,9 +77,19 @@ curl -u scan-cci:replace-cci-password \
   'http://localhost:8080/api/v1/analytics/overview?retailerCode=DEMO'
 ```
 
+## Prepare the Kaggle supermarket demo
+
+The repository includes an isolated preparation tool for the approved Kaggle 2019
+supermarket dataset. It creates a deterministic 10,000-receipt sample, a product catalog,
+a validation report, and rejected-row details under the ignored `target/` directory.
+
+See [`../docs/kaggle-demo.md`](../docs/kaggle-demo.md) for the exact preparation, catalog
+import, transaction import, analytics, and opt-in real-volume smoke-test commands.
+
 Uploading the exact same file again returns the original import job and sets
 `duplicateFile: true`. Uploading a different file that reuses an existing receipt identity
 with different line contents fails without writing partial receipts.
+Identical receipts in different overlapping files are skipped without double-counting.
 
 ## Phase 0 limitations
 

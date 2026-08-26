@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +18,15 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
         Store store,
         String externalReceiptId,
         Instant transactionTimestamp
+    );
+
+    @EntityGraph(attributePaths = "store")
+    List<Receipt> findAllByRetailerAndStoreAndExternalReceiptIdInAndTransactionTimestampBetween(
+        Retailer retailer,
+        Store store,
+        Collection<String> externalReceiptIds,
+        Instant from,
+        Instant to
     );
 
     @EntityGraph(attributePaths = {"store", "lines", "lines.retailerProduct", "lines.retailerProduct.canonicalProduct"})

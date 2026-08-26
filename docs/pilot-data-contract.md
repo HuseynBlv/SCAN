@@ -36,14 +36,20 @@ The application adds `retailer_id`, `source_system`, `source_import_job_id`, and
 9. Fail the entire import if the same receipt identity has different contents.
 10. Preserve unresolved retailer products for manual mapping.
 
-## Product matching order
+## Product identity and matching
 
-1. Previously saved retailer product mapping, identified by retailer product code.
-2. Exact barcode against the canonical product catalog.
-3. Manual mapping.
-4. Otherwise unresolved.
+The source identity key uses barcode first, then a stable retailer product code, then the
+case-normalized exact product name. Existing approved retailer mappings are reused,
+including legacy code-based mappings found by barcode. Imports do not silently overwrite
+manual decisions. A catalog that conflicts with an existing mapping is rejected.
 
+New products are matched by exact barcode against the canonical catalog. Products without
+an exact match remain unresolved until an explicit manual mapping or catalog import.
 No fuzzy or AI matching is performed.
+
+The Kaggle demo deliberately uses approved exact-name mappings because its source product
+codes are not stable SKU identifiers. Real retailer adapters should retain barcode or a
+verified stable retailer product code and omit unreliable identifiers before ingestion.
 
 ## Questions the real export must answer
 
