@@ -65,10 +65,13 @@ Flyway creates retailer `KAGGLE` and import profile `KAGGLE_2019`.
 
 ## 3. Import the exact-name catalog
 
-Do this before importing transactions so every sample product is mapped deterministically:
+Do this before importing transactions so every sample product is mapped deterministically.
+Keep the API running and use a second terminal in `scan-api/` for the following curl commands.
+Curl prompts for the backend's admin or CCI password; no password variables are needed in
+that second terminal:
 
 ```bash
-curl -u "scan-admin:$SCAN_ADMIN_PASSWORD" \
+curl -u scan-admin \
   -F retailerCode=KAGGLE \
   -F file=@target/kaggle-demo/product-catalog.csv \
   http://localhost:8080/api/v1/product-mappings/catalog-imports
@@ -82,7 +85,7 @@ rejected instead of silently changing analytics truth.
 ## 4. Import transactions
 
 ```bash
-curl -u "scan-admin:$SCAN_ADMIN_PASSWORD" \
+curl -u scan-admin \
   -F retailerCode=KAGGLE \
   -F profileCode=KAGGLE_2019 \
   -F file=@target/kaggle-demo/canonical-transactions.csv \
@@ -92,9 +95,15 @@ curl -u "scan-admin:$SCAN_ADMIN_PASSWORD" \
 ## 5. Read analytics
 
 ```bash
-curl -u "scan-cci:$SCAN_CCI_PASSWORD" \
+curl -u scan-cci \
   'http://localhost:8080/api/v1/analytics/overview?retailerCode=KAGGLE'
 ```
+
+To view the same results in the browser, follow the
+[frontend setup guide](../scan-app/README.md) and sign in with retailer `KAGGLE`.
+Re-uploading the exact transaction file should return `duplicateFile: true` without changing
+the basket count. If this retailer already contains other imports, its aggregate totals can
+exceed the sample-only values below.
 
 ## Verified 10,000-receipt sample
 

@@ -9,7 +9,7 @@ behind an explicit legacy flag.
 
 ## Requirements
 
-- Java 21+
+- Java 21 (the version used in CI)
 - Maven 3.6.3+
 - PostgreSQL for running the application
 
@@ -36,7 +36,20 @@ cover receipt idempotency, mapping consistency, analytics values, and API permis
 
 ## Run with PostgreSQL
 
-Create an empty database and user, then configure these environment variables:
+Start PostgreSQL first. For a fresh local setup only, create a login and database using a
+PostgreSQL administrator account:
+
+```bash
+createuser --pwprompt scan
+createdb --owner=scan scan
+```
+
+The first command prompts for the new database user's password. These commands use your
+local PostgreSQL connection defaults; specify the administrator, host, and port if needed.
+If the `scan` user and database already exist, skip creation and use their existing password.
+Do not recreate a database containing imported data.
+
+From `scan-api/`, configure the following variables in the same terminal used to start Maven:
 
 ```bash
 export SCAN_DB_URL=jdbc:postgresql://localhost:5432/scan
@@ -48,15 +61,18 @@ mvn spring-boot:run
 ```
 
 Flyway creates the schema plus a synthetic `DEMO` retailer, `CANONICAL` import profile,
-and four-product demo catalog. They exist only to exercise the pipeline before a real
-retailer export is available.
+and four-product demo catalog. It also creates the `KAGGLE` retailer and `KAGGLE_2019`
+profile. These support testing before a real retailer export is available; migrations do
+not load transaction files.
 
 ## Exercise the Phase 0 API
 
-Upload the synthetic fixture as the admin user:
+Upload the synthetic fixture as the admin user. Run these examples from `scan-api/` in
+another terminal while the API is running. Curl prompts for the corresponding password
+configured on the backend, so it does not need password variables in this second terminal:
 
 ```bash
-curl -u scan-admin:replace-admin-password \
+curl -u scan-admin \
   -F retailerCode=DEMO \
   -F profileCode=CANONICAL \
   -F file=@src/test/resources/fixtures/canonical-transactions.csv \
@@ -66,14 +82,14 @@ curl -u scan-admin:replace-admin-password \
 List unresolved retailer products:
 
 ```bash
-curl -u scan-admin:replace-admin-password \
+curl -u scan-admin \
   'http://localhost:8080/api/v1/product-mappings/unresolved?retailerCode=DEMO'
 ```
 
 Read aggregate metrics as the CCI user:
 
 ```bash
-curl -u scan-cci:replace-cci-password \
+curl -u scan-cci \
   'http://localhost:8080/api/v1/analytics/overview?retailerCode=DEMO'
 ```
 
@@ -91,7 +107,7 @@ Uploading the exact same file again returns the original import job and sets
 with different line contents fails without writing partial receipts.
 Identical receipts in different overlapping files are skipped without double-counting.
 
-## Phase 0 limitations
+## Current pilot limitations
 
 - Imports run synchronously and are limited to 25 MB.
 - XLS/XLSX parsing loads the first worksheet into memory.
@@ -102,4 +118,9 @@ Identical receipts in different overlapping files are skipped without double-cou
 - Analytics currently load one retailer's receipts through JPA. Production volume testing
   will determine which calculations move to native PostgreSQL aggregation queries.
 - Pilot identities are configured from environment variables. Persistent accounts or SSO
-  are outside Phase 0.
+  are not implemented. CCI access requires the retailer's sharing flag; per-user retailer
+  permissions are not implemented.
+- Production needs HTTPS and a reachable backend, not just a static frontend deployment.
+  The current security configuration does not enable cross-origin browser requests. Prefer
+  same-origin frontend/API routing; a separate frontend origin requires an explicit CORS
+  implementation and verification.
