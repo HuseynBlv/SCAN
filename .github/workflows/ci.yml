@@ -36,7 +36,7 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress verify
 
   frontend:
-    name: Frontend lint and build
+    name: Frontend test, lint, and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,6 +58,9 @@ jobs:
 
       - name: Lint frontend
         run: npm run lint
+
+      - name: Test frontend
+        run: npm test
 
       - name: Build frontend
         run: npm run build

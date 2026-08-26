@@ -6,12 +6,15 @@ SCAN is an analytics and data-collaboration layer that turns transaction data al
 created by a retailer's checkout system into decision-ready basket intelligence for the
 retailer and approved aggregate insights for **CCI Sales and Marketing**.
 
-The product has pivoted away from cashier-operated phone scanning. Active backend
-development is in [`scan-api/`](scan-api/); the existing React scanner in [`scan-app/`](scan-app/)
-is retained as a legacy prototype while its useful HQ interface is evolved for the new
-workflow.
+The product has pivoted away from cashier-operated phone scanning. The Spring Boot analytics
+service lives in [`scan-api/`](scan-api/), and [`scan-app/`](scan-app/) now opens an API-backed
+CCI Sales and Marketing dashboard by default. The original scanner remains available only
+behind an explicit legacy development flag.
 
 ## Legacy hackathon prototype
+
+The sections in this legacy area describe the retired scanner and apply only when
+`VITE_ENABLE_LEGACY_SCANNER=true`. They do not describe SCAN's default workflow.
 
 The original prototype was designed around two complementary experiences:
 
@@ -90,6 +93,8 @@ Includes:
 ```text
 SCAN/
 ├── README.md
+├── docs/
+├── scan-api/
 └── scan-app/
     ├── src/
     │   ├── App.jsx
@@ -102,7 +107,8 @@ SCAN/
 
 ## Running Locally
 
-From the app directory:
+Start PostgreSQL and the Spring Boot API as documented in [`scan-api/README.md`](scan-api/README.md).
+Then start the frontend:
 
 ```bash
 cd scan-app
@@ -110,9 +116,10 @@ npm install
 npm run dev
 ```
 
-Then open the local Vite URL in your browser.
+Then open the local Vite URL and sign in to the aggregate analytics dashboard. See
+[`scan-app/README.md`](scan-app/README.md) for configuration and verification commands.
 
-## Testing on a Phone
+## Legacy scanner: testing on a phone
 
 For real barcode scanning on a phone, use an **HTTPS** URL. Mobile browsers often block camera access on plain `http`.
 
@@ -121,7 +128,7 @@ Recommended options:
 1. deploy to **Vercel**
 2. or run locally and expose the app with a secure tunnel such as **ngrok**
 
-## Deployment Notes
+## Legacy scanner: deployment notes
 
 If deploying with Vercel:
 
@@ -130,9 +137,11 @@ If deploying with Vercel:
 - **Build Command:** `npm run build`
 - **Output Directory:** `dist`
 
-No custom environment variables are required for the current prototype.
+That Vercel-only setup applies to the legacy scanner. The current dashboard also requires a
+deployed SCAN API. Prefer a same-origin deployment; otherwise set `VITE_SCAN_API_BASE_URL` and
+configure the API's allowed frontend origin. Never place SCAN passwords in `VITE_*` variables.
 
-## Offline Behavior
+## Legacy scanner: offline behavior
 
 The prototype is designed to remain usable even when product lookup is unavailable.
 
@@ -140,7 +149,7 @@ The prototype is designed to remain usable even when product lookup is unavailab
 - Open Food Facts is the only external API dependency
 - If lookup fails, SCAN falls back to the built-in demo catalog when possible
 
-## Demo Flow
+## Legacy scanner: demo flow
 
 For a reliable live presentation:
 
@@ -161,14 +170,16 @@ It is optimized for:
 - UI polish
 - live demos
 
-## Pivoted backend — Phase 0
+## Pivoted retailer-export product
 
 Development of the retailer-export version now lives in [`scan-api/`](scan-api/). The new
 Spring Boot service accepts configurable CSV/XLSX transaction exports, creates audited and
 idempotent imports, reconstructs receipts, supports explicit product mapping, and exposes
 aggregate-only deterministic analytics.
 
-The original React scanner remains intact while the backend data path is validated. See:
+The React application now reads the backend's deterministic aggregate analytics. The original
+scanner remains intact for historical reference and can be enabled with
+`VITE_ENABLE_LEGACY_SCANNER=true`. See:
 
 - [`scan-api/README.md`](scan-api/README.md)
 - [`docs/pilot-data-contract.md`](docs/pilot-data-contract.md)

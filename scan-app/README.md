@@ -1,36 +1,52 @@
 # SCAN App
 
-This folder contains the Vite + React application for the **SCAN** hackathon prototype.
+The React frontend for SCAN. The default experience is the pivoted CCI Sales and Marketing
+dashboard backed by aggregate analytics from `scan-api`.
 
-For the full product overview, feature summary, and deployment notes, see the root project README:
+The original cashier-scanning prototype is preserved for reference but is not part of the
+current retailer-export workflow.
 
-[Project README](../README.md)
+## Local development
 
-## Local Development
+Start the Spring Boot API on port `8080`, then run:
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Production Build
+Vite proxies `/api` to `http://localhost:8080`. Open the displayed Vite URL and sign in with:
+
+- Retailer code: `KAGGLE` for the prepared demo dataset.
+- Username: `scan-cci`.
+- Password: the value supplied to the API as `SCAN_CCI_PASSWORD`.
+
+The password is held only in React memory for the current tab. Do not put it in a `VITE_*`
+environment variable because Vite variables are embedded in the browser bundle.
+
+## Frontend configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VITE_SCAN_RETAILER_CODE` | `KAGGLE` | Initial retailer code on the sign-in screen |
+| `VITE_SCAN_API_BASE_URL` | same origin | API origin for deployments where frontend and API are on different origins |
+| `VITE_ENABLE_LEGACY_SCANNER` | `false` | Set to `true` to open the retired cashier-scanning prototype |
+
+If `VITE_SCAN_API_BASE_URL` points to a different production origin, the API must explicitly
+allow that frontend origin. Same-origin deployment is preferred for the pilot.
+
+## Verification
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+## Production build
 
 ```bash
 npm run build
 ```
 
-## Lint
-
-```bash
-npm run lint
-```
-
-## Deployment
-
-Recommended Vercel settings:
-
-- **Framework Preset:** `Vite`
-- **Root Directory:** `scan-app`
-- **Output Directory:** `dist`
-
-No custom environment variables are required for the current prototype.
+The output is written to `dist/`.
