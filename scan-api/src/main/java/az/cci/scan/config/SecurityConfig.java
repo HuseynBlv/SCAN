@@ -23,6 +23,10 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers(HttpMethod.GET,
+                    "/", "/index.html", "/assets/**", "/favicon.svg", "/icons.svg", "/health").permitAll()
+                .requestMatchers(HttpMethod.HEAD,
+                    "/", "/index.html", "/assets/**", "/favicon.svg", "/icons.svg", "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/imports").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/imports/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/product-mappings/**").hasRole("ADMIN")

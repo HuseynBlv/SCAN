@@ -75,6 +75,30 @@ describe('fetchOverview', () => {
     })).rejects.toBeInstanceOf(ScanApiError)
   })
 
+  it.each([502, 503, 504])('explains a temporary hosting failure (%s)', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ok: false, status })))
+
+    await expect(fetchOverview({ retailerCode: 'KAGGLE', username: 'scan-cci', password: 'secret' }))
+      .rejects.toEqual(expect.objectContaining({
+        status,
+        message: expect.stringContaining('temporarily unavailable'),
+      }))
+  })
+
+  it('handles a hosting HTML response without exposing a JSON parser error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token <')),
+    }))
+
+    await expect(fetchOverview({ retailerCode: 'KAGGLE', username: 'scan-cci', password: 'secret' }))
+      .rejects.toEqual(expect.objectContaining({
+        name: 'ScanApiError',
+        message: expect.stringContaining('did not return readable analytics'),
+      }))
+  })
+
   it('distinguishes denied retailer access from invalid credentials', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
       ok: false,
@@ -90,5 +114,17 @@ describe('fetchOverview', () => {
       status: 403,
       message: "This account cannot access the selected retailer's analytics.",
     }))
+  })
+
+  it('preserves cancellation while reading the response body', async () => {
+    const aborted = new DOMException('Request was cancelled', 'AbortError')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockRejectedValue(aborted),
+    }))
+
+    await expect(fetchOverview({ retailerCode: 'KAGGLE', username: 'scan-cci', password: 'secret' }))
+      .rejects.toBe(aborted)
   })
 })

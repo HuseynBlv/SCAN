@@ -1,0 +1,4 @@
+# Deployment credentials belong in provider settings, never in Git.
+.env
+.env.*
+!.env.example

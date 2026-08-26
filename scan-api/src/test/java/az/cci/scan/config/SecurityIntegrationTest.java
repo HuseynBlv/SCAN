@@ -21,7 +21,11 @@ import java.nio.charset.StandardCharsets;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
@@ -86,6 +90,40 @@ class SecurityIntegrationTest {
             "Asia/Baku",
             false
         ));
+    }
+
+    @Test
+    void exposesOnlyMinimalPublicHealth() throws Exception {
+        mockMvc.perform(get("/health"))
+            .andExpect(status().isOk())
+            .andExpect(content().json("{\"status\":\"UP\"}"))
+            .andExpect(header().string("Cache-Control", "no-store"));
+        mockMvc.perform(head("/health")).andExpect(status().isOk());
+    }
+
+    @Test
+    void servesPublicFrontendWithoutGrantingApiAccess() throws Exception {
+        mockMvc.perform(get("/")).andExpect(status().isOk());
+        mockMvc.perform(get("/index.html"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("SCAN test frontend")));
+        mockMvc.perform(get("/assets/security-test.js"))
+            .andExpect(status().isOk());
+        mockMvc.perform(head("/assets/security-test.js"))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/product-mappings/catalog"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/unknown"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void publicRoutesDoNotAllowAnonymousWritesOrPrivateCatalogAccess() throws Exception {
+        mockMvc.perform(post("/health")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/index.html")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/product-mappings/catalog")
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
     }
 
     @Test

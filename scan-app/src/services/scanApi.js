@@ -22,6 +22,9 @@ function basicAuthorization(username, password) {
 }
 
 async function errorMessage(response) {
+  if ([502, 503, 504].includes(response.status)) {
+    return "The SCAN API is temporarily unavailable. If the demo is waking up, wait a minute and try again.";
+  }
   if (response.status === 401) {
     return "The username or password is incorrect.";
   }
@@ -90,7 +93,7 @@ export async function fetchOverview({ retailerCode, username, password, signal }
       throw error;
     }
     throw new ScanApiError(
-      "Cannot reach the SCAN API. Confirm Spring Boot is running on port 8080."
+      "Cannot reach the SCAN API. Check your connection and that the API is running. A sleeping demo may need a minute before you retry."
     );
   }
 
@@ -98,5 +101,16 @@ export async function fetchOverview({ retailerCode, username, password, signal }
     throw new ScanApiError(await errorMessage(response), response.status);
   }
 
-  return normalizeOverview(await response.json());
+  let data;
+  try {
+    data = await response.json();
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw error;
+    }
+    throw new ScanApiError(
+      "The SCAN API did not return readable analytics. If the demo is waking up, wait a minute and try again."
+    );
+  }
+  return normalizeOverview(data);
 }

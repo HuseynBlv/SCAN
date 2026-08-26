@@ -64,3 +64,19 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+  deployment:
+    name: Deployment container smoke test
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Build the same frontend and API image used on Render
+        run: docker build --tag scan-demo:ci .
+
+      - name: Verify packaged assets, authentication, imports, and restart persistence
+        run: bash scripts/smoke-container.sh scan-demo:ci

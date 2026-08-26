@@ -57,3 +57,12 @@ npm run build
 The output is written to `dist/`. The Vite `/api` proxy applies only to the development
 server; neither `dist/` nor a frontend-only Vercel deployment includes the Spring Boot API.
 Production must route `/api` to a deployed API or implement the cross-origin setup above.
+
+The root `Dockerfile` provides the same-origin option: it builds this frontend, copies
+`dist/` into Spring Boot, and serves both from a single container. It explicitly disables
+the legacy scanner and uses same-origin API URLs. Runtime passwords are never supplied to
+Vite. See the [free Render + Neon deployment guide](../docs/free-demo-deployment.md).
+
+The UI explains temporary hosting failures so users can wait and retry after a free service
+wakes up. If the whole service is asleep, Render may show its own loading page before SCAN
+can load. Existing frontend-only Vercel hosting is unchanged by the container configuration.

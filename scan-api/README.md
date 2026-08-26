@@ -107,6 +107,26 @@ Uploading the exact same file again returns the original import job and sets
 with different line contents fails without writing partial receipts.
 Identical receipts in different overlapping files are skipped without double-counting.
 
+## Container and free-demo hosting
+
+The repository-root `Dockerfile` builds the React dashboard into this service, so one
+container serves both `/` and `/api`. Follow the
+[Render + Neon setup guide](../docs/free-demo-deployment.md); hosted resources are not
+created automatically by this repository.
+
+The container activates `cloud`, listens on `${PORT:8080}`, limits its Java heap to 256 MB,
+and uses a small database/thread pool. Local `mvn spring-boot:run` retains the normal profile
+unless you explicitly enable `cloud`. Set the database URL, role, password, and separate
+admin/CCI passwords in the host's environment settings, never the image or source code.
+
+`GET /health` is public and returns only `{"status":"UP"}` with no database query. Page
+assets are public, but API role and retailer-sharing restrictions still apply. Check an
+authenticated analytics request as well to verify database access after deployment.
+
+From the repository root, `bash scripts/smoke-container.sh scan-demo:local` tests a built
+image with disposable PostgreSQL 17 and a 512 MB app limit. This test does not use your
+local database; see the hosting guide for the build and optional dataset-test commands.
+
 ## Current pilot limitations
 
 - Imports run synchronously and are limited to 25 MB.

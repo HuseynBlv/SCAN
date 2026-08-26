@@ -14,7 +14,8 @@ inventory system, or ERP.
 
 **Current stage:** a working local pilot prototype with CSV/XLSX ingestion, deterministic
 analytics, and an API-backed React dashboard. A reproducible Kaggle demo exercises the full
-pipeline. Real-retailer validation and production deployment remain next steps.
+pipeline. A single-container Render + Neon free-demo deployment is configured; hosted
+resource creation and verification are still required. Real-retailer validation remains next.
 
 ## What SCAN helps answer
 
@@ -168,8 +169,10 @@ Backend tests use an isolated H2 database; they do not need or modify local Post
 and 55% branch coverage. Coverage is a regression guard, not proof of business correctness.
 
 GitHub Actions runs backend verification and frontend tests, lint, and build on pushes and
-pull requests. The optional 10,000-basket smoke test requires locally generated files and is
-documented in the [demo guide](docs/kaggle-demo.md#optional-real-volume-smoke-test).
+pull requests, then builds the deployable Docker image and smoke-tests it against disposable
+PostgreSQL under a 512 MB app memory limit. See the
+[container test instructions](docs/free-demo-deployment.md#local-container-verification).
+The optional 10,000-basket tests require locally generated files; they are not part of normal CI.
 
 ## Privacy and pilot boundaries
 
@@ -190,14 +193,21 @@ documented in the [demo guide](docs/kaggle-demo.md#optional-real-volume-smoke-te
 
 ## Deployment status
 
-The working local setup includes **both** the React frontend and the Spring Boot/PostgreSQL
-backend. A successful Vercel frontend build does not deploy the backend or make API sign-in work.
+The [free-demo deployment guide](docs/free-demo-deployment.md) sets up **one Render Free
+service for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile
+packages the existing dashboard into the Java application. One HTTPS origin serves the page
+and `/api`, so no cross-origin configuration is needed. `render.yaml` explicitly selects the
+free instance and manual deployment. Resource/account creation and hosted verification are
+still pending; this repository does not yet record a verified Render URL.
 
-Frontend build settings: root `scan-app`, build `npm run build`, output `dist`.
-For a hosted pilot, serve the frontend and `/api` under the same HTTPS origin using a reverse
-proxy, or explicitly implement and test cross-origin access. The Vite development proxy is
-not part of the production build. `VITE_SCAN_API_BASE_URL` alone does not enable cross-origin
-requests; the backend does not currently configure CORS permissions.
+Free services can sleep, start slowly, or stop at quota limits. This is an occasional technical
+demo, not a production availability commitment. The guide covers account setup, runtime
+secrets, imports, verification, limits, and updating the tracked branch after PR #2 is merged.
+
+A successful frontend-only Vercel build does not deploy Spring Boot or make API sign-in work.
+The Vite development proxy is not included in production builds. A separately hosted frontend
+still needs explicit API routing or implemented and tested CORS; `VITE_SCAN_API_BASE_URL`
+alone is not enough. Existing Vercel configuration is unchanged.
 
 Never put passwords in `VITE_*` variables: those values are embedded in the browser bundle.
 The GitHub repository has an existing Vercel integration, so merging into its production
@@ -231,8 +241,11 @@ These are planned improvements, not claims about the current feature set.
 
 ```text
 SCAN/
-├── .github/workflows/ci.yml    # Backend and frontend checks
-├── docs/                      # Data contract, metrics, and reproducible demo
+├── .github/workflows/ci.yml    # Backend, frontend, and container checks
+├── Dockerfile                 # Builds React into the Java 21 application
+├── render.yaml                # One Free web service; runtime secrets only
+├── scripts/                   # Isolated deployment smoke test
+├── docs/                      # Data contract, metrics, demo, and hosting runbook
 ├── scan-api/                  # Java / Spring Boot, JPA, PostgreSQL, Flyway
 │   └── src/                   # Ingestion, catalog, analytics, security, and tests
 └── scan-app/                  # React 19, Vite, Recharts, Vitest
@@ -246,6 +259,7 @@ SCAN/
 - [Backend setup and API examples](scan-api/README.md)
 - [Frontend setup and configuration](scan-app/README.md)
 - [Reproducible Kaggle demo](docs/kaggle-demo.md)
+- [Free Render + Neon demo deployment](docs/free-demo-deployment.md)
 - [Pilot data contract and retailer questions](docs/pilot-data-contract.md)
 - [Analytics definitions and insight rules](docs/analytics-definitions.md)
 
