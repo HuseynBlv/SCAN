@@ -2,3 +2,6 @@
 .env
 .env.*
 !.env.example
+
+# Neon CLI project/branch context is machine-local.
+.neon

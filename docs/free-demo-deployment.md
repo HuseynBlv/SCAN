@@ -2,8 +2,9 @@
 
 This is a small, occasional-use **technical demo**, not a production retailer deployment.
 The repository is configured for one Render Free web service and one Neon Free PostgreSQL
-project. You must create those resources in your own accounts; committing this configuration
-does not create a hosted app. No public Render URL has been verified yet.
+project. The Neon project and SCAN schema are verified; you must still create the Render
+service in your own account. Committing this configuration does not create a hosted app, and
+no public Render URL has been verified yet.
 
 ## How it works
 
@@ -30,28 +31,54 @@ Flyway creates the database schema on startup. Imported receipts, mappings, and 
 live in Neon and survive app restarts. Uploaded source files are not archived by SCAN: retain
 secure originals locally. Never rely on the container filesystem for durable data.
 
-## 1. Create a Neon Free database
+## 1. Use the configured Neon Free database
 
-1. Open [Neon](https://neon.com/) and create a **Free** project, such as `scan-demo`.
-2. Prefer AWS Frankfurt to be close to the Render service. Select PostgreSQL 17 if offered;
-   that is the version used by the container smoke test.
-3. In the connection dialog, select the database and owner role. Turn **connection pooling
-   off** for this initial deployment. SCAN uses the same connection for Flyway migrations
-   and application queries, with a maximum of three application connections.
-4. Keep the hostname, database name, role, and password private. Enter them directly into
-   Render in the next step; do not paste credentials into chat or a GitHub issue.
+The verified Neon resources are:
 
-Use this **JDBC** URL format, replacing only the hostname and database name:
+| Resource | Value |
+|---|---|
+| Organization | `SCAN` (`org-orange-lake-78991410`) |
+| Project | `SCAN` (`withered-darkness-12839995`) |
+| Region / PostgreSQL | AWS Frankfurt / PostgreSQL 18 |
+| Branch | `production` |
+| Application database | `scan` |
+| Application role | `scan_app` |
+
+The application role owns its database and can run Flyway without using the default
+`neondb_owner` role. Keep the role password private and enter it directly into Render in the
+next step; do not paste credentials into chat, GitHub, source files, or deployment logs.
+
+Before importing real or non-public data, reset the original `neondb_owner` password from
+Neon's **Connect** dialog. Its first connection string was shared outside a secret manager.
+The deployed application does not use that role, so this rotation does not change the Render
+variables below.
+
+Use this **direct JDBC** URL:
 
 ```text
-jdbc:postgresql://YOUR_DIRECT_NEON_HOST:5432/neondb?sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory
+jdbc:postgresql://ep-weathered-haze-b1xkw5un.c-5.eu-central-1.aws.neon.tech:5432/scan?sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory
 ```
 
-Do not include the username or password in the URL. Supply them as separate variables.
+Do not use the `-pooler` hostname for this initial deployment: SCAN's datasource also runs
+Flyway migrations. Do not include the username or password in the URL; supply them as separate
+variables. Retrieve the current private connection details from Neon when needed:
+
+```bash
+neon connection-string production \
+  --project-id withered-darkness-12839995 \
+  --role-name scan_app \
+  --database-name scan
+```
+
+Run that only in your private terminal. The command displays a credential, so never paste its
+output into chat. For local development, prefer `bash scripts/run-neon-api.sh`; it retrieves
+the same value in memory without displaying or storing the database password.
+
 `verify-full` checks the server certificate and hostname, using Java's default trusted CAs.
 Do not remove TLS verification to fix a connection error; check the hostname and certificate
 error first. See the [PostgreSQL JDBC SSL documentation](https://jdbc.postgresql.org/documentation/ssl/).
-The actual Neon TLS connection remains a hosted verification step.
+The JDBC path and all three Flyway migrations were verified on 2026-08-27. Render-to-Neon
+connectivity remains a hosted verification step.
 
 ## 2. Create the Render Free service
 
@@ -71,9 +98,9 @@ Render prompts for these three values:
 
 | Render environment variable | Value |
 |---|---|
-| `SCAN_DB_URL` | The JDBC URL from step 1 |
-| `SCAN_DB_USERNAME` | The actual Neon role name |
-| `SCAN_DB_PASSWORD` | That role's Neon password |
+| `SCAN_DB_URL` | The direct JDBC URL from step 1 |
+| `SCAN_DB_USERNAME` | `scan_app` |
+| `SCAN_DB_PASSWORD` | The private password for `scan_app` retrieved from Neon |
 
 The Blueprint generates separate random `SCAN_ADMIN_PASSWORD` and `SCAN_CCI_PASSWORD`
 values and sets `SPRING_PROFILES_ACTIVE=cloud`. Retrieve the generated passwords privately

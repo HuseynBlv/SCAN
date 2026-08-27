@@ -14,8 +14,9 @@ inventory system, or ERP.
 
 **Current stage:** a working local pilot prototype with CSV/XLSX ingestion, deterministic
 analytics, and an API-backed React dashboard. A reproducible Kaggle demo exercises the full
-pipeline. A single-container Render + Neon free-demo deployment is configured; hosted
-resource creation and verification are still required. Real-retailer validation remains next.
+pipeline. The Spring Boot application and Flyway migrations are verified against a Neon Free
+database; the single-container Render service is configured but not yet created. Real-retailer
+validation remains next.
 
 ## What SCAN helps answer
 
@@ -94,11 +95,39 @@ correct. Raw downloads and generated data are not committed to this repository.
 
 - Java 21 and Maven 3.6.3+; CI uses Java 21.
 - Node.js 24 and npm; CI uses Node.js 24.
-- A running PostgreSQL server, with a `scan` database and a login allowed to create its schema.
+- Either the configured Neon development workflow or a running local PostgreSQL server with
+  a `scan` database and a login allowed to create its schema.
 
 No AI API key, Supabase account, or camera is needed for the current dashboard.
 
-### 1. Start the API
+### 1. Start the API with Neon
+
+Authenticate the Neon CLI once, create a private local config, and start the API:
+
+```bash
+neon auth
+cp .env.example .env.neon
+# Edit .env.neon and replace both SCAN application password placeholders.
+bash scripts/run-neon-api.sh
+```
+
+The repository is linked to the `production` branch of Neon project
+`withered-darkness-12839995`. The launcher targets the app-owned `scan` database as role
+`scan_app`, retrieves its direct connection URI through the authenticated Neon CLI, converts
+it to a verified-TLS JDBC URL, and passes the database credential only to the Spring Boot
+process. It does not write the database password to disk. `.env.neon` and the machine-local
+`.neon` context are ignored by Git.
+
+Only `SCAN_ADMIN_PASSWORD` and `SCAN_CCI_PASSWORD` belong in `.env.neon`; they protect the
+pilot API and are unrelated to Neon account/database credentials. The root
+[`.env.example`](.env.example) documents the supported local overrides.
+
+The global Codex Neon MCP connection is project-scoped and read-only, and exposes only
+project/branch inspection, schema/query reading, observability, and documentation tools.
+Restart Codex after first-time setup so a new task can load those tools. Database changes
+continue to use the explicit CLI/application workflow.
+
+### Local PostgreSQL alternative
 
 From the repository root, in the backend terminal:
 
@@ -113,8 +142,8 @@ mvn spring-boot:run
 ```
 
 Use your own passwords and keep them out of Git. Environment variables apply to the terminal
-where they are set. Flyway creates the schema and seeds the `DEMO` and `KAGGLE` profiles;
-it does **not** automatically import transaction files.
+where they are set. With either database path, Flyway creates the schema and seeds the `DEMO`
+and `KAGGLE` profiles; it does **not** automatically import transaction files.
 
 See the [backend guide](scan-api/README.md) for database setup and API examples.
 
@@ -194,11 +223,12 @@ The optional 10,000-basket tests require locally generated files; they are not p
 ## Deployment status
 
 The [free-demo deployment guide](docs/free-demo-deployment.md) sets up **one Render Free
-service for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile
-packages the existing dashboard into the Java application. One HTTPS origin serves the page
-and `/api`, so no cross-origin configuration is needed. `render.yaml` explicitly selects the
-free instance and manual deployment. Resource/account creation and hosted verification are
-still pending; this repository does not yet record a verified Render URL.
+service for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The Neon project,
+app-owned database/role, verified JDBC connection, and Flyway schema are complete. The root
+Dockerfile packages the existing dashboard into the Java application. One HTTPS origin serves
+the page and `/api`, so no cross-origin configuration is needed. `render.yaml` explicitly
+selects the free instance and manual deployment. Render resource creation and public hosted
+verification are still pending; this repository does not yet record a verified Render URL.
 
 Free services can sleep, start slowly, or stop at quota limits. This is an occasional technical
 demo, not a production availability commitment. The guide covers account setup, runtime
@@ -213,6 +243,10 @@ Never put passwords in `VITE_*` variables: those values are embedded in the brow
 The GitHub repository has an existing Vercel integration, so merging into its production
 branch can update the public frontend. Verify backend routing before presenting that URL
 as a working analytics demo.
+
+Before putting real or non-public data in Neon, reset the default `neondb_owner` password in
+the Neon Console because its original connection string was shared outside a secret manager.
+SCAN does not use that role, so rotating it will not affect the `scan_app` connection.
 
 ## Troubleshooting
 
