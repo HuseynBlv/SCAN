@@ -23,6 +23,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -101,7 +102,9 @@ class KagglePreparedDatasetSmokeTest {
             "KAGGLE_2019",
             file(transactions)
         );
+        long analyticsStartedAt = System.nanoTime();
         var overview = analyticsService.overview("KAGGLE", true);
+        Duration analyticsDuration = Duration.ofNanos(System.nanoTime() - analyticsStartedAt);
 
         assertThat(catalogResult.rows()).isEqualTo(13_913);
         assertThat(importResult.status()).isEqualTo(ImportJob.Status.COMPLETED);
@@ -115,6 +118,7 @@ class KagglePreparedDatasetSmokeTest {
         assertThat(overview.topCompanionProducts()).isNotEmpty();
         assertThat(overview.topCompanionCategories()).isNotEmpty();
         assertThat(overview.stores()).hasSize(21);
+        assertThat(analyticsDuration).isLessThan(Duration.ofSeconds(5));
     }
 
     private MockMultipartFile file(Path path) throws IOException {

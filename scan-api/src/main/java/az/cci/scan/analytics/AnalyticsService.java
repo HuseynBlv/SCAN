@@ -1,10 +1,6 @@
 package az.cci.scan.analytics;
 
-import az.cci.scan.domain.CanonicalProduct;
-import az.cci.scan.domain.Receipt;
 import az.cci.scan.domain.Retailer;
-import az.cci.scan.domain.TransactionLine;
-import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -26,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static az.cci.scan.analytics.AnalyticsQueryRepository.AnalyticsLineRow;
 import static az.cci.scan.analytics.AnalyticsDtos.CategoryMetric;
 import static az.cci.scan.analytics.AnalyticsDtos.CciSkuMetric;
 import static az.cci.scan.analytics.AnalyticsDtos.CompanionMetric;
@@ -37,16 +34,16 @@ import static az.cci.scan.analytics.AnalyticsDtos.StoreMetric;
 public class AnalyticsService {
 
     private final RetailerRepository retailerRepository;
-    private final ReceiptRepository receiptRepository;
+    private final AnalyticsQueryRepository analyticsQueryRepository;
     private final InsightRules insightRules;
 
     public AnalyticsService(
         RetailerRepository retailerRepository,
-        ReceiptRepository receiptRepository,
+        AnalyticsQueryRepository analyticsQueryRepository,
         InsightRules insightRules
     ) {
         this.retailerRepository = retailerRepository;
-        this.receiptRepository = receiptRepository;
+        this.analyticsQueryRepository = analyticsQueryRepository;
         this.insightRules = insightRules;
     }
 
@@ -58,23 +55,29 @@ public class AnalyticsService {
             throw new AccessDeniedException("Retailer has not enabled CCI aggregate sharing");
         }
 
-        List<Receipt> receipts = receiptRepository
-            .findDistinctByRetailerOrderByTransactionTimestampAsc(retailer);
-        OverviewResponse response = calculate(retailer, receipts);
+        List<AnalyticsLineRow> rows = analyticsQueryRepository.findByRetailerId(retailer.getId());
+        OverviewResponse response = calculate(retailer, rows);
         return response.withInsights(insightRules.generate(response));
     }
 
-    private OverviewResponse calculate(Retailer retailer, List<Receipt> receipts) {
-        long totalBaskets = receipts.size();
-        long totalLines = receipts.stream().mapToLong(receipt -> receipt.getLines().size()).sum();
-        long mappedLines = receipts.stream()
-            .flatMap(receipt -> receipt.getLines().stream())
-            .filter(line -> line.getRetailerProduct().isResolved())
+    private OverviewResponse calculate(Retailer retailer, List<AnalyticsLineRow> rows) {
+        Map<UUID, BasketAccumulator> basketsById = new LinkedHashMap<>();
+        rows.forEach(row -> basketsById
+            .computeIfAbsent(row.receiptId(), ignored -> new BasketAccumulator(row))
+            .add(row));
+        List<BasketAccumulator> baskets = new ArrayList<>(basketsById.values());
+
+        long totalBaskets = baskets.size();
+        long totalLines = rows.stream().filter(row -> row.lineId() != null).count();
+        long mappedLines = rows.stream()
+            .filter(row -> row.lineId() != null && row.canonicalProductId() != null)
             .count();
-        List<Receipt> cciReceipts = receipts.stream().filter(this::containsCci).toList();
-        long cciBaskets = cciReceipts.size();
-        Set<String> currencies = receipts.stream()
-            .map(Receipt::getCurrency)
+        List<BasketAccumulator> cciBasketsList = baskets.stream()
+            .filter(BasketAccumulator::containsCci)
+            .toList();
+        long cciBaskets = cciBasketsList.size();
+        Set<String> currencies = baskets.stream()
+            .map(BasketAccumulator::currency)
             .collect(java.util.stream.Collectors.toSet());
         if (currencies.size() > 1) {
             throw new AnalyticsDataException(
@@ -82,27 +85,15 @@ public class AnalyticsService {
                     + currencies.stream().sorted().collect(java.util.stream.Collectors.joining(", "))
             );
         }
-        BigDecimal totalValue = receipts.stream()
-            .map(Receipt::getBasketValue)
+        BigDecimal totalValue = baskets.stream()
+            .map(BasketAccumulator::basketValue)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Long> companionCounts = new HashMap<>();
         Map<String, Long> categoryCounts = new HashMap<>();
-        for (Receipt receipt : cciReceipts) {
-            Set<String> productsInBasket = new HashSet<>();
-            Set<String> categoriesInBasket = new HashSet<>();
-            for (TransactionLine line : receipt.getLines()) {
-                CanonicalProduct product = line.getRetailerProduct().getCanonicalProduct();
-                if (product == null || product.isCci()) {
-                    continue;
-                }
-                productsInBasket.add(product.getNormalizedName());
-                if (product.getCategory() != null && !product.getCategory().isBlank()) {
-                    categoriesInBasket.add(product.getCategory());
-                }
-            }
-            productsInBasket.forEach(product -> companionCounts.merge(product, 1L, Long::sum));
-            categoriesInBasket.forEach(category -> categoryCounts.merge(category, 1L, Long::sum));
+        for (BasketAccumulator basket : cciBasketsList) {
+            basket.companionProducts().forEach(product -> companionCounts.merge(product, 1L, Long::sum));
+            basket.companionCategories().forEach(category -> categoryCounts.merge(category, 1L, Long::sum));
         }
 
         List<CompanionMetric> companions = companionCounts.entrySet().stream()
@@ -125,11 +116,11 @@ public class AnalyticsService {
             .toList();
 
         ZoneId zoneId = ZoneId.of(retailer.getZoneId());
-        List<SegmentMetric> dayparts = segmentMetrics(receipts, receipt -> daypart(
-            receipt.getTransactionTimestamp().atZone(zoneId)
+        List<SegmentMetric> dayparts = segmentMetrics(baskets, basket -> daypart(
+            basket.transactionTimestamp().atZone(zoneId)
         ));
-        List<SegmentMetric> weekdayWeekend = segmentMetrics(receipts, receipt -> {
-            DayOfWeek day = receipt.getTransactionTimestamp().atZone(zoneId).getDayOfWeek();
+        List<SegmentMetric> weekdayWeekend = segmentMetrics(baskets, basket -> {
+            DayOfWeek day = basket.transactionTimestamp().atZone(zoneId).getDayOfWeek();
             return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY
                 ? "WEEKEND"
                 : "WEEKDAY";
@@ -147,36 +138,25 @@ public class AnalyticsService {
             percentage(mappedLines, totalLines),
             companions,
             categories,
-            cciSkuMetrics(receipts),
+            cciSkuMetrics(rows),
             dayparts,
             weekdayWeekend,
-            storeMetrics(receipts),
+            storeMetrics(baskets),
             List.of()
         );
         return response;
     }
 
-    private boolean containsCci(Receipt receipt) {
-        return receipt.getLines().stream().anyMatch(line -> {
-            CanonicalProduct product = line.getRetailerProduct().getCanonicalProduct();
-            return product != null && product.isCci();
-        });
-    }
-
-    private List<CciSkuMetric> cciSkuMetrics(List<Receipt> receipts) {
+    private List<CciSkuMetric> cciSkuMetrics(List<AnalyticsLineRow> rows) {
         Map<UUID, SkuAccumulator> metrics = new HashMap<>();
-        for (Receipt receipt : receipts) {
-            for (TransactionLine line : receipt.getLines()) {
-                CanonicalProduct product = line.getRetailerProduct().getCanonicalProduct();
-                if (product == null || !product.isCci()) {
-                    continue;
-                }
-                metrics.computeIfAbsent(
-                    product.getId(),
-                    ignored -> new SkuAccumulator(product.getNormalizedName())
-                )
-                    .add(receipt.getId(), line.getQuantity(), line.getLineTotal());
+        for (AnalyticsLineRow row : rows) {
+            if (row.lineId() == null || row.canonicalProductId() == null || !row.cci()) {
+                continue;
             }
+            metrics.computeIfAbsent(
+                row.canonicalProductId(),
+                ignored -> new SkuAccumulator(row.normalizedName())
+            ).add(row.receiptId(), row.quantity(), row.lineTotal());
         }
         return metrics.entrySet().stream()
             .map(entry -> new CciSkuMetric(
@@ -191,39 +171,39 @@ public class AnalyticsService {
             .toList();
     }
 
-    private List<StoreMetric> storeMetrics(List<Receipt> receipts) {
-        Map<String, List<Receipt>> byStore = new LinkedHashMap<>();
-        receipts.forEach(receipt -> byStore
-            .computeIfAbsent(receipt.getStore().getExternalStoreId(), ignored -> new ArrayList<>())
-            .add(receipt));
+    private List<StoreMetric> storeMetrics(List<BasketAccumulator> baskets) {
+        Map<String, List<BasketAccumulator>> byStore = new LinkedHashMap<>();
+        baskets.forEach(basket -> byStore
+            .computeIfAbsent(basket.storeId(), ignored -> new ArrayList<>())
+            .add(basket));
         return byStore.entrySet().stream().map(entry -> {
-            List<Receipt> storeReceipts = entry.getValue();
-            long cci = storeReceipts.stream().filter(this::containsCci).count();
-            BigDecimal value = storeReceipts.stream()
-                .map(Receipt::getBasketValue)
+            List<BasketAccumulator> storeBaskets = entry.getValue();
+            long cci = storeBaskets.stream().filter(BasketAccumulator::containsCci).count();
+            BigDecimal value = storeBaskets.stream()
+                .map(BasketAccumulator::basketValue)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             return new StoreMetric(
                 entry.getKey(),
-                storeReceipts.size(),
+                storeBaskets.size(),
                 cci,
-                percentage(cci, storeReceipts.size()),
-                average(value, storeReceipts.size())
+                percentage(cci, storeBaskets.size()),
+                average(value, storeBaskets.size())
             );
         }).sorted(Comparator.comparing(StoreMetric::basketCount).reversed()
             .thenComparing(StoreMetric::storeId)).toList();
     }
 
     private List<SegmentMetric> segmentMetrics(
-        List<Receipt> receipts,
-        java.util.function.Function<Receipt, String> classifier
+        List<BasketAccumulator> baskets,
+        java.util.function.Function<BasketAccumulator, String> classifier
     ) {
         Map<String, Long> counts = new LinkedHashMap<>();
-        receipts.forEach(receipt -> counts.merge(classifier.apply(receipt), 1L, Long::sum));
+        baskets.forEach(basket -> counts.merge(classifier.apply(basket), 1L, Long::sum));
         return counts.entrySet().stream()
             .map(entry -> new SegmentMetric(
                 entry.getKey(),
                 entry.getValue(),
-                percentage(entry.getValue(), receipts.size())
+                percentage(entry.getValue(), baskets.size())
             ))
             .sorted(Comparator.comparing(SegmentMetric::basketCount).reversed()
                 .thenComparing(SegmentMetric::segment))
@@ -268,6 +248,65 @@ public class AnalyticsService {
             return BigDecimal.ZERO.setScale(2);
         }
         return total.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP);
+    }
+
+    private static final class BasketAccumulator {
+        private final Instant transactionTimestamp;
+        private final String currency;
+        private final BigDecimal basketValue;
+        private final String storeId;
+        private final Set<String> companionProducts = new HashSet<>();
+        private final Set<String> companionCategories = new HashSet<>();
+        private boolean containsCci;
+
+        private BasketAccumulator(AnalyticsLineRow firstRow) {
+            this.transactionTimestamp = firstRow.transactionTimestamp();
+            this.currency = firstRow.currency();
+            this.basketValue = firstRow.basketValue();
+            this.storeId = firstRow.storeId();
+        }
+
+        private void add(AnalyticsLineRow row) {
+            if (row.lineId() == null || row.canonicalProductId() == null) {
+                return;
+            }
+            if (row.cci()) {
+                containsCci = true;
+                return;
+            }
+            companionProducts.add(row.normalizedName());
+            if (row.category() != null && !row.category().isBlank()) {
+                companionCategories.add(row.category());
+            }
+        }
+
+        private Instant transactionTimestamp() {
+            return transactionTimestamp;
+        }
+
+        private String currency() {
+            return currency;
+        }
+
+        private BigDecimal basketValue() {
+            return basketValue;
+        }
+
+        private String storeId() {
+            return storeId;
+        }
+
+        private boolean containsCci() {
+            return containsCci;
+        }
+
+        private Set<String> companionProducts() {
+            return companionProducts;
+        }
+
+        private Set<String> companionCategories() {
+            return companionCategories;
+        }
     }
 
     private static final class SkuAccumulator {
