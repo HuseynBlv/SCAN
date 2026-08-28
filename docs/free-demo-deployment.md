@@ -2,9 +2,10 @@
 
 This is a small, occasional-use **technical demo**, not a production retailer deployment.
 The repository uses one Render Free web service and one Neon Free PostgreSQL project. The
-service is live at [https://scan-demo.onrender.com](https://scan-demo.onrender.com). Initial
-public health, frontend delivery, authentication-boundary, and Render-to-Neon startup checks
-passed on 2026-08-28; authenticated analytics and hosted demo-data import remain pending.
+service is live at [https://scan-demo.onrender.com](https://scan-demo.onrender.com). Public
+health, frontend delivery, authentication boundaries, Render-to-Neon startup, authenticated
+analytics, idempotent hosted import, and all five dashboard sections were verified on
+2026-08-28.
 
 ## How it works
 
@@ -180,6 +181,15 @@ Check all five dashboard tabs. Repeat the transaction upload: `duplicateFile` sh
 `/api/v1/product-mappings/catalog`. Restart the app from Render and verify the same totals.
 Only then share the demo link and CCI credentials privately. Do not share admin credentials.
 
+The hosted verification on 2026-08-28 completed those checks with these results:
+
+- Catalog: 13,913 existing canonical products and 13,913 existing mappings after the repeat.
+- Transactions: 10,000 receipts and 54,848 lines; zero unresolved products.
+- Repeat transaction upload: `duplicateFile: true`; totals remained unchanged.
+- Analytics: 209 CCI baskets, 2.1% penetration, 100% mapped lines, and 21 stores.
+- Browser QA: Overview, Basket Analysis, Product Performance, Time & Store, and
+  Recommendations passed on desktop and at a 375 px mobile viewport with a clean console.
+
 ## Free-plan expectations and safeguards
 
 Limits checked against provider documentation on **2026-08-26**; review them again at signup.
@@ -198,8 +208,9 @@ Limits checked against provider documentation on **2026-08-26**; review them aga
   restore window is limited. [Neon pricing](https://neon.com/pricing).
 - Use only the prepared, de-identified demo data. Real retailer hosting requires explicit
   data-sharing approval, retention/backup decisions, appropriate accounts, and security review.
-- Imports are synchronous and analytics load receipts into memory. Do not import the full
-  Kaggle source or assume concurrent retailer-scale traffic fits this free service.
+- Imports are synchronous. Analytics calculate product/category/SKU aggregates in PostgreSQL
+  and retain compact receipt summaries for time/store metrics. Do not import the full Kaggle
+  source or assume concurrent retailer-scale traffic fits this free service.
 
 ## Local container verification
 
@@ -243,10 +254,10 @@ selected commit. Blueprint configuration changes may also trigger deployment whe
 review the proposed changes and disable automatic Blueprint sync if you require every
 configuration update to be manual. See [Render's Blueprint reference](https://render.com/docs/blueprint-spec).
 
-PR #2 stays open until authenticated hosted analytics, the demo-data import, and the existing
-Vercel production impact are resolved. The initial public Render deployment and Neon startup
-are verified. This work does not change Vercel routing or deploy Spring Boot there. Merging the
-branch can still update that existing frontend, which currently has no hosted API route.
+PR #2 has completed authenticated hosted analytics, demo-data import, restart persistence,
+responsive browser QA, and CI verification. It remains open for final review because this work
+does not change Vercel routing or deploy Spring Boot there. Merging the branch can still update
+that existing frontend, which currently has no hosted API route.
 
 After an approved merge, change the service branch in `render.yaml` and Render to `main`,
 then manually deploy and recheck it. Do not delete the feature branch while Render still

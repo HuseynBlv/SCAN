@@ -7,9 +7,10 @@ remain deterministic. Do not commit credentials, raw exports, or generated datas
 ## Deploy Configuration (configured by /setup-deploy)
 
 - **Platform:** one Render Free Docker web service, with external Neon Free PostgreSQL.
-- **Production URL:** `https://scan-demo.onrender.com`. Render reported commit `eaf1f30` live
-  on 2026-08-28; public health, frontend delivery, unauthenticated 401, and Neon startup were
-  verified. Authenticated analytics and hosted demo-data import remain pending.
+- **Production URL:** `https://scan-demo.onrender.com`. Render reported application commit
+  `efdcad8` live on 2026-08-28. Public health, frontend delivery, authentication boundaries,
+  Neon startup, the 10,000-basket hosted import, duplicate-file behavior, authenticated
+  analytics, and responsive dashboard QA are verified.
 - **Project type:** React web app and Spring Boot API served from one HTTPS origin.
 - **Configuration:** root `Dockerfile`, `render.yaml`, and the Spring `cloud` profile.
 - **Deploy trigger:** manual from Render after GitHub CI passes; service auto-deploy is off.
@@ -23,8 +24,8 @@ remain deterministic. Do not commit credentials, raw exports, or generated datas
 - **Budget:** $0. No paid services, disks, upgrades, payment methods, or paid overages.
 - **Secrets:** runtime Render environment only; separate hosted admin/CCI passwords. Never
   put secrets in `VITE_*`, Docker build arguments, logs, PR descriptions, or chat.
-- **Runbook:** `docs/free-demo-deployment.md` (initial deployment complete; authenticated
-  analytics, demo import, and post-import checks pending).
+- **Runbook:** `docs/free-demo-deployment.md` (deployment, hosted import, and post-import
+  checks complete for the bounded technical demo).
 
 Before handing off a deployment change, run:
 

@@ -198,6 +198,8 @@ From the repository root:
 Backend tests use an isolated H2 database; they do not need or modify local PostgreSQL.
 `mvn verify` produces `scan-api/target/site/jacoco/index.html` and enforces at least 80% line
 and 55% branch coverage. Coverage is a regression guard, not proof of business correctness.
+An opt-in full-sample smoke test also checks the verified 10,000-basket result and enforces a
+five-second local analytics budget after import.
 
 GitHub Actions runs backend verification and frontend tests, lint, and build on pull requests
 and pushes to `main`, then builds the deployable Docker image and smoke-tests it against
@@ -220,7 +222,8 @@ The optional 10,000-basket tests require locally generated files; they are not p
 - Monetary analytics refuse to combine receipts from multiple currencies. A retailer export
   must use one confirmed currency per analytical dataset until explicit conversion is designed.
 - Imports are synchronous, limited to 25 MB, and spreadsheet parsing uses the first worksheet.
-  Analytics load the selected retailer's receipts into memory. Larger workloads are not validated.
+  Analytics use database aggregates plus compact receipt summaries for time/store metrics; larger
+  workloads and concurrent analytical traffic are not validated.
 - Receipt identity currently includes retailer, store, receipt ID, and timestamp. Verify this
   against the retailer's actual receipt-number reuse rules.
 - No live POS connector, scheduled synchronization, promotion-effectiveness calculation,
@@ -232,11 +235,13 @@ The [free-demo deployment guide](docs/free-demo-deployment.md) uses **one Render
 for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile packages
 the dashboard into the Java application. One HTTPS origin serves the page and `/api`, so no
 cross-origin configuration is needed. `render.yaml` explicitly selects the free instance and
-manual deployment. On 2026-08-28, Render deployed commit `eaf1f30` successfully at
+manual deployment. On 2026-08-28, Render deployed application commit `efdcad8` successfully at
 [https://scan-demo.onrender.com](https://scan-demo.onrender.com): the React root returned 200,
 `GET /health` returned `{"status":"UP"}`, the unauthenticated analytics route returned 401,
-and startup logs confirmed Flyway schema version 4 on Neon PostgreSQL 18.6. Authenticated
-analytics and hosted demo-data import still require the privately generated Render passwords.
+and startup logs confirmed Flyway schema version 4 on Neon PostgreSQL 18.6. The hosted import
+was then verified at 10,000 baskets and 54,848 lines with 100% mapping; a repeat upload returned
+`duplicateFile: true` without changing totals. Authenticated analytics returned the expected
+209 CCI baskets and 2.1% penetration across all five dashboard sections.
 
 Free services can sleep, start slowly, or stop at quota limits. This is an occasional technical
 demo, not a production availability commitment. The guide covers account setup, runtime
