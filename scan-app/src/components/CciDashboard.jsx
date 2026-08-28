@@ -13,6 +13,7 @@ import {
   configuredRetailerCode,
   fetchOverview,
 } from "../services/scanApi";
+import { compactChartLabel } from "./chartLabels";
 import "./CciDashboard.css";
 
 const NAV_ITEMS = [
@@ -327,9 +328,10 @@ function CompanionChart({ data, dataKey, nameKey, chartLabel, emptyTitle }) {
             axisLine={false}
             dataKey={nameKey}
             tick={{ fill: "#545861", fontSize: 12 }}
+            tickFormatter={compactChartLabel}
             tickLine={false}
             type="category"
-            width={150}
+            width={138}
           />
           <Tooltip formatter={(value) => [formatPercent(value), "Attachment rate"]} />
           <Bar dataKey={dataKey} fill="#e61c24" radius={[0, 8, 8, 0]} />

@@ -38,7 +38,7 @@ const overview = {
 const overviewWithCompanions = {
   ...overview,
   topCompanionProducts: [{
-    name: 'Chips 45g',
+    name: 'SWEET HOME FALQA ALUMIN 10M',
     basketCount: 80,
     attachmentRatePercentage: 38.3,
   }],
@@ -166,6 +166,8 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('img', { name: 'Companion product attachment rates' }))
       .toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Companion category attachment rates' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'SWEET HOME FALQA ALUMIN 10M' }))
       .toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Companion category detail' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Snacks' })).toBeInTheDocument()
