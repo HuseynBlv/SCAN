@@ -35,6 +35,20 @@ const overview = {
   }],
 }
 
+const overviewWithCompanions = {
+  ...overview,
+  topCompanionProducts: [{
+    name: 'Chips 45g',
+    basketCount: 80,
+    attachmentRatePercentage: 38.3,
+  }],
+  topCompanionCategories: [{
+    category: 'Snacks',
+    basketCount: 90,
+    attachmentRatePercentage: 43.1,
+  }],
+}
+
 describe('CciDashboard', () => {
   beforeEach(() => {
     fetchOverview.mockReset()
@@ -137,5 +151,47 @@ describe('CciDashboard', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Retailer access denied.')
     expect(screen.queryByRole('heading', { name: 'Kaggle Demo Retailer' })).not.toBeInTheDocument()
+  })
+
+  it('provides accessible chart labels and equivalent category table data', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overviewWithCompanions)
+    render(<CciDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open analytics' }))
+    await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })
+    await user.click(screen.getAllByRole('button', { name: 'Basket Analysis' })[0])
+
+    expect(screen.getByRole('img', { name: 'Companion product attachment rates' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Companion category attachment rates' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Companion category detail' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Snacks' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: '43.1%' })).toBeInTheDocument()
+  })
+
+  it('shows onboarding instead of derived KPIs when no baskets exist', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue({
+      ...overview,
+      totalBaskets: 0,
+      cciBaskets: 0,
+      cciPenetrationPercentage: 0,
+      averageBasketValue: 0,
+      mappedLinePercentage: 0,
+      insights: [],
+    })
+    render(<CciDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open analytics' }))
+
+    expect(await screen.findByRole('heading', { name: 'No transaction data imported yet' }))
+      .toBeInTheDocument()
+    expect(screen.queryByLabelText('Retailer KPIs')).not.toBeInTheDocument()
+    screen.getAllByRole('button', { name: 'Basket Analysis' })
+      .forEach((button) => expect(button).toBeDisabled())
   })
 })

@@ -188,6 +188,19 @@ function InsightCard({ insight, index, actionOnly = false }) {
 function Overview({ data, onNavigate }) {
   const mappingHealthy = data.mappedLinePercentage >= 90;
 
+  if (data.totalBaskets === 0) {
+    return (
+      <div className="cci-page-stack">
+        <section className="cci-panel">
+          <EmptyState title="No transaction data imported yet">
+            Ask the SCAN administrator to import a validated retailer export for {data.retailerCode}.
+            Derived KPIs will appear only after at least one complete receipt is available.
+          </EmptyState>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="cci-page-stack">
       <section className="cci-kpi-grid" aria-label="Retailer KPIs">
@@ -284,7 +297,7 @@ function Overview({ data, onNavigate }) {
   );
 }
 
-function CompanionChart({ data, dataKey, nameKey, emptyTitle }) {
+function CompanionChart({ data, dataKey, nameKey, chartLabel, emptyTitle }) {
   if (!data.length) {
     return (
       <EmptyState title={emptyTitle}>
@@ -294,7 +307,7 @@ function CompanionChart({ data, dataKey, nameKey, emptyTitle }) {
   }
 
   return (
-    <div className="cci-chart" aria-label={emptyTitle}>
+    <div className="cci-chart" aria-label={chartLabel} role="img">
       <ResponsiveContainer
         width="100%"
         height="100%"
@@ -341,6 +354,7 @@ function BasketAnalysis({ data }) {
             data={data.topCompanionProducts}
             dataKey="attachmentRatePercentage"
             nameKey="name"
+            chartLabel="Companion product attachment rates"
             emptyTitle="No companion products"
           />
         </div>
@@ -350,6 +364,7 @@ function BasketAnalysis({ data }) {
             data={data.topCompanionCategories}
             dataKey="attachmentRatePercentage"
             nameKey="category"
+            chartLabel="Companion category attachment rates"
             emptyTitle="No companion categories"
           />
         </div>
@@ -361,6 +376,18 @@ function BasketAnalysis({ data }) {
           empty="No companion products are available."
           rows={data.topCompanionProducts.map((item) => [
             item.name,
+            formatInteger(item.basketCount),
+            formatPercent(item.attachmentRatePercentage),
+          ])}
+        />
+      </section>
+      <section className="cci-panel">
+        <div className="cci-section-heading compact"><h2>Companion category detail</h2></div>
+        <MetricTable
+          columns={["Category", "CCI baskets", "Attachment rate"]}
+          empty="No companion categories are available."
+          rows={data.topCompanionCategories.map((item) => [
+            item.category,
             formatInteger(item.basketCount),
             formatPercent(item.attachmentRatePercentage),
           ])}
@@ -536,6 +563,7 @@ function Recommendations({ data }) {
 }
 
 function DashboardPage({ activePage, data, onNavigate }) {
+  if (data.totalBaskets === 0) return <Overview data={data} onNavigate={onNavigate} />;
   if (activePage === "basket") return <BasketAnalysis data={data} />;
   if (activePage === "products") return <ProductPerformance data={data} />;
   if (activePage === "time-store") return <TimeAndStore data={data} />;
@@ -629,6 +657,7 @@ export default function CciDashboard() {
             <button
               aria-current={activePage === item.id ? "page" : undefined}
               className={activePage === item.id ? "active" : ""}
+              disabled={data.totalBaskets === 0 && item.id !== "overview"}
               key={item.id}
               onClick={() => setActivePage(item.id)}
               type="button"
@@ -681,6 +710,7 @@ export default function CciDashboard() {
             <button
               aria-current={activePage === item.id ? "page" : undefined}
               className={activePage === item.id ? "active" : ""}
+              disabled={data.totalBaskets === 0 && item.id !== "overview"}
               key={item.id}
               onClick={() => setActivePage(item.id)}
               type="button"

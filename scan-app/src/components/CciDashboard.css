@@ -75,7 +75,7 @@ button:disabled {
 
 .cci-brand-subtitle {
   margin-top: 2px;
-  color: #777b84;
+  color: #5f636c;
   font-size: 0.72rem;
   font-weight: 650;
 }
@@ -232,10 +232,16 @@ button:disabled {
   transition: color 150ms ease, background 150ms ease;
 }
 
-.cci-nav button:hover,
+.cci-nav button:hover:not(:disabled),
 .cci-nav button.active {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.cci-nav button:disabled,
+.cci-mobile-nav button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .cci-nav button.active {
@@ -417,7 +423,7 @@ button:disabled {
 
 .cci-kpi-label,
 .cci-insight-label {
-  color: #7b7f88;
+  color: #5f636c;
   font-size: 0.68rem;
   font-weight: 850;
   letter-spacing: 0.09em;
@@ -433,7 +439,7 @@ button:disabled {
 
 .cci-kpi-note {
   margin-top: 7px;
-  color: #777b83;
+  color: #5f636c;
   font-size: 0.72rem;
   line-height: 1.35;
 }
@@ -547,7 +553,7 @@ button:disabled {
 }
 
 .cci-highlight-metric span {
-  color: #737780;
+  color: #5f636c;
   font-size: 0.78rem;
 }
 
@@ -578,7 +584,7 @@ button:disabled {
 .cci-empty-state p {
   max-width: 460px;
   margin: 0;
-  color: #777b84;
+  color: #5f636c;
   font-size: 0.8rem;
   line-height: 1.55;
 }
@@ -603,7 +609,7 @@ button:disabled {
 
 .cci-table th {
   background: #f7f8f9;
-  color: #737780;
+  color: #5f636c;
   font-size: 0.68rem;
   font-weight: 850;
   letter-spacing: 0.07em;
@@ -662,7 +668,7 @@ button:disabled {
 }
 
 .cci-segment-row small {
-  color: #888c94;
+  color: #5f636c;
 }
 
 .cci-recommendation-list {

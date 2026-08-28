@@ -9,20 +9,38 @@ function response({ ok, status, body }) {
   }
 }
 
+function validOverview(overrides = {}) {
+  return {
+    generatedAt: '2026-08-25T10:00:00Z',
+    retailerCode: 'DEMO',
+    retailerName: 'Demo Retailer',
+    totalBaskets: 2,
+    cciBaskets: 1,
+    cciPenetrationPercentage: 50,
+    averageBasketValue: 4.25,
+    currency: 'AZN',
+    mappedLinePercentage: 100,
+    topCompanionProducts: [],
+    topCompanionCategories: [],
+    cciSkuPerformance: [],
+    dayparts: [],
+    weekdayWeekend: [],
+    stores: [],
+    insights: [],
+    ...overrides,
+  }
+}
+
 describe('fetchOverview', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('sends Basic Auth and normalizes aggregate arrays', async () => {
+  it('sends Basic Auth and normalizes a complete analytics response', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({
       ok: true,
       status: 200,
-      body: {
-        retailerCode: 'DEMO',
-        totalBaskets: 2,
-        topCompanionProducts: null,
-      },
+      body: validOverview(),
     }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -42,9 +60,36 @@ describe('fetchOverview', () => {
       }),
     )
     expect(result.totalBaskets).toBe(2)
-    expect(result.cciBaskets).toBe(0)
+    expect(result.cciBaskets).toBe(1)
     expect(result.topCompanionProducts).toEqual([])
     expect(result.insights).toEqual([])
+  })
+
+  it.each([
+    ['missing arrays', validOverview({ stores: undefined }), 'stores'],
+    ['malformed numbers', validOverview({ totalBaskets: '2' }), 'totalBaskets'],
+    ['invalid timestamps', validOverview({ generatedAt: 'not-a-timestamp' }), 'generatedAt'],
+    ['negative metrics', validOverview({ averageBasketValue: -1 }), 'averageBasketValue'],
+    ['out-of-range percentages', validOverview({ mappedLinePercentage: 101 }), 'mappedLinePercentage'],
+    ['inconsistent basket counts', validOverview({ cciBaskets: 3 }), 'cciBaskets'],
+    ['incomplete SKU metrics', validOverview({
+      cciSkuPerformance: [{ product: 'Coke', basketCount: 1, quantity: 1, revenue: 1.5 }],
+    }), 'productId'],
+  ])('fails closed for %s', async (_description, body, invalidField) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      ok: true,
+      status: 200,
+      body,
+    })))
+
+    await expect(fetchOverview({
+      retailerCode: 'DEMO',
+      username: 'scan-cci',
+      password: 'secret',
+    })).rejects.toEqual(expect.objectContaining({
+      name: 'ScanApiError',
+      message: expect.stringContaining(invalidField),
+    }))
   })
 
   it('turns 401 responses into a useful typed error', async () => {

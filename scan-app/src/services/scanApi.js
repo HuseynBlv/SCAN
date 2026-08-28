@@ -40,30 +40,162 @@ async function errorMessage(response) {
   }
 }
 
-function normalizedArray(value) {
-  return Array.isArray(value) ? value : [];
+function contractError(field) {
+  throw new ScanApiError(`SCAN API returned an invalid analytics field: ${field}.`);
+}
+
+function requiredString(value, field) {
+  if (typeof value !== "string" || !value.trim()) {
+    contractError(field);
+  }
+  return value;
+}
+
+function requiredTimestamp(value, field) {
+  const timestamp = requiredString(value, field);
+  if (Number.isNaN(Date.parse(timestamp))) {
+    contractError(field);
+  }
+  return timestamp;
+}
+
+function requiredNumber(value, field) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    contractError(field);
+  }
+  return value;
+}
+
+function requiredNonNegativeNumber(value, field) {
+  const number = requiredNumber(value, field);
+  if (number < 0) {
+    contractError(field);
+  }
+  return number;
+}
+
+function requiredCount(value, field) {
+  const number = requiredNonNegativeNumber(value, field);
+  if (!Number.isSafeInteger(number)) {
+    contractError(field);
+  }
+  return number;
+}
+
+function requiredPercentage(value, field) {
+  const number = requiredNonNegativeNumber(value, field);
+  if (number > 100) {
+    contractError(field);
+  }
+  return number;
+}
+
+function requiredArray(value, field, normalizeItem) {
+  if (!Array.isArray(value)) {
+    contractError(field);
+  }
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      contractError(`${field}[${index}]`);
+    }
+    return normalizeItem(item, `${field}[${index}]`);
+  });
+}
+
+function metric(item, field, labelField) {
+  return {
+    ...item,
+    [labelField]: requiredString(item[labelField], `${field}.${labelField}`),
+    basketCount: requiredCount(item.basketCount, `${field}.basketCount`),
+  };
 }
 
 function normalizeOverview(data) {
-  if (!data || typeof data !== "object" || typeof data.retailerCode !== "string") {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new ScanApiError("SCAN API returned an unexpected analytics response.");
   }
 
-  return {
+  const normalized = {
     ...data,
-    totalBaskets: Number(data.totalBaskets || 0),
-    cciBaskets: Number(data.cciBaskets || 0),
-    cciPenetrationPercentage: Number(data.cciPenetrationPercentage || 0),
-    averageBasketValue: Number(data.averageBasketValue || 0),
-    mappedLinePercentage: Number(data.mappedLinePercentage || 0),
-    topCompanionProducts: normalizedArray(data.topCompanionProducts),
-    topCompanionCategories: normalizedArray(data.topCompanionCategories),
-    cciSkuPerformance: normalizedArray(data.cciSkuPerformance),
-    dayparts: normalizedArray(data.dayparts),
-    weekdayWeekend: normalizedArray(data.weekdayWeekend),
-    stores: normalizedArray(data.stores),
-    insights: normalizedArray(data.insights),
+    generatedAt: requiredTimestamp(data.generatedAt, "generatedAt"),
+    retailerCode: requiredString(data.retailerCode, "retailerCode"),
+    retailerName: requiredString(data.retailerName, "retailerName"),
+    totalBaskets: requiredCount(data.totalBaskets, "totalBaskets"),
+    cciBaskets: requiredCount(data.cciBaskets, "cciBaskets"),
+    cciPenetrationPercentage: requiredPercentage(
+      data.cciPenetrationPercentage,
+      "cciPenetrationPercentage"
+    ),
+    averageBasketValue: requiredNonNegativeNumber(
+      data.averageBasketValue,
+      "averageBasketValue"
+    ),
+    currency: requiredString(data.currency, "currency"),
+    mappedLinePercentage: requiredPercentage(data.mappedLinePercentage, "mappedLinePercentage"),
+    topCompanionProducts: requiredArray(
+      data.topCompanionProducts,
+      "topCompanionProducts",
+      (item, field) => ({
+        ...metric(item, field, "name"),
+        attachmentRatePercentage: requiredPercentage(
+          item.attachmentRatePercentage,
+          `${field}.attachmentRatePercentage`
+        ),
+      })
+    ),
+    topCompanionCategories: requiredArray(
+      data.topCompanionCategories,
+      "topCompanionCategories",
+      (item, field) => ({
+        ...metric(item, field, "category"),
+        attachmentRatePercentage: requiredPercentage(
+          item.attachmentRatePercentage,
+          `${field}.attachmentRatePercentage`
+        ),
+      })
+    ),
+    cciSkuPerformance: requiredArray(data.cciSkuPerformance, "cciSkuPerformance", (item, field) => ({
+      ...metric(item, field, "product"),
+      productId: requiredString(item.productId, `${field}.productId`),
+      quantity: requiredNonNegativeNumber(item.quantity, `${field}.quantity`),
+      revenue: requiredNonNegativeNumber(item.revenue, `${field}.revenue`),
+    })),
+    dayparts: requiredArray(data.dayparts, "dayparts", (item, field) => ({
+      ...metric(item, field, "segment"),
+      sharePercentage: requiredPercentage(item.sharePercentage, `${field}.sharePercentage`),
+    })),
+    weekdayWeekend: requiredArray(data.weekdayWeekend, "weekdayWeekend", (item, field) => ({
+      ...metric(item, field, "segment"),
+      sharePercentage: requiredPercentage(item.sharePercentage, `${field}.sharePercentage`),
+    })),
+    stores: requiredArray(data.stores, "stores", (item, field) => ({
+      ...metric(item, field, "storeId"),
+      cciBasketCount: requiredCount(item.cciBasketCount, `${field}.cciBasketCount`),
+      cciPenetrationPercentage: requiredPercentage(
+        item.cciPenetrationPercentage,
+        `${field}.cciPenetrationPercentage`
+      ),
+      averageBasketValue: requiredNonNegativeNumber(
+        item.averageBasketValue,
+        `${field}.averageBasketValue`
+      ),
+    })),
+    insights: requiredArray(data.insights, "insights", (item, field) => ({
+      fact: requiredString(item.fact, `${field}.fact`),
+      interpretation: requiredString(item.interpretation, `${field}.interpretation`),
+      recommendedAction: requiredString(item.recommendedAction, `${field}.recommendedAction`),
+    })),
   };
+
+  if (normalized.cciBaskets > normalized.totalBaskets) {
+    contractError("cciBaskets");
+  }
+  normalized.stores.forEach((store, index) => {
+    if (store.cciBasketCount > store.basketCount) {
+      contractError(`stores[${index}].cciBasketCount`);
+    }
+  });
+  return normalized;
 }
 
 export function configuredRetailerCode() {
