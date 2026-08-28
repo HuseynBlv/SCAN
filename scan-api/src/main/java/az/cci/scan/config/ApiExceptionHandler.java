@@ -1,5 +1,6 @@
 package az.cci.scan.config;
 
+import az.cci.scan.analytics.AnalyticsDataException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -31,5 +32,11 @@ public class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     ApiError conflict(DataIntegrityViolationException exception) {
         return new ApiError(Instant.now(), 409, "The request conflicts with existing data");
+    }
+
+    @ExceptionHandler(AnalyticsDataException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+    ApiError unprocessableAnalytics(AnalyticsDataException exception) {
+        return new ApiError(Instant.now(), 422, exception.getMessage());
     }
 }

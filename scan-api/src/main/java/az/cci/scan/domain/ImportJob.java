@@ -19,8 +19,8 @@ import java.util.UUID;
 @Table(
     name = "import_job",
     uniqueConstraints = @UniqueConstraint(
-        name = "import_job_retailer_hash_key",
-        columnNames = {"retailer_id", "file_sha256"}
+        name = "import_job_retailer_hash_attempt_key",
+        columnNames = {"retailer_id", "file_sha256", "attempt_number"}
     )
 )
 public class ImportJob {
@@ -50,6 +50,9 @@ public class ImportJob {
 
     @Column(name = "file_sha256", nullable = false, length = 64)
     private String fileSha256;
+
+    @Column(name = "attempt_number", nullable = false)
+    private int attemptNumber;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
@@ -86,12 +89,14 @@ public class ImportJob {
         Retailer retailer,
         ImportProfile importProfile,
         String originalFilename,
-        String fileSha256
+        String fileSha256,
+        int attemptNumber
     ) {
         this.retailer = retailer;
         this.importProfile = importProfile;
         this.originalFilename = originalFilename;
         this.fileSha256 = fileSha256;
+        this.attemptNumber = attemptNumber;
     }
 
     public void markValidating() {
@@ -123,6 +128,10 @@ public class ImportJob {
     public void markFailed(int totalRows, String errorSummary) {
         status = Status.FAILED;
         this.totalRows = totalRows;
+        this.importedReceipts = 0;
+        this.importedLines = 0;
+        this.duplicateReceipts = 0;
+        this.unresolvedProducts = 0;
         this.errorSummary = errorSummary;
         this.completedAt = Instant.now();
     }
@@ -145,6 +154,10 @@ public class ImportJob {
 
     public String getFileSha256() {
         return fileSha256;
+    }
+
+    public int getAttemptNumber() {
+        return attemptNumber;
     }
 
     public Status getStatus() {

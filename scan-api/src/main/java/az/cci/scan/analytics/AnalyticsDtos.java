@@ -3,6 +3,7 @@ package az.cci.scan.analytics;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public final class AnalyticsDtos {
 
@@ -24,6 +25,7 @@ public final class AnalyticsDtos {
     }
 
     public record CciSkuMetric(
+        UUID productId,
         String product,
         long basketCount,
         BigDecimal quantity,

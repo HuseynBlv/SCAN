@@ -1,5 +1,6 @@
 package az.cci.scan.importing;
 
+import az.cci.scan.analytics.AnalyticsDataException;
 import az.cci.scan.analytics.AnalyticsService;
 import az.cci.scan.catalog.ProductMappingService;
 import az.cci.scan.catalog.ProductCatalogImportService;
@@ -19,11 +20,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -102,13 +107,79 @@ class ImportServiceIntegrationTest {
         var duplicate = importService.importFile("DEMO", "CANONICAL", canonicalFixture());
 
         assertThat(first.status()).isEqualTo(ImportJob.Status.COMPLETED);
+        assertThat(first.attemptNumber()).isEqualTo(1);
         assertThat(first.importedReceipts()).isEqualTo(6);
         assertThat(first.importedLines()).isEqualTo(11);
         assertThat(first.unresolvedProducts()).isZero();
         assertThat(first.errors()).isEmpty();
         assertThat(duplicate.duplicateFile()).isTrue();
         assertThat(duplicate.id()).isEqualTo(first.id());
+        assertThat(duplicate.attemptNumber()).isEqualTo(1);
+        assertThat(importJobRepository.count()).isEqualTo(1);
         assertThat(receiptRepository.count()).isEqualTo(6);
+    }
+
+    @Test
+    void retriesAFailedFileAsANewAuditableAttempt() {
+        String invalid = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-03,R-3002,not-a-date,CHIPS-45,5053990109332,Chips 45g,wrong,1.20,0.00,1.20
+            """;
+
+        var first = importService.importFile("DEMO", "CANONICAL", csv("invalid.csv", invalid));
+        var retry = importService.importFile("DEMO", "CANONICAL", csv("invalid.csv", invalid));
+
+        assertThat(first.status()).isEqualTo(ImportJob.Status.FAILED);
+        assertThat(first.attemptNumber()).isEqualTo(1);
+        assertThat(retry.status()).isEqualTo(ImportJob.Status.FAILED);
+        assertThat(retry.duplicateFile()).isFalse();
+        assertThat(retry.id()).isNotEqualTo(first.id());
+        assertThat(retry.attemptNumber()).isEqualTo(2);
+        assertThat(importJobRepository.count()).isEqualTo(2);
+        assertThat(receiptRepository.count()).isZero();
+    }
+
+    @Test
+    void coalescesConcurrentIdenticalImportsIntoOneJob() throws Exception {
+        byte[] bytes = canonicalFixture().getBytes();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var first = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return importService.importFile(
+                    "DEMO",
+                    "CANONICAL",
+                    new MockMultipartFile("file", "same.csv", "text/csv", bytes)
+                );
+            });
+            var second = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return importService.importFile(
+                    "DEMO",
+                    "CANONICAL",
+                    new MockMultipartFile("file", "same.csv", "text/csv", bytes)
+                );
+            });
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            List<ImportDtos.ImportJobResponse> results = List.of(
+                first.get(15, TimeUnit.SECONDS),
+                second.get(15, TimeUnit.SECONDS)
+            );
+
+            assertThat(results).filteredOn(ImportDtos.ImportJobResponse::duplicateFile).hasSize(1);
+            assertThat(results).extracting(ImportDtos.ImportJobResponse::id)
+                .containsOnly(results.getFirst().id());
+            assertThat(importJobRepository.count()).isEqualTo(1);
+            assertThat(receiptRepository.count()).isEqualTo(6);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -116,8 +187,8 @@ class ImportServiceIntegrationTest {
         importService.importFile("DEMO", "CANONICAL", canonicalFixture());
         String overlap = """
             store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
-            STORE-01,R-1001,2026-08-22T18:45:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,1.50
-            STORE-01,R-1001,2026-08-22T18:45:00,CHIPS-45,5053990109332,Chips 45g,1,1.20,0.20,1.00
+            STORE-01,R-1001,2026-08-22T18:45:00,COKE-500,5449000000996,Coca-Cola 500ml,1.0000,1.5000,0.0000,1.5000
+            STORE-01,R-1001,2026-08-22T18:45:00,CHIPS-45,5053990109332,Chips 45g,1.0000,1.2000,0.2000,1.0000
             """;
 
         var result = importService.importFile(
@@ -155,6 +226,27 @@ class ImportServiceIntegrationTest {
     }
 
     @Test
+    void rejectsDecimalsThatCannotFitTheCanonicalNumericType() {
+        String invalid = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-03,R-3101,2026-08-24T10:00:00,COKE-500,5449000000996,Coca-Cola 500ml,1.00001,-1.50,0.00,1.50
+            STORE-03,R-3102,2026-08-24T10:01:00,CHIPS-45,5053990109332,Chips 45g,1,1234567890123456.0000,0.00,1.20
+            """;
+
+        var result = importService.importFile(
+            "DEMO",
+            "CANONICAL",
+            csv("invalid-decimals.csv", invalid)
+        );
+
+        assertThat(result.status()).isEqualTo(ImportJob.Status.FAILED);
+        assertThat(result.errors()).anyMatch(error -> error.contains("at most 4 decimal places"));
+        assertThat(result.errors()).anyMatch(error -> error.contains("must not be negative"));
+        assertThat(result.errors()).anyMatch(error -> error.contains("numeric(19,4)"));
+        assertThat(receiptRepository.count()).isZero();
+    }
+
+    @Test
     void blocksCciAnalyticsWhenRetailerHasNotEnabledAggregateSharing() {
         retailerRepository.save(new Retailer(
             "PRIVATE",
@@ -184,6 +276,9 @@ class ImportServiceIntegrationTest {
         );
 
         assertThat(result.status()).isEqualTo(ImportJob.Status.FAILED);
+        assertThat(result.importedReceipts()).isZero();
+        assertThat(result.importedLines()).isZero();
+        assertThat(result.duplicateReceipts()).isZero();
         assertThat(result.errors()).singleElement().asString().contains("different line contents");
         assertThat(receiptRepository.count()).isEqualTo(6);
         assertThat(storeRepository.findAll())
@@ -214,6 +309,7 @@ class ImportServiceIntegrationTest {
         assertThat(overview.topCompanionCategories().getFirst().attachmentRatePercentage())
             .isEqualByComparingTo("60.0");
         assertThat(overview.cciSkuPerformance().getFirst().product()).isEqualTo("Coca-Cola 500ml");
+        assertThat(overview.cciSkuPerformance().getFirst().productId()).isNotNull();
         assertThat(overview.cciSkuPerformance().getFirst().basketCount()).isEqualTo(4);
         assertThat(overview.cciSkuPerformance().getFirst().quantity()).isEqualByComparingTo("4.0000");
         assertThat(overview.cciSkuPerformance().getFirst().revenue()).isEqualByComparingTo("6.0000");
@@ -298,6 +394,48 @@ class ImportServiceIntegrationTest {
         assertThat(overview.mappedLinePercentage()).isEqualByComparingTo("0.0");
         assertThat(overview.topCompanionProducts()).isEmpty();
         assertThat(overview.stores()).isEmpty();
+    }
+
+    @Test
+    void refusesToAggregateReceiptsAcrossCurrencies() {
+        importService.importFile("DEMO", "CANONICAL", csv("azn.csv", """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-01,R-AZN,2026-08-24T10:00:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,1.50
+            """));
+        Retailer retailer = retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow();
+        importProfileRepository.save(new ImportProfile(
+            retailer,
+            "USD_PROFILE",
+            "synthetic-usd-v1",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "Asia/Baku",
+            "USD"
+        ));
+        importService.importFile("DEMO", "USD_PROFILE", csv("usd.csv", """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-01,R-USD,2026-08-24T10:01:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,1.50
+            """));
+
+        assertThatThrownBy(() -> analyticsService.overview("DEMO", true))
+            .isInstanceOf(AnalyticsDataException.class)
+            .hasMessageContaining("AZN, USD");
+    }
+
+    @Test
+    void canonicalProductIdentityIsUniqueIgnoringCaseAndOuterWhitespace() {
+        assertThatThrownBy(() -> canonicalProductRepository.saveAndFlush(new CanonicalProduct(
+            "  coca-cola 500ML  ",
+            null,
+            "CCI",
+            "CCI",
+            "Beverages",
+            null,
+            null,
+            null,
+            true
+        )))
+            .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(canonicalProductRepository.count()).isEqualTo(4);
     }
 
     @Test

@@ -73,6 +73,15 @@ public class AnalyticsService {
             .count();
         List<Receipt> cciReceipts = receipts.stream().filter(this::containsCci).toList();
         long cciBaskets = cciReceipts.size();
+        Set<String> currencies = receipts.stream()
+            .map(Receipt::getCurrency)
+            .collect(java.util.stream.Collectors.toSet());
+        if (currencies.size() > 1) {
+            throw new AnalyticsDataException(
+                "Analytics cannot combine receipts with different currencies: "
+                    + currencies.stream().sorted().collect(java.util.stream.Collectors.joining(", "))
+            );
+        }
         BigDecimal totalValue = receipts.stream()
             .map(Receipt::getBasketValue)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -134,7 +143,7 @@ public class AnalyticsService {
             cciBaskets,
             percentage(cciBaskets, totalBaskets),
             average(totalValue, totalBaskets),
-            currency(receipts),
+            currency(currencies),
             percentage(mappedLines, totalLines),
             companions,
             categories,
@@ -155,20 +164,24 @@ public class AnalyticsService {
     }
 
     private List<CciSkuMetric> cciSkuMetrics(List<Receipt> receipts) {
-        Map<String, SkuAccumulator> metrics = new HashMap<>();
+        Map<UUID, SkuAccumulator> metrics = new HashMap<>();
         for (Receipt receipt : receipts) {
             for (TransactionLine line : receipt.getLines()) {
                 CanonicalProduct product = line.getRetailerProduct().getCanonicalProduct();
                 if (product == null || !product.isCci()) {
                     continue;
                 }
-                metrics.computeIfAbsent(product.getNormalizedName(), ignored -> new SkuAccumulator())
+                metrics.computeIfAbsent(
+                    product.getId(),
+                    ignored -> new SkuAccumulator(product.getNormalizedName())
+                )
                     .add(receipt.getId(), line.getQuantity(), line.getLineTotal());
             }
         }
         return metrics.entrySet().stream()
             .map(entry -> new CciSkuMetric(
                 entry.getKey(),
+                entry.getValue().product,
                 entry.getValue().receiptIds.size(),
                 entry.getValue().quantity,
                 entry.getValue().revenue
@@ -234,12 +247,11 @@ public class AnalyticsService {
         return "NIGHT";
     }
 
-    private String currency(List<Receipt> receipts) {
-        Set<String> currencies = receipts.stream().map(Receipt::getCurrency).collect(java.util.stream.Collectors.toSet());
+    private String currency(Set<String> currencies) {
         if (currencies.isEmpty()) {
             return "N/A";
         }
-        return currencies.size() == 1 ? currencies.iterator().next() : "MULTI";
+        return currencies.iterator().next();
     }
 
     private BigDecimal percentage(long numerator, long denominator) {
@@ -259,9 +271,14 @@ public class AnalyticsService {
     }
 
     private static final class SkuAccumulator {
+        private final String product;
         private final Set<UUID> receiptIds = new HashSet<>();
         private BigDecimal quantity = BigDecimal.ZERO;
         private BigDecimal revenue = BigDecimal.ZERO;
+
+        private SkuAccumulator(String product) {
+            this.product = product;
+        }
 
         private void add(UUID receiptId, BigDecimal nextQuantity, BigDecimal nextRevenue) {
             receiptIds.add(receiptId);

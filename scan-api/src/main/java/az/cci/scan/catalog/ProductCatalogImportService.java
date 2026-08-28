@@ -84,7 +84,9 @@ public class ProductCatalogImportService {
             CanonicalProduct barcodeMatch = row.barcode() == null
                 ? null
                 : canonicalByBarcode.get(row.barcode());
-            CanonicalProduct nameMatch = canonicalByName.get(row.normalizedName());
+            CanonicalProduct nameMatch = canonicalByName.get(CanonicalProduct.normalizedKey(
+                row.normalizedName()
+            ));
             if (barcodeMatch != null && nameMatch != null
                 && !barcodeMatch.getId().equals(nameMatch.getId())) {
                 throw new IllegalArgumentException(
@@ -105,7 +107,7 @@ public class ProductCatalogImportService {
                     row.packageType(),
                     row.cci()
                 ));
-                canonicalByName.put(canonical.getNormalizedName(), canonical);
+                canonicalByName.put(canonical.getNormalizedKey(), canonical);
                 if (canonical.getBarcode() != null) {
                     canonicalByBarcode.put(canonical.getBarcode(), canonical);
                 }
@@ -240,11 +242,11 @@ public class ProductCatalogImportService {
 
     private Map<String, CanonicalProduct> loadCanonicalByName(List<CatalogRow> rows) {
         Set<String> names = new HashSet<>();
-        rows.forEach(row -> names.add(row.normalizedName()));
+        rows.forEach(row -> names.add(CanonicalProduct.normalizedKey(row.normalizedName())));
         Map<String, CanonicalProduct> products = new HashMap<>();
         for (List<String> batch : batches(names)) {
-            canonicalProductRepository.findAllByNormalizedNameIn(batch)
-                .forEach(product -> products.put(product.getNormalizedName(), product));
+            canonicalProductRepository.findAllByNormalizedKeyIn(batch)
+                .forEach(product -> products.put(product.getNormalizedKey(), product));
         }
         return products;
     }

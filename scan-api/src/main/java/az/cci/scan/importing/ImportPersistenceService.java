@@ -9,8 +9,10 @@ import az.cci.scan.domain.RetailerProduct;
 import az.cci.scan.domain.Store;
 import az.cci.scan.domain.TransactionLine;
 import az.cci.scan.repository.CanonicalProductRepository;
+import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
+import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,39 +41,50 @@ public class ImportPersistenceService {
     private static final int LOOKUP_BATCH_SIZE = 500;
 
     private final StoreRepository storeRepository;
+    private final RetailerRepository retailerRepository;
+    private final ImportJobRepository importJobRepository;
     private final ReceiptRepository receiptRepository;
     private final RetailerProductRepository retailerProductRepository;
     private final CanonicalProductRepository canonicalProductRepository;
 
     public ImportPersistenceService(
         StoreRepository storeRepository,
+        RetailerRepository retailerRepository,
+        ImportJobRepository importJobRepository,
         ReceiptRepository receiptRepository,
         RetailerProductRepository retailerProductRepository,
         CanonicalProductRepository canonicalProductRepository
     ) {
         this.storeRepository = storeRepository;
+        this.retailerRepository = retailerRepository;
+        this.importJobRepository = importJobRepository;
         this.receiptRepository = receiptRepository;
         this.retailerProductRepository = retailerProductRepository;
         this.canonicalProductRepository = canonicalProductRepository;
     }
 
     @Transactional
-    public ImportPersistenceResult persist(
+    public ImportPersistenceResult persistAndComplete(
         Retailer retailer,
         ImportProfile profile,
         ImportJob job,
         List<ParsedTransactionLine> lines
     ) {
+        Retailer lockedRetailer = retailerRepository.findLockedById(retailer.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Unknown retailer: " + retailer.getId()));
         Map<ReceiptIdentity, List<ParsedTransactionLine>> baskets = lines.stream()
             .collect(Collectors.groupingBy(
                 line -> new ReceiptIdentity(line.storeId(), line.receiptId(), line.transactionTimestamp()),
                 LinkedHashMap::new,
                 Collectors.toList()
             ));
-        Map<String, Store> stores = resolveStores(retailer, baskets.keySet());
-        List<PreparedReceipt> prepared = prepareReceipts(retailer, stores, baskets);
-        Map<ExistingReceiptIdentity, Receipt> existingReceipts = loadExistingReceipts(retailer, prepared);
-        Map<String, RetailerProduct> retailerProducts = loadRetailerProducts(retailer, lines);
+        Map<String, Store> stores = resolveStores(lockedRetailer, baskets.keySet());
+        List<PreparedReceipt> prepared = prepareReceipts(lockedRetailer, stores, baskets);
+        Map<ExistingReceiptIdentity, Receipt> existingReceipts = loadExistingReceipts(
+            lockedRetailer,
+            prepared
+        );
+        Map<String, RetailerProduct> retailerProducts = loadRetailerProducts(lockedRetailer, lines);
         Map<String, CanonicalProduct> canonicalByBarcode = loadCanonicalProducts(lines);
 
         int duplicateReceipts = 0;
@@ -106,7 +119,7 @@ public class ImportPersistenceService {
                 .map(ParsedTransactionLine::lineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             Receipt receipt = new Receipt(
-                retailer,
+                lockedRetailer,
                 candidate.store(),
                 candidate.identity().receiptId(),
                 candidate.identity().timestamp(),
@@ -118,7 +131,7 @@ public class ImportPersistenceService {
 
             for (ParsedTransactionLine source : candidate.lines()) {
                 RetailerProduct retailerProduct = resolveProduct(
-                    retailer,
+                    lockedRetailer,
                     source,
                     retailerProducts,
                     canonicalByBarcode
@@ -146,13 +159,21 @@ public class ImportPersistenceService {
             importedLines += candidate.lines().size();
         }
         receiptRepository.saveAll(receiptsToSave);
-
-        return new ImportPersistenceResult(
+        ImportPersistenceResult result = new ImportPersistenceResult(
             importedReceipts,
             importedLines,
             duplicateReceipts,
             unresolvedProducts.size()
         );
+        job.markCompleted(
+            lines.size(),
+            result.importedReceipts(),
+            result.importedLines(),
+            result.duplicateReceipts(),
+            result.unresolvedProducts()
+        );
+        importJobRepository.saveAndFlush(job);
+        return result;
     }
 
     private Map<ExistingReceiptIdentity, Receipt> loadExistingReceipts(
@@ -311,10 +332,10 @@ public class ImportPersistenceService {
                 nullToEmpty(line.productCode()),
                 nullToEmpty(line.barcode()),
                 line.productName().trim(),
-                line.quantity().toPlainString(),
-                line.unitPrice().toPlainString(),
-                line.discountAmount().toPlainString(),
-                line.lineTotal().toPlainString()
+                canonicalDecimal(line.quantity()),
+                canonicalDecimal(line.unitPrice()),
+                canonicalDecimal(line.discountAmount()),
+                canonicalDecimal(line.lineTotal())
             ))
             .sorted(Comparator.naturalOrder())
             .toList();
@@ -338,6 +359,10 @@ public class ImportPersistenceService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String canonicalDecimal(BigDecimal value) {
+        return value.setScale(4).toPlainString();
     }
 
     private record ReceiptIdentity(String storeId, String receiptId, Instant timestamp) {

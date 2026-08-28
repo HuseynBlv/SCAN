@@ -13,7 +13,7 @@ public interface CanonicalProductRepository extends JpaRepository<CanonicalProdu
 
     List<CanonicalProduct> findAllByBarcodeIn(Collection<String> barcodes);
 
-    List<CanonicalProduct> findAllByNormalizedNameIn(Collection<String> normalizedNames);
+    List<CanonicalProduct> findAllByNormalizedKeyIn(Collection<String> normalizedKeys);
 
     List<CanonicalProduct> findAllByOrderByNormalizedNameAsc();
 }
