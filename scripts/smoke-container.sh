@@ -79,6 +79,7 @@ SCAN_SMOKE_NETWORK_CREATED=1
 docker run --detach --rm --name "$SCAN_SMOKE_DB" \
   --network "$SCAN_SMOKE_NETWORK" --network-alias db \
   --tmpfs /var/lib/postgresql/data \
+  --env PGDATA=/var/lib/postgresql/data \
   --env POSTGRES_DB=scan_smoke --env POSTGRES_USER=scan_smoke \
   --env POSTGRES_PASSWORD=smoke-only-db-password "$SCAN_SMOKE_POSTGRES_IMAGE" >/dev/null
 SCAN_SMOKE_DB_CREATED=1
