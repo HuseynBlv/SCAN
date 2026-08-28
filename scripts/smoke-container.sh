@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCAN_SMOKE_IMAGE="${1:-scan-demo:local}"
+SCAN_SMOKE_POSTGRES_IMAGE="${SCAN_SMOKE_POSTGRES_IMAGE:-postgres:18-bookworm}"
 SCAN_SMOKE_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCAN_SMOKE_ID="scan-smoke-$(date +%s)-$$"
 SCAN_SMOKE_NETWORK="${SCAN_SMOKE_ID}-net"
@@ -79,7 +80,7 @@ docker run --detach --rm --name "$SCAN_SMOKE_DB" \
   --network "$SCAN_SMOKE_NETWORK" --network-alias db \
   --tmpfs /var/lib/postgresql/data \
   --env POSTGRES_DB=scan_smoke --env POSTGRES_USER=scan_smoke \
-  --env POSTGRES_PASSWORD=smoke-only-db-password postgres:17-bookworm >/dev/null
+  --env POSTGRES_PASSWORD=smoke-only-db-password "$SCAN_SMOKE_POSTGRES_IMAGE" >/dev/null
 SCAN_SMOKE_DB_CREATED=1
 for attempt in {1..60}; do
   if docker exec "$SCAN_SMOKE_DB" pg_isready -h 127.0.0.1 -U scan_smoke -d scan_smoke >/dev/null; then break; fi
@@ -119,14 +120,16 @@ expect_http 403 --user scan-cci:smoke-only-cci-password \
   -F retailerCode=DEMO -F profileCode=CANONICAL -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
 expect_http 201 --user scan-admin:smoke-only-admin-password \
   -F retailerCode=DEMO -F profileCode=CANONICAL -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
-assert_json '.status == "COMPLETED" and .importedReceipts == 6 and .importedLines == 11'
+assert_json '.status == "COMPLETED" and .attemptNumber == 1 and .importedReceipts == 6 and .importedLines == 11'
 SCAN_SMOKE_JOB_ID="$(jq --raw-output .id "$SCAN_SMOKE_TMP_DIR/response")"
 expect_http 403 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/imports/$SCAN_SMOKE_JOB_ID"
 expect_http 200 --user scan-admin:smoke-only-admin-password \
   -F retailerCode=DEMO -F profileCode=CANONICAL -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
-assert_json '.duplicateFile == true and .status == "COMPLETED"'
+assert_json '.duplicateFile == true and .attemptNumber == 1 and .status == "COMPLETED"'
 expect_http 200 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/analytics/overview?retailerCode=DEMO"
-assert_json '.totalBaskets == 6 and .cciBaskets == 5 and .mappedLinePercentage == 100'
+assert_json '.totalBaskets == 6 and .cciBaskets == 5 and .mappedLinePercentage == 100
+  and (.cciSkuPerformance | length) > 0
+  and (.cciSkuPerformance | all(.productId != null))'
 
 if [ -n "${SCAN_SMOKE_KAGGLE_DIR:-}" ]; then
   printf 'Importing the optional 10,000-receipt Kaggle sample under the same memory limit...\n'

@@ -31,6 +31,10 @@ sum(receipt basket value) / total baskets
 Receipt basket value is the sum of imported line totals. The real retailer must confirm
 that line total represents final paid value consistently.
 
+SCAN does not perform currency conversion. If one retailer's persisted receipts contain
+more than one currency, the analytics request fails explicitly rather than returning an
+invalid combined basket value or revenue total.
+
 ### Companion attachment rate
 
 For the Phase 0 network-level companion list:
@@ -52,6 +56,7 @@ transaction lines linked to any canonical product / all transaction lines × 100
 
 For each mapped CCI SKU:
 
+- stable canonical product ID and display name;
 - distinct basket count;
 - sum of imported quantity;
 - sum of imported line total as revenue.

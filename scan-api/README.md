@@ -103,9 +103,13 @@ See [`../docs/kaggle-demo.md`](../docs/kaggle-demo.md) for the exact preparation
 import, transaction import, analytics, and opt-in real-volume smoke-test commands.
 
 Uploading the exact same file again returns the original import job and sets
-`duplicateFile: true`. Uploading a different file that reuses an existing receipt identity
-with different line contents fails without writing partial receipts.
+`duplicateFile: true` while that job is active or completed. Re-uploading bytes from a
+`FAILED` job creates a new job with the next `attemptNumber`, preserving the earlier failure
+for audit history. Uploading a different file that reuses an existing receipt identity with
+different line contents fails without writing partial receipts or successful import counts.
 Identical receipts in different overlapping files are skipped without double-counting.
+Imports for the same retailer are serialized to make concurrent duplicate and receipt checks
+deterministic.
 
 ## Container and free-demo hosting
 
@@ -124,17 +128,19 @@ assets are public, but API role and retailer-sharing restrictions still apply. C
 authenticated analytics request as well to verify database access after deployment.
 
 From the repository root, `bash scripts/smoke-container.sh scan-demo:local` tests a built
-image with disposable PostgreSQL 17 and a 512 MB app limit. This test does not use your
+image with disposable PostgreSQL 18 and a 512 MB app limit. This test does not use your
 local database; see the hosting guide for the build and optional dataset-test commands.
 
 ## Current pilot limitations
 
 - Imports run synchronously and are limited to 25 MB.
 - XLS/XLSX parsing loads the first worksheet into memory.
-- CSV is UTF-8 and numeric fields must use plain decimal notation.
+- CSV is UTF-8. Numeric fields must use plain decimal notation, fit PostgreSQL
+  `numeric(19,4)`, and contain at most four decimal places.
 - Positive sales are supported. Return, void, refund, and cancellation semantics require
   the real retailer export.
 - Receipt identity is currently retailer + store + receipt ID + timestamp.
+- Analytics reject mixed-currency receipt sets instead of summing unlike monetary values.
 - Analytics currently load one retailer's receipts through JPA. Production volume testing
   will determine which calculations move to native PostgreSQL aggregation queries.
 - Pilot identities are configured from environment variables. Persistent accounts or SSO

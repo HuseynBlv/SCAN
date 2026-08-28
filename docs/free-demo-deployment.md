@@ -77,8 +77,8 @@ the same value in memory without displaying or storing the database password.
 `verify-full` checks the server certificate and hostname, using Java's default trusted CAs.
 Do not remove TLS verification to fix a connection error; check the hostname and certificate
 error first. See the [PostgreSQL JDBC SSL documentation](https://jdbc.postgresql.org/documentation/ssl/).
-The JDBC path and all three Flyway migrations were verified on 2026-08-27. Render-to-Neon
-connectivity remains a hosted verification step.
+The JDBC path and all four Flyway migrations were verified on Neon PostgreSQL 18 on
+2026-08-28. Render-to-Neon connectivity remains a hosted verification step.
 
 ## 2. Create the Render Free service
 
@@ -158,8 +158,9 @@ curl --fail-with-body -u scan-admin \
 
 Catalog first, transactions second. Check that the transaction response says `COMPLETED`.
 The database starts separately from your laptop database: local imports are not automatically
-copied to Neon. If a request times out, inspect Render's logs and import status before retrying;
-do not start concurrent imports. A successfully completed identical upload is idempotent.
+copied to Neon. If a request times out, inspect Render's logs and import status before retrying.
+The API serializes same-retailer persistence and keeps failed retries as numbered attempts, but
+the pilot remains synchronous, so wait for a final status before starting another large upload.
 
 Sign into the hosted page with retailer `KAGGLE`, username `scan-cci`, and the generated
 CCI password. For the identified source ZIP and a fresh demo retailer, verify:
@@ -207,11 +208,13 @@ docker build --tag scan-demo:local .
 bash scripts/smoke-container.sh scan-demo:local
 ```
 
-The script creates its own disposable PostgreSQL 17 database and a read-only, non-root app
+The script creates its own disposable PostgreSQL 18 database and a read-only, non-root app
 container with a **512 MB memory limit**. It checks real frontend assets, a non-default port,
 public health, authentication/role boundaries, imports, duplicate prevention, and persistence
 across an app restart. It never uses your host's `SCAN_DB_*` values or laptop PostgreSQL.
 On exit it removes only its temporary containers, their test data, and its temporary network.
+If Docker Hub is temporarily rate-limiting downloads, a locally cached version can be selected
+with `SCAN_SMOKE_POSTGRES_IMAGE`; CI and the default command continue to use PostgreSQL 18.
 
 To exercise the prepared 10,000-basket sample under the same memory limit:
 
@@ -225,10 +228,11 @@ The optional dataset is not committed or uploaded to CI. Local Docker results do
 Render's CPU speed, cold-start time, Neon connectivity, or behavior under concurrent traffic;
 the hosted checks above are still required.
 
-Local verification on 2026-08-26 passed with Java 21, PostgreSQL 17, and the 512 MB app limit:
-the prepared sample produced 10,000 baskets, 209 CCI baskets, and 100% mapped lines, including
-after an application restart. The final memory snapshot was about 444 MiB (not a peak
-measurement). This leaves limited headroom; do not treat the run as a concurrency benchmark.
+Local verification on 2026-08-26 passed with Java 21, PostgreSQL 17, and the 512 MB app limit;
+the current CI path has since moved to PostgreSQL 18 to match Neon. The earlier full sample
+run produced 10,000 baskets, 209 CCI baskets, and 100% mapped lines, including after an
+application restart. Its final memory snapshot was about 444 MiB (not a peak measurement).
+This leaves limited headroom; do not treat the run as a concurrency benchmark.
 
 ## Updates, GitHub, and Vercel
 

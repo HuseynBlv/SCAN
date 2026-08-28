@@ -102,7 +102,8 @@ curl -u scan-cci \
 To view the same results in the browser, follow the
 [frontend setup guide](../scan-app/README.md) and sign in with retailer `KAGGLE`.
 Re-uploading the exact transaction file should return `duplicateFile: true` without changing
-the basket count. If this retailer already contains other imports, its aggregate totals can
+the basket count. Failed uploads remain in history and the same bytes can be retried as a new
+numbered attempt. If this retailer already contains other imports, its aggregate totals can
 exceed the sample-only values below.
 
 ## Verified 10,000-receipt sample

@@ -57,12 +57,14 @@ flowchart LR
     G --> H["React CCI dashboard"]
 ```
 
-- **Repeatable imports:** uploading identical bytes returns the original import job;
-  identical receipts in overlapping files are skipped without double-counting.
-- **Safe failures:** malformed transaction uploads write no receipts. Reusing a receipt
-  identity with different contents rejects the import rather than silently changing history.
+- **Repeatable imports:** uploading identical bytes returns the active/completed import job;
+  a failed file can be retried as a new numbered attempt. Concurrent imports for one retailer
+  are serialized, and identical receipts in overlapping files are skipped without double-counting.
+- **Safe failures:** malformed transaction uploads write no receipts. Receipt writes and job
+  completion are atomic; reusing a receipt identity with different contents rejects the import
+  rather than silently changing history.
 - **Explicit product mapping:** exact barcodes, saved retailer mappings, and manual/catalog
-  mapping; no fuzzy or AI product matching.
+  mapping; canonical names have a stable case-insensitive identity, with no fuzzy or AI matching.
 - **Traceability:** import jobs retain status, counts, and validation errors.
 - **Separation of access:** import and mapping endpoints are admin-only. CCI receives
   aggregate analytics only for retailers with CCI sharing enabled.
@@ -197,9 +199,11 @@ Backend tests use an isolated H2 database; they do not need or modify local Post
 `mvn verify` produces `scan-api/target/site/jacoco/index.html` and enforces at least 80% line
 and 55% branch coverage. Coverage is a regression guard, not proof of business correctness.
 
-GitHub Actions runs backend verification and frontend tests, lint, and build on pushes and
-pull requests, then builds the deployable Docker image and smoke-tests it against disposable
-PostgreSQL under a 512 MB app memory limit. See the
+GitHub Actions runs backend verification and frontend tests, lint, and build on pull requests
+and pushes to `main`, then builds the deployable Docker image and smoke-tests it against
+disposable PostgreSQL 18 under a 512 MB app memory limit. Workflow actions are pinned to
+immutable commits, and Dependabot checks application, container, and CI dependencies monthly.
+See the
 [container test instructions](docs/free-demo-deployment.md#local-container-verification).
 The optional 10,000-basket tests require locally generated files; they are not part of normal CI.
 
@@ -213,6 +217,8 @@ The optional 10,000-basket tests require locally generated files; they are not p
   HTTPS, account management, retailer-scoped access, and an agreed data-sharing policy.
 - Positive sales are supported. Returns, voids, taxes, and receipt-level discount semantics
   must be confirmed with a real retailer before their data is considered decision-ready.
+- Monetary analytics refuse to combine receipts from multiple currencies. A retailer export
+  must use one confirmed currency per analytical dataset until explicit conversion is designed.
 - Imports are synchronous, limited to 25 MB, and spreadsheet parsing uses the first worksheet.
   Analytics load the selected retailer's receipts into memory. Larger workloads are not validated.
 - Receipt identity currently includes retailer, store, receipt ID, and timestamp. Verify this
@@ -275,7 +281,7 @@ These are planned improvements, not claims about the current feature set.
 
 ```text
 SCAN/
-├── .github/workflows/ci.yml    # Backend, frontend, and container checks
+├── .github/                   # CI plus monthly dependency update configuration
 ├── Dockerfile                 # Builds React into the Java 21 application
 ├── render.yaml                # One Free web service; runtime secrets only
 ├── scripts/                   # Isolated deployment smoke test
