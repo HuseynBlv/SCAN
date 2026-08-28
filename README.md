@@ -12,11 +12,11 @@ already use a digital checkout system. It uses the transaction data they already
 Cashiers do not scan products into SCAN, and SCAN does not replace a POS, cash register,
 inventory system, or ERP.
 
-**Current stage:** a working local pilot prototype with CSV/XLSX ingestion, deterministic
-analytics, and an API-backed React dashboard. A reproducible Kaggle demo exercises the full
-pipeline. The Spring Boot application and Flyway migrations are verified against a Neon Free
-database; the single-container Render service is configured but not yet created. Real-retailer
-validation remains next.
+**Current stage:** a working pilot prototype with CSV/XLSX ingestion, deterministic analytics,
+and an API-backed React dashboard. A reproducible Kaggle demo exercises the full pipeline. The
+single-container application is live on Render Free at
+[scan-demo.onrender.com](https://scan-demo.onrender.com), backed by Neon Free PostgreSQL over
+verified TLS. Real-retailer validation remains next.
 
 ## What SCAN helps answer
 
@@ -228,13 +228,15 @@ The optional 10,000-basket tests require locally generated files; they are not p
 
 ## Deployment status
 
-The [free-demo deployment guide](docs/free-demo-deployment.md) sets up **one Render Free
-service for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The Neon project,
-app-owned database/role, verified JDBC connection, and Flyway schema are complete. The root
-Dockerfile packages the existing dashboard into the Java application. One HTTPS origin serves
-the page and `/api`, so no cross-origin configuration is needed. `render.yaml` explicitly
-selects the free instance and manual deployment. Render resource creation and public hosted
-verification are still pending; this repository does not yet record a verified Render URL.
+The [free-demo deployment guide](docs/free-demo-deployment.md) uses **one Render Free service
+for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile packages
+the dashboard into the Java application. One HTTPS origin serves the page and `/api`, so no
+cross-origin configuration is needed. `render.yaml` explicitly selects the free instance and
+manual deployment. On 2026-08-28, Render deployed commit `eaf1f30` successfully at
+[https://scan-demo.onrender.com](https://scan-demo.onrender.com): the React root returned 200,
+`GET /health` returned `{"status":"UP"}`, the unauthenticated analytics route returned 401,
+and startup logs confirmed Flyway schema version 4 on Neon PostgreSQL 18.6. Authenticated
+analytics and hosted demo-data import still require the privately generated Render passwords.
 
 Free services can sleep, start slowly, or stop at quota limits. This is an occasional technical
 demo, not a production availability commitment. The guide covers account setup, runtime

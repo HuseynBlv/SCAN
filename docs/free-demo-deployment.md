@@ -1,10 +1,10 @@
 # SCAN demo hosting for $0
 
 This is a small, occasional-use **technical demo**, not a production retailer deployment.
-The repository is configured for one Render Free web service and one Neon Free PostgreSQL
-project. The Neon project and SCAN schema are verified; you must still create the Render
-service in your own account. Committing this configuration does not create a hosted app, and
-no public Render URL has been verified yet.
+The repository uses one Render Free web service and one Neon Free PostgreSQL project. The
+service is live at [https://scan-demo.onrender.com](https://scan-demo.onrender.com). Initial
+public health, frontend delivery, authentication-boundary, and Render-to-Neon startup checks
+passed on 2026-08-28; authenticated analytics and hosted demo-data import remain pending.
 
 ## How it works
 
@@ -78,7 +78,8 @@ the same value in memory without displaying or storing the database password.
 Do not remove TLS verification to fix a connection error; check the hostname and certificate
 error first. See the [PostgreSQL JDBC SSL documentation](https://jdbc.postgresql.org/documentation/ssl/).
 The JDBC path and all four Flyway migrations were verified on Neon PostgreSQL 18 on
-2026-08-28. Render-to-Neon connectivity remains a hosted verification step.
+2026-08-28. The first Render startup subsequently connected over the same verified-TLS path,
+validated schema version 4, and completed successfully against Neon PostgreSQL 18.6.
 
 ## 2. Create the Render Free service
 
@@ -108,8 +109,9 @@ from the service's Environment page after creation. Usernames remain `scan-admin
 `scan-cci`. The app uses Render's `PORT` automatically; do not configure port forwarding.
 
 Deploy the service and wait for the build and startup logs to complete. Copy the **actual
-assigned HTTPS URL** from Render; the name may have an extra suffix. Do not assume that
-`scan-demo.onrender.com` is yours. Fill in the pending URL in `CLAUDE.md` once verified.
+assigned HTTPS URL** from Render; the name may have an extra suffix. The deployment created
+on 2026-08-28 was assigned `https://scan-demo.onrender.com`, and that exact URL is recorded in
+`CLAUDE.md`.
 
 For a strict $0 budget, remain on free plans and do not add a payment method or accept an
 upgrade. If signup requires a card or the review screen shows a charge, stop. Free quotas
@@ -241,9 +243,10 @@ selected commit. Blueprint configuration changes may also trigger deployment whe
 review the proposed changes and disable automatic Blueprint sync if you require every
 configuration update to be manual. See [Render's Blueprint reference](https://render.com/docs/blueprint-spec).
 
-PR #2 stays open until the hosted demo is verified and the existing Vercel production impact
-is resolved. This work does not change Vercel routing or deploy Spring Boot there. Merging
-the branch can still update that existing frontend, which currently has no hosted API route.
+PR #2 stays open until authenticated hosted analytics, the demo-data import, and the existing
+Vercel production impact are resolved. The initial public Render deployment and Neon startup
+are verified. This work does not change Vercel routing or deploy Spring Boot there. Merging the
+branch can still update that existing frontend, which currently has no hosted API route.
 
 After an approved merge, change the service branch in `render.yaml` and Render to `main`,
 then manually deploy and recheck it. Do not delete the feature branch while Render still
