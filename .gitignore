@@ -5,3 +5,4 @@
 
 # Neon CLI project/branch context is machine-local.
 .neon
+.gstack/
