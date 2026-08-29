@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
 
 @Entity
@@ -19,6 +20,9 @@ public class CanonicalProduct {
 
     @Column(name = "normalized_name", nullable = false)
     private String normalizedName;
+
+    @Column(name = "normalized_key", nullable = false, unique = true)
+    private String normalizedKey;
 
     @Column(unique = true, length = 64)
     private String barcode;
@@ -58,7 +62,8 @@ public class CanonicalProduct {
         String packageType,
         boolean cci
     ) {
-        this.normalizedName = normalizedName;
+        this.normalizedName = normalizedName.trim();
+        this.normalizedKey = normalizedKey(normalizedName);
         this.barcode = barcode;
         this.brand = brand;
         this.manufacturer = manufacturer;
@@ -75,6 +80,10 @@ public class CanonicalProduct {
 
     public String getNormalizedName() {
         return normalizedName;
+    }
+
+    public String getNormalizedKey() {
+        return normalizedKey;
     }
 
     public String getBarcode() {
@@ -107,5 +116,9 @@ public class CanonicalProduct {
 
     public boolean isCci() {
         return cci;
+    }
+
+    public static String normalizedKey(String normalizedName) {
+        return normalizedName.trim().toUpperCase(Locale.ROOT);
     }
 }

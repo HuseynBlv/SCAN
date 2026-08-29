@@ -1,0 +1,8 @@
+# Deployment credentials belong in provider settings, never in Git.
+.env
+.env.*
+!.env.example
+
+# Neon CLI project/branch context is machine-local.
+.neon
+.gstack/

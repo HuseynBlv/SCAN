@@ -293,7 +293,7 @@ function AchievementOverlay({ achievement }) {
   );
 }
 
-export default function App() {
+export default function LegacyApp() {
   const basketDataMode = getBasketDataMode();
   const videoRef = useRef(null);
   const readerRef = useRef(null);

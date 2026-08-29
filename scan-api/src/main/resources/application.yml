@@ -13,6 +13,9 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   flyway:
     enabled: true
   servlet:
@@ -23,6 +26,7 @@ spring:
     time-zone: UTC
 
 server:
+  port: ${PORT:8080}
   error:
     include-message: never
 

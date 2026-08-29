@@ -9,8 +9,10 @@ import az.cci.scan.domain.RetailerProduct;
 import az.cci.scan.domain.Store;
 import az.cci.scan.domain.TransactionLine;
 import az.cci.scan.repository.CanonicalProductRepository;
+import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
+import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +23,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,50 +38,64 @@ import java.util.stream.Collectors;
 @Service
 public class ImportPersistenceService {
 
+    private static final int LOOKUP_BATCH_SIZE = 500;
+
     private final StoreRepository storeRepository;
+    private final RetailerRepository retailerRepository;
+    private final ImportJobRepository importJobRepository;
     private final ReceiptRepository receiptRepository;
     private final RetailerProductRepository retailerProductRepository;
     private final CanonicalProductRepository canonicalProductRepository;
 
     public ImportPersistenceService(
         StoreRepository storeRepository,
+        RetailerRepository retailerRepository,
+        ImportJobRepository importJobRepository,
         ReceiptRepository receiptRepository,
         RetailerProductRepository retailerProductRepository,
         CanonicalProductRepository canonicalProductRepository
     ) {
         this.storeRepository = storeRepository;
+        this.retailerRepository = retailerRepository;
+        this.importJobRepository = importJobRepository;
         this.receiptRepository = receiptRepository;
         this.retailerProductRepository = retailerProductRepository;
         this.canonicalProductRepository = canonicalProductRepository;
     }
 
     @Transactional
-    public ImportPersistenceResult persist(
+    public ImportPersistenceResult persistAndComplete(
         Retailer retailer,
         ImportProfile profile,
         ImportJob job,
         List<ParsedTransactionLine> lines
     ) {
+        Retailer lockedRetailer = retailerRepository.findLockedById(retailer.getId())
+            .orElseThrow(() -> new IllegalArgumentException("Unknown retailer: " + retailer.getId()));
         Map<ReceiptIdentity, List<ParsedTransactionLine>> baskets = lines.stream()
             .collect(Collectors.groupingBy(
                 line -> new ReceiptIdentity(line.storeId(), line.receiptId(), line.transactionTimestamp()),
                 LinkedHashMap::new,
                 Collectors.toList()
             ));
-        Map<String, Store> stores = resolveStores(retailer, baskets.keySet());
-        List<PreparedReceipt> prepared = prepareReceipts(retailer, stores, baskets);
+        Map<String, Store> stores = resolveStores(lockedRetailer, baskets.keySet());
+        List<PreparedReceipt> prepared = prepareReceipts(lockedRetailer, stores, baskets);
+        Map<ExistingReceiptIdentity, Receipt> existingReceipts = loadExistingReceipts(
+            lockedRetailer,
+            prepared
+        );
+        Map<String, RetailerProduct> retailerProducts = loadRetailerProducts(lockedRetailer, lines);
+        Map<String, CanonicalProduct> canonicalByBarcode = loadCanonicalProducts(lines);
 
         int duplicateReceipts = 0;
         for (PreparedReceipt candidate : prepared) {
-            var existing = receiptRepository
-                .findByRetailerAndStoreAndExternalReceiptIdAndTransactionTimestamp(
-                    retailer,
-                    candidate.store(),
-                    candidate.identity().receiptId(),
-                    candidate.identity().timestamp()
-                );
-            if (existing.isPresent()) {
-                if (!existing.get().getBasketFingerprint().equals(candidate.fingerprint())) {
+            Receipt existing = existingReceipts.get(new ExistingReceiptIdentity(
+                candidate.store().getId(),
+                candidate.identity().receiptId(),
+                candidate.identity().timestamp()
+            ));
+            if (existing != null) {
+                if (!existing.getBasketFingerprint().equals(candidate.fingerprint())) {
                     throw new ReceiptConflictException(
                         "Receipt " + candidate.identity().receiptId()
                             + " already exists with different line contents"
@@ -89,7 +108,8 @@ public class ImportPersistenceService {
 
         int importedReceipts = 0;
         int importedLines = 0;
-        Set<UUID> unresolvedProducts = new java.util.HashSet<>();
+        Set<UUID> unresolvedProducts = new HashSet<>();
+        List<Receipt> receiptsToSave = new ArrayList<>();
         for (PreparedReceipt candidate : prepared) {
             if (candidate.duplicate()) {
                 continue;
@@ -99,7 +119,7 @@ public class ImportPersistenceService {
                 .map(ParsedTransactionLine::lineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
             Receipt receipt = new Receipt(
-                retailer,
+                lockedRetailer,
                 candidate.store(),
                 candidate.identity().receiptId(),
                 candidate.identity().timestamp(),
@@ -110,7 +130,12 @@ public class ImportPersistenceService {
             );
 
             for (ParsedTransactionLine source : candidate.lines()) {
-                RetailerProduct retailerProduct = resolveProduct(retailer, source);
+                RetailerProduct retailerProduct = resolveProduct(
+                    lockedRetailer,
+                    source,
+                    retailerProducts,
+                    canonicalByBarcode
+                );
                 if (!retailerProduct.isResolved()) {
                     unresolvedProducts.add(retailerProduct.getId());
                 }
@@ -129,17 +154,111 @@ public class ImportPersistenceService {
                     profile.getSourceSystem()
                 ));
             }
-            receiptRepository.save(receipt);
+            receiptsToSave.add(receipt);
             importedReceipts++;
             importedLines += candidate.lines().size();
         }
-
-        return new ImportPersistenceResult(
+        receiptRepository.saveAll(receiptsToSave);
+        ImportPersistenceResult result = new ImportPersistenceResult(
             importedReceipts,
             importedLines,
             duplicateReceipts,
             unresolvedProducts.size()
         );
+        job.markCompleted(
+            lines.size(),
+            result.importedReceipts(),
+            result.importedLines(),
+            result.duplicateReceipts(),
+            result.unresolvedProducts()
+        );
+        importJobRepository.saveAndFlush(job);
+        return result;
+    }
+
+    private Map<ExistingReceiptIdentity, Receipt> loadExistingReceipts(
+        Retailer retailer,
+        List<PreparedReceipt> prepared
+    ) {
+        Map<ExistingReceiptIdentity, Receipt> receipts = new LinkedHashMap<>();
+        Map<Store, List<PreparedReceipt>> byStore = prepared.stream()
+            .collect(Collectors.groupingBy(PreparedReceipt::store));
+        for (Map.Entry<Store, List<PreparedReceipt>> entry : byStore.entrySet()) {
+            List<PreparedReceipt> storeReceipts = entry.getValue();
+            List<String> receiptIds = storeReceipts.stream()
+                .map(candidate -> candidate.identity().receiptId())
+                .distinct()
+                .toList();
+            Instant from = storeReceipts.stream().map(candidate -> candidate.identity().timestamp())
+                .min(Comparator.naturalOrder()).orElseThrow();
+            Instant to = storeReceipts.stream().map(candidate -> candidate.identity().timestamp())
+                .max(Comparator.naturalOrder()).orElseThrow();
+            for (List<String> batch : batches(receiptIds)) {
+                receiptRepository
+                    .findAllByRetailerAndStoreAndExternalReceiptIdInAndTransactionTimestampBetween(
+                        retailer, entry.getKey(), batch, from, to
+                    )
+                    .forEach(receipt -> receipts.put(
+                        new ExistingReceiptIdentity(
+                            receipt.getStore().getId(),
+                            receipt.getExternalReceiptId(),
+                            receipt.getTransactionTimestamp()
+                        ),
+                        receipt
+                    ));
+            }
+        }
+        return receipts;
+    }
+
+    private Map<String, RetailerProduct> loadRetailerProducts(
+        Retailer retailer,
+        List<ParsedTransactionLine> lines
+    ) {
+        Set<String> keys = new HashSet<>();
+        for (ParsedTransactionLine line : lines) {
+            keys.add(line.productKey());
+            if (line.productCode() != null && !line.productCode().isBlank()) {
+                keys.add(ProductIdentity.codeKey(line.productCode()));
+            }
+        }
+
+        Map<String, RetailerProduct> products = new LinkedHashMap<>();
+        for (List<String> batch : batches(keys)) {
+            retailerProductRepository.findAllByRetailerAndProductKeyIn(retailer, batch)
+                .forEach(product -> products.put(product.getProductKey(), product));
+        }
+        Set<String> barcodes = lines.stream().map(ParsedTransactionLine::barcode)
+            .filter(barcode -> barcode != null && !barcode.isBlank())
+            .collect(Collectors.toSet());
+        for (List<String> batch : batches(barcodes)) {
+            retailerProductRepository.findAllByRetailerAndBarcodeIn(retailer, batch)
+                .forEach(product -> products.put(product.getProductKey(), product));
+        }
+        ProductIdentity.addBarcodeAliases(products);
+        return products;
+    }
+
+    private Map<String, CanonicalProduct> loadCanonicalProducts(List<ParsedTransactionLine> lines) {
+        Set<String> barcodes = lines.stream()
+            .map(ParsedTransactionLine::barcode)
+            .filter(barcode -> barcode != null && !barcode.isBlank())
+            .collect(Collectors.toSet());
+        Map<String, CanonicalProduct> products = new HashMap<>();
+        for (List<String> batch : batches(barcodes)) {
+            canonicalProductRepository.findAllByBarcodeIn(batch)
+                .forEach(product -> products.put(product.getBarcode(), product));
+        }
+        return products;
+    }
+
+    private <T> List<List<T>> batches(Collection<T> values) {
+        List<T> list = List.copyOf(values);
+        List<List<T>> batches = new ArrayList<>();
+        for (int start = 0; start < list.size(); start += LOOKUP_BATCH_SIZE) {
+            batches.add(list.subList(start, Math.min(start + LOOKUP_BATCH_SIZE, list.size())));
+        }
+        return batches;
     }
 
     private Map<String, Store> resolveStores(Retailer retailer, Set<ReceiptIdentity> identities) {
@@ -167,25 +286,40 @@ public class ImportPersistenceService {
         return prepared;
     }
 
-    private RetailerProduct resolveProduct(Retailer retailer, ParsedTransactionLine source) {
-        return retailerProductRepository.findByRetailerAndProductKey(retailer, source.productKey())
-            .orElseGet(() -> {
-                RetailerProduct product = new RetailerProduct(
-                    retailer,
-                    source.productKey(),
-                    source.productCode(),
-                    source.barcode(),
-                    source.productName()
-                );
-                if (source.barcode() != null) {
-                    canonicalProductRepository.findByBarcode(source.barcode())
-                        .ifPresent(canonical -> product.mapTo(
-                            canonical,
-                            RetailerProduct.MatchMethod.EXACT_BARCODE
-                        ));
-                }
-                return retailerProductRepository.save(product);
-            });
+    private RetailerProduct resolveProduct(
+        Retailer retailer,
+        ParsedTransactionLine source,
+        Map<String, RetailerProduct> retailerProducts,
+        Map<String, CanonicalProduct> canonicalByBarcode
+    ) {
+        RetailerProduct existing = retailerProducts.get(source.productKey());
+        if (existing == null && source.productCode() != null && !source.productCode().isBlank()) {
+            RetailerProduct legacy = retailerProducts.get(ProductIdentity.codeKey(source.productCode()));
+            if (legacy != null && (source.barcode() == null || legacy.getBarcode() == null
+                || source.barcode().equals(legacy.getBarcode()))) {
+                existing = legacy;
+            }
+        }
+        if (existing != null) {
+            return existing;
+        }
+
+        RetailerProduct product = new RetailerProduct(
+            retailer,
+            source.productKey(),
+            source.productCode(),
+            source.barcode(),
+            source.productName()
+        );
+        if (source.barcode() != null) {
+            CanonicalProduct canonical = canonicalByBarcode.get(source.barcode());
+            if (canonical != null) {
+                product.mapTo(canonical, RetailerProduct.MatchMethod.EXACT_BARCODE);
+            }
+        }
+        retailerProductRepository.save(product);
+        retailerProducts.put(product.getProductKey(), product);
+        return product;
     }
 
     private String basketFingerprint(
@@ -198,10 +332,10 @@ public class ImportPersistenceService {
                 nullToEmpty(line.productCode()),
                 nullToEmpty(line.barcode()),
                 line.productName().trim(),
-                line.quantity().toPlainString(),
-                line.unitPrice().toPlainString(),
-                line.discountAmount().toPlainString(),
-                line.lineTotal().toPlainString()
+                canonicalDecimal(line.quantity()),
+                canonicalDecimal(line.unitPrice()),
+                canonicalDecimal(line.discountAmount()),
+                canonicalDecimal(line.lineTotal())
             ))
             .sorted(Comparator.naturalOrder())
             .toList();
@@ -227,7 +361,14 @@ public class ImportPersistenceService {
         return value == null ? "" : value.trim();
     }
 
+    private String canonicalDecimal(BigDecimal value) {
+        return value.setScale(4).toPlainString();
+    }
+
     private record ReceiptIdentity(String storeId, String receiptId, Instant timestamp) {
+    }
+
+    private record ExistingReceiptIdentity(UUID storeId, String receiptId, Instant timestamp) {
     }
 
     private static final class PreparedReceipt {

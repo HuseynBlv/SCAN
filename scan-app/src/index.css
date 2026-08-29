@@ -11,3 +11,60 @@ body {
 #root {
   min-height: 100vh;
 }
+
+.app-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 700;
+  color: #e61c24;
+  background: #f4f5f7;
+}
+
+.app-failure {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 32px;
+  font-family: Inter, system-ui, sans-serif;
+  text-align: center;
+  color: #17181b;
+  background: #f4f5f7;
+}
+
+.app-failure-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #fff;
+  background: #e61c24;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.app-failure h1 {
+  margin: 20px 0 8px;
+}
+
+.app-failure p {
+  max-width: 480px;
+  margin: 0 0 20px;
+  color: #5f636c;
+  line-height: 1.5;
+}
+
+.app-failure button {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: #c9141c;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}

@@ -10,7 +10,10 @@ import java.util.UUID;
 
 public interface ImportJobRepository extends JpaRepository<ImportJob, UUID> {
     @EntityGraph(attributePaths = {"retailer", "importProfile"})
-    Optional<ImportJob> findByRetailerAndFileSha256(Retailer retailer, String fileSha256);
+    Optional<ImportJob> findFirstByRetailerAndFileSha256OrderByAttemptNumberDesc(
+        Retailer retailer,
+        String fileSha256
+    );
 
     @Override
     @EntityGraph(attributePaths = {"retailer", "importProfile"})

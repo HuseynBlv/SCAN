@@ -25,6 +25,7 @@ public class ImportService {
     private final RetailerRepository retailerRepository;
     private final ImportProfileRepository importProfileRepository;
     private final ImportJobRepository importJobRepository;
+    private final ImportJobCoordinator jobCoordinator;
     private final List<TransactionFileParser> parsers;
     private final TransactionRowMapper rowMapper;
     private final ImportPersistenceService persistenceService;
@@ -33,6 +34,7 @@ public class ImportService {
         RetailerRepository retailerRepository,
         ImportProfileRepository importProfileRepository,
         ImportJobRepository importJobRepository,
+        ImportJobCoordinator jobCoordinator,
         List<TransactionFileParser> parsers,
         TransactionRowMapper rowMapper,
         ImportPersistenceService persistenceService
@@ -40,6 +42,7 @@ public class ImportService {
         this.retailerRepository = retailerRepository;
         this.importProfileRepository = importProfileRepository;
         this.importJobRepository = importJobRepository;
+        this.jobCoordinator = jobCoordinator;
         this.parsers = parsers;
         this.rowMapper = rowMapper;
         this.persistenceService = persistenceService;
@@ -57,13 +60,17 @@ public class ImportService {
 
         byte[] bytes = readBytes(file);
         String hash = sha256(bytes);
-        var duplicate = importJobRepository.findByRetailerAndFileSha256(retailer, hash);
-        if (duplicate.isPresent()) {
-            return ImportJobResponse.from(duplicate.get(), true, existingErrors(duplicate.get()));
-        }
-
         String filename = safeFilename(file.getOriginalFilename());
-        ImportJob job = importJobRepository.save(new ImportJob(retailer, profile, filename, hash));
+        ImportJobCoordinator.ImportJobStart start = jobCoordinator.begin(
+            retailer.getId(),
+            profile.getId(),
+            filename,
+            hash
+        );
+        ImportJob job = start.job();
+        if (start.duplicateFile()) {
+            return ImportJobResponse.from(job, true, existingErrors(job));
+        }
         if (bytes.length == 0) {
             return fail(job, 0, List.of("file: uploaded file is empty"));
         }
@@ -88,15 +95,7 @@ public class ImportService {
 
             job.markImporting(mapping.lines().size());
             importJobRepository.save(job);
-            ImportPersistenceResult result = persistenceService.persist(retailer, profile, job, mapping.lines());
-            job.markCompleted(
-                mapping.lines().size(),
-                result.importedReceipts(),
-                result.importedLines(),
-                result.duplicateReceipts(),
-                result.unresolvedProducts()
-            );
-            importJobRepository.save(job);
+            persistenceService.persistAndComplete(retailer, profile, job, mapping.lines());
             return ImportJobResponse.from(job, false, List.of());
         } catch (IOException | RuntimeException exception) {
             return fail(job, job.getTotalRows(), List.of(safeErrorMessage(exception)));

@@ -32,6 +32,10 @@ class FlywayMigrationTest {
         assertThat(retailer.isCciSharingEnabled()).isTrue();
         assertThat(importProfileRepository.findByRetailerAndCodeIgnoreCase(retailer, "CANONICAL"))
             .isPresent();
+        var kaggle = retailerRepository.findByCodeIgnoreCase("KAGGLE").orElseThrow();
+        assertThat(kaggle.getZoneId()).isEqualTo("Asia/Baku");
+        assertThat(importProfileRepository.findByRetailerAndCodeIgnoreCase(kaggle, "KAGGLE_2019"))
+            .isPresent();
         assertThat(canonicalProductRepository.count()).isEqualTo(4);
         assertThat(canonicalProductRepository.findByBarcode("5449000000996"))
             .hasValueSatisfying(product -> assertThat(product.isCci()).isTrue());

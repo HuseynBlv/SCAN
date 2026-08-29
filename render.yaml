@@ -1,0 +1,26 @@
+# Initial demo deploy uses the unmerged, verified feature branch.
+# After PR #2 is merged, change branch to main here and in the Render service.
+services:
+  - type: web
+    name: scan-demo
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: codex/phase-1-kaggle-cci-dashboard
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: cloud
+      - key: SCAN_DB_URL
+        sync: false
+      - key: SCAN_DB_USERNAME
+        sync: false
+      - key: SCAN_DB_PASSWORD
+        sync: false
+      - key: SCAN_ADMIN_PASSWORD
+        generateValue: true
+      - key: SCAN_CCI_PASSWORD
+        generateValue: true

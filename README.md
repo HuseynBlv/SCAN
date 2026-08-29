@@ -1,179 +1,350 @@
 # SCAN
 
-> Sales & Consumption Analytics Network
+**Sales & Consumption Analytics Network**
 
-SCAN is an analytics and data-collaboration layer that turns transaction data already
-created by a retailer's checkout system into decision-ready basket intelligence for the
-retailer and approved aggregate insights for **CCI Sales and Marketing**.
+[![CI](https://github.com/HuseynBlv/SCAN/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HuseynBlv/SCAN/actions/workflows/ci.yml)
 
-The product has pivoted away from cashier-operated phone scanning. Active backend
-development is in [`scan-api/`](scan-api/); the existing React scanner in [`scan-app/`](scan-app/)
-is retained as a legacy prototype while its useful HQ interface is evolved for the new
-workflow.
+Turn retailer receipt exports into basket intelligence and practical actions for
+**CCI Sales and Marketing**.
 
-## Legacy hackathon prototype
+SCAN is an analytics and data-collaboration layer for medium-sized formal retailers that
+already use a digital checkout system. It uses the transaction data they already generate.
+Cashiers do not scan products into SCAN, and SCAN does not replace a POS, cash register,
+inventory system, or ERP.
 
-The original prototype was designed around two complementary experiences:
+**Current stage:** a working pilot prototype with CSV/XLSX ingestion, deterministic analytics,
+and an API-backed React dashboard. A reproducible Kaggle demo exercises the full pipeline. The
+single-container application is live on Render Free at
+[scan-demo.onrender.com](https://scan-demo.onrender.com), backed by Neon Free PostgreSQL over
+verified TLS. Real-retailer validation remains next.
 
-- **Cashier View** for a store owner or cashier using a phone at the counter
-- **HQ View** for a CCI team member monitoring aggregated trends across stores
+## What SCAN helps answer
 
-It is built as a fast, presentation-friendly React app with real camera scanning, live feedback, analytics screens, and a polished demo flow.
+- What do shoppers buy alongside CCI products?
+- Which companion products and categories appear most often in CCI baskets?
+- How do CCI penetration and basket value differ between stores?
+- When does basket activity occur?
+- Which observed relationships are worth testing through a bundle or joint display?
 
-## Why This Exists
+Recommendations follow **Fact → Interpretation → Recommended Action**. Numbers come from
+the analytics engine, not an LLM. An observed relationship suggests a test; it does not
+prove that a promotion will increase sales.
 
-SCAN answers a simple business question:
+## The working product
 
-**What are customers actually buying together, and how can CCI use that insight?**
+| Dashboard section | What it shows today |
+|---|---|
+| Overview | Basket count, CCI baskets, penetration, average basket value, mapping coverage, and up to three insights |
+| Basket Analysis | Top mapped non-CCI companion products and categories, with attachment rates |
+| Product Performance | CCI SKU basket counts, quantities, and imported line-value totals |
+| Time & Store | Daypart and weekday/weekend basket distribution, plus store-level comparisons |
+| Recommendations | Rule-based facts, interpretations, and suggested actions |
 
-Instead of treating a barcode scan as a checkout-only action, SCAN turns each basket into a small data signal. Over time, those signals power:
+All five sections use the same backend aggregate response. Current companion rankings are
+across all CCI baskets, not a selected SKU; time distributions describe all imported baskets.
+Date/store/SKU filters and period-over-period changes are not implemented yet.
 
-- product pair analysis
-- store-level performance insights
-- restock recommendations
-- rewards and gamification for store partners
-- HQ visibility into regional trends
+### From export to insight
 
-## Product Experience
-
-### Cashier View
-
-Mobile-first, optimized for a phone at the point of sale.
-
-Includes:
-
-- live barcode scanning with `@zxing/browser`
-- duplicate-scan protection
-- Open Food Facts lookup
-- graceful offline fallback for key products
-- basket building and logging
-- `My Store` analytics
-- `Rewards` and achievement system
-- `Rankings` leaderboard view
-- `Demo Mode` for presentation-safe simulated scans
-
-### HQ View
-
-Desktop-oriented analytics view for CCI headquarters.
-
-Includes:
-
-- top KPI cards
-- basket pair analysis
-- district-level comparison
-- peak-hours chart
-- live transaction feed
-- anonymized store reporting
-
-## Core Features
-
-- **Real camera scanning** with a smoother one-dimensional retail barcode pipeline
-- **Fast scan feedback** with processing states, success feedback, and vibration support
-- **Hardcoded fallback catalog** for offline resilience:
-  - Coca-Cola 330ml
-  - Lays Original
-  - Azerchay Black Tea
-- **Splash screen** and polished transitions for demos
-- **Mode switcher** between cashier and HQ experiences
-- **Hackathon-ready UI** using CCI red branding: `#E61C24`
-
-## Tech Stack
-
-- **React 19**
-- **Vite**
-- **Recharts**
-- **@zxing/browser**
-- **Open Food Facts API**
-
-## Project Structure
-
-```text
-SCAN/
-├── README.md
-└── scan-app/
-    ├── src/
-    │   ├── App.jsx
-    │   ├── main.jsx
-    │   └── index.css
-    ├── public/
-    ├── package.json
-    └── vite.config.js
+```mermaid
+flowchart LR
+    A["Retailer CSV / XLSX export"] --> B["Column mapping and validation"]
+    B --> C["Canonical lines and product mapping"]
+    C --> D["Receipt reconstruction and duplicate checks"]
+    D --> E["Deterministic basket analytics"]
+    E --> F["Rule-based insights"]
+    F --> G["CCI aggregate-sharing permission check"]
+    G --> H["React CCI dashboard"]
 ```
 
-## Running Locally
+- **Repeatable imports:** uploading identical bytes returns the active/completed import job;
+  a failed file can be retried as a new numbered attempt. Concurrent imports for one retailer
+  are serialized, and identical receipts in overlapping files are skipped without double-counting.
+- **Safe failures:** malformed transaction uploads write no receipts. Receipt writes and job
+  completion are atomic; reusing a receipt identity with different contents rejects the import
+  rather than silently changing history.
+- **Explicit product mapping:** exact barcodes, saved retailer mappings, and manual/catalog
+  mapping; canonical names have a stable case-insensitive identity, with no fuzzy or AI matching.
+- **Traceability:** import jobs retain status, counts, and validation errors.
+- **Separation of access:** import and mapping endpoints are admin-only. CCI receives
+  aggregate analytics only for retailers with CCI sharing enabled.
 
-From the app directory:
+See the [data contract](docs/pilot-data-contract.md) and
+[metric definitions](docs/analytics-definitions.md) for exact rules and denominators.
+
+## Reproducible demo
+
+The [Kaggle demo guide](docs/kaggle-demo.md) prepares and imports a deterministic sample of
+complete receipts. For the source ZIP identified in that guide, the verified result is:
+
+| Check | Expected result |
+|---|---:|
+| Complete baskets | 10,000 |
+| Transaction lines | 54,848 |
+| Stores | 21 |
+| Baskets containing mapped CCI products | 209 |
+| CCI basket penetration | 2.1% |
+| Mapped transaction lines | 100% |
+
+These are technical demo results, **not current retailer or CCI market evidence**. The
+adapter uses explicit assumptions for quantity, prices, currency, and product classification.
+Mapping coverage measures linked lines, not independent confirmation that every label is
+correct. Raw downloads and generated data are not committed to this repository.
+
+## Run locally
+
+### Requirements
+
+- Java 21 and Maven 3.6.3+; CI uses Java 21.
+- Node.js 24 and npm; CI uses Node.js 24.
+- Either the configured Neon development workflow or a running local PostgreSQL server with
+  a `scan` database and a login allowed to create its schema.
+
+No AI API key, Supabase account, or camera is needed for the current dashboard.
+
+### 1. Start the API with Neon
+
+Authenticate the Neon CLI once, create a private local config, and start the API:
+
+```bash
+neon auth
+cp .env.example .env.neon
+# Edit .env.neon and replace both SCAN application password placeholders.
+bash scripts/run-neon-api.sh
+```
+
+The repository is linked to the `production` branch of Neon project
+`withered-darkness-12839995`. The launcher targets the app-owned `scan` database as role
+`scan_app`, retrieves its direct connection URI through the authenticated Neon CLI, converts
+it to a verified-TLS JDBC URL, and passes the database credential only to the Spring Boot
+process. It does not write the database password to disk. `.env.neon` and the machine-local
+`.neon` context are ignored by Git.
+
+Only `SCAN_ADMIN_PASSWORD` and `SCAN_CCI_PASSWORD` belong in `.env.neon`; they protect the
+pilot API and are unrelated to Neon account/database credentials. The root
+[`.env.example`](.env.example) documents the supported local overrides.
+
+The global Codex Neon MCP connection is project-scoped and read-only, and exposes only
+project/branch inspection, schema/query reading, observability, and documentation tools.
+Restart Codex after first-time setup so a new task can load those tools. Database changes
+continue to use the explicit CLI/application workflow.
+
+### Local PostgreSQL alternative
+
+From the repository root, in the backend terminal:
+
+```bash
+cd scan-api
+export SCAN_DB_URL='jdbc:postgresql://localhost:5432/scan'
+export SCAN_DB_USERNAME='scan'
+export SCAN_DB_PASSWORD='replace-with-your-database-password'
+export SCAN_ADMIN_PASSWORD='choose-a-local-admin-password'
+export SCAN_CCI_PASSWORD='choose-a-local-cci-password'
+mvn spring-boot:run
+```
+
+Use your own passwords and keep them out of Git. Environment variables apply to the terminal
+where they are set. With either database path, Flyway creates the schema and seeds the `DEMO`
+and `KAGGLE` profiles; it does **not** automatically import transaction files.
+
+See the [backend guide](scan-api/README.md) for database setup and API examples.
+
+### 2. Load data
+
+Follow the [Kaggle demo guide](docs/kaggle-demo.md): prepare the ZIP, import its product
+catalog, then import transactions. If that sample is already loaded, skip this step.
+
+Without the download, use the small synthetic fixture in the
+[backend guide](scan-api/README.md#exercise-the-phase-0-api) and sign in with retailer code
+`DEMO` instead. Its results will differ from the Kaggle table above.
+
+### 3. Start the dashboard
+
+From the repository root, in a second terminal:
 
 ```bash
 cd scan-app
-npm install
+npm ci
 npm run dev
 ```
 
-Then open the local Vite URL in your browser.
+Open the URL Vite prints, usually `http://localhost:5173`, then sign in:
 
-## Testing on a Phone
+- Retailer: `KAGGLE` for the prepared sample, or `DEMO` for the synthetic fixture.
+- Username: `scan-cci`.
+- Password: the value you set for `SCAN_CCI_PASSWORD` in the backend terminal.
 
-For real barcode scanning on a phone, use an **HTTPS** URL. Mobile browsers often block camera access on plain `http`.
+Vite forwards `/api` requests to `localhost:8080` during development. The frontend holds
+credentials in memory only; reloading the page requires signing in again.
 
-Recommended options:
+### A short demo walkthrough
 
-1. deploy to **Vercel**
-2. or run locally and expose the app with a secure tunnel such as **ngrok**
+1. Start on **Overview**: explain the imported basket count, CCI penetration, and mapping coverage.
+2. Open **Basket Analysis**: identify a companion and explain its attachment-rate denominator.
+3. Use **Product Performance** and **Time & Store** to compare SKUs and stores without claiming causation.
+4. Finish on **Recommendations**: choose one action to test, not a guaranteed sales outcome.
+5. Re-upload the same transaction file and refresh: `duplicateFile: true` and unchanged totals
+   demonstrate that repeat uploads do not inflate the story.
 
-## Deployment Notes
+## Tests and continuous integration
 
-If deploying with Vercel:
+From the repository root:
 
-- **Framework Preset:** `Vite`
-- **Root Directory:** `scan-app`
-- **Build Command:** `npm run build`
-- **Output Directory:** `dist`
+```bash
+(cd scan-api && mvn verify)
+(cd scan-app && npm test && npm run lint && npm run build)
+```
 
-No custom environment variables are required for the current prototype.
+Backend tests use an isolated H2 database; they do not need or modify local PostgreSQL.
+`mvn verify` produces `scan-api/target/site/jacoco/index.html` and enforces at least 80% line
+and 55% branch coverage. Coverage is a regression guard, not proof of business correctness.
+An opt-in full-sample smoke test also checks the verified 10,000-basket result and enforces a
+five-second local analytics budget after import.
 
-## Offline Behavior
+GitHub Actions runs backend verification and frontend tests, lint, and build on pull requests
+and pushes to `main`, then builds the deployable Docker image and smoke-tests it against
+disposable PostgreSQL 18 under a 512 MB app memory limit. Workflow actions are pinned to
+immutable commits, and Dependabot checks application, container, and CI dependencies monthly.
+See the
+[container test instructions](docs/free-demo-deployment.md#local-container-verification).
+The optional 10,000-basket tests require locally generated files; they are not part of normal CI.
 
-The prototype is designed to remain usable even when product lookup is unavailable.
+## Privacy and pilot boundaries
 
-- Barcode scanning works locally in the browser
-- Open Food Facts is the only external API dependency
-- If lookup fails, SCAN falls back to the built-in demo catalog when possible
+- Customer names, phone numbers, loyalty/card identifiers, bank credentials, and cashier
+  personal information are not required. Remove them before sharing or importing exports.
+- CCI accounts cannot access the admin import/mapping endpoints. Sharing is currently a
+  retailer-level switch, not a complete per-user/per-retailer permission system.
+- Shared environment-configured Basic Auth accounts are for the pilot. Production needs
+  HTTPS, account management, retailer-scoped access, and an agreed data-sharing policy.
+- Positive sales are supported. Returns, voids, taxes, and receipt-level discount semantics
+  must be confirmed with a real retailer before their data is considered decision-ready.
+- Monetary analytics refuse to combine receipts from multiple currencies. A retailer export
+  must use one confirmed currency per analytical dataset until explicit conversion is designed.
+- Imports are synchronous, limited to 25 MB, and spreadsheet parsing uses the first worksheet.
+  Analytics use database aggregates plus compact receipt summaries for time/store metrics; larger
+  workloads and concurrent analytical traffic are not validated.
+- Receipt identity currently includes retailer, store, receipt ID, and timestamp. Verify this
+  against the retailer's actual receipt-number reuse rules.
+- No live POS connector, scheduled synchronization, promotion-effectiveness calculation,
+  browser upload/mapping workflow, or separate retailer dashboard is implemented yet.
 
-## Demo Flow
+## Deployment status
 
-For a reliable live presentation:
+The [free-demo deployment guide](docs/free-demo-deployment.md) uses **one Render Free service
+for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile packages
+the dashboard into the Java application. One HTTPS origin serves the page and `/api`, so no
+cross-origin configuration is needed. `render.yaml` explicitly selects the free instance and
+manual deployment. On 2026-08-28, Render deployed application commit `efdcad8` successfully at
+[https://scan-demo.onrender.com](https://scan-demo.onrender.com): the React root returned 200,
+`GET /health` returned `{"status":"UP"}`, the unauthenticated analytics route returned 401,
+and startup logs confirmed Flyway schema version 4 on Neon PostgreSQL 18.6. The hosted import
+was then verified at 10,000 baskets and 54,848 lines with 100% mapping; a repeat upload returned
+`duplicateFile: true` without changing totals. Authenticated analytics returned the expected
+209 CCI baskets and 2.1% penetration across all five dashboard sections.
 
-1. open **Cashier View**
-2. use **Demo Mode** if camera conditions are poor
-3. log the basket
-4. switch to **HQ View**
-5. show how the new basket influences the live feed and analytics
+Free services can sleep, start slowly, or stop at quota limits. This is an occasional technical
+demo, not a production availability commitment. The guide covers account setup, runtime
+secrets, imports, verification, limits, and updating the tracked branch after PR #2 is merged.
 
-## Status
+A successful frontend-only Vercel build does not deploy Spring Boot or make API sign-in work.
+The Vite development proxy is not included in production builds. A separately hosted frontend
+still needs explicit API routing or implemented and tested CORS; `VITE_SCAN_API_BASE_URL`
+alone is not enough. Existing Vercel configuration is unchanged.
 
-This is a **hackathon prototype**, not a production checkout system.
+Never put passwords in `VITE_*` variables: those values are embedded in the browser bundle.
+The GitHub repository has an existing Vercel integration, so merging into its production
+branch can update the public frontend. Verify backend routing before presenting that URL
+as a working analytics demo.
 
-It is optimized for:
+Before putting real or non-public data in Neon, reset the default `neondb_owner` password in
+the Neon Console because its original connection string was shared outside a secret manager.
+SCAN does not use that role, so rotating it will not affect the `scan_app` connection.
 
-- concept validation
-- storytelling
-- UI polish
-- live demos
+## Troubleshooting
 
-## Pivoted backend — Phase 0
+| Symptom | Check |
+|---|---|
+| API startup fails with connection refused on port 5432 | PostgreSQL must be running on the host and port in `SCAN_DB_URL`. Read the final database error; the Maven `sun.misc.Unsafe` warning alone is not the cause. |
+| API returns 401 | Use `scan-admin` for imports or `scan-cci` for analytics, with the corresponding backend password. `curl -u scan-admin` prompts safely for the password. |
+| API returns 403 | The account may lack the required role, or CCI sharing is disabled for that retailer. |
+| Dashboard has no baskets | Confirm the retailer code and import transactions; migrations create profiles, not transaction history. |
+| Hosted sign-in fails while local sign-in works | Check the hosted API route. A frontend-only deployment does not include Spring Boot. |
 
-Development of the retailer-export version now lives in [`scan-api/`](scan-api/). The new
-Spring Boot service accepts configurable CSV/XLSX transaction exports, creates audited and
-idempotent imports, reconstructs receipts, supports explicit product mapping, and exposes
-aggregate-only deterministic analytics.
+## Next milestones
 
-The original React scanner remains intact while the backend data path is validated. See:
+1. **Validate one real retailer export:** import complete receipts, resolve product mappings,
+   and reconcile receipt counts and sales totals against the source system.
+2. **Make the analysis decision-specific:** date/store/SKU filters, matching comparison
+   periods, visible denominators, and minimum-sample safeguards for recommendations.
+3. **Make onboarding demonstrable:** a browser upload, validation report, unresolved-product
+   review, and import history above the existing API.
+4. **Run one measurable pilot:** agree on a bundle/display test and its success measure;
+   deploy a secured, accessible demo once the hosting and sharing scope are agreed.
 
-- [`scan-api/README.md`](scan-api/README.md)
-- [`docs/pilot-data-contract.md`](docs/pilot-data-contract.md)
-- [`docs/analytics-definitions.md`](docs/analytics-definitions.md)
+These are planned improvements, not claims about the current feature set.
 
-## Credits
+## Repository and documentation
 
-Built as a prototype for **CCI** using modern frontend tools and public food-product data from [Open Food Facts](https://world.openfoodfacts.org/).
+```text
+SCAN/
+├── .github/                   # CI plus monthly dependency update configuration
+├── Dockerfile                 # Builds React into the Java 21 application
+├── render.yaml                # One Free web service; runtime secrets only
+├── scripts/                   # Isolated deployment smoke test
+├── docs/                      # Data contract, metrics, demo, and hosting runbook
+├── scan-api/                  # Java / Spring Boot, JPA, PostgreSQL, Flyway
+│   └── src/                   # Ingestion, catalog, analytics, security, and tests
+└── scan-app/                  # React 19, Vite, Recharts, Vitest
+    └── src/
+        ├── AppLoader.jsx      # Default dashboard / explicit legacy switch
+        ├── components/        # CCI dashboard and tests
+        ├── services/scanApi.js
+        └── App.jsx            # Preserved original scanner
+```
+
+- [Backend setup and API examples](scan-api/README.md)
+- [Frontend setup and configuration](scan-app/README.md)
+- [Reproducible Kaggle demo](docs/kaggle-demo.md)
+- [Free Render + Neon demo deployment](docs/free-demo-deployment.md)
+- [Pilot data contract and retailer questions](docs/pilot-data-contract.md)
+- [Analytics definitions and insight rules](docs/analytics-definitions.md)
+
+## Legacy scanner
+
+The original hackathon prototype remains intact for reference. To run it explicitly from
+`scan-app/`:
+
+```bash
+VITE_ENABLE_LEGACY_SCANNER=true npm run dev
+```
+
+<details>
+<summary>Original scanner capabilities and demo notes (not the current product)</summary>
+
+The original React prototype paired a mobile cashier view with an HQ analytics view. It
+included camera barcode scanning with `@zxing/browser`, duplicate-scan protection, scan
+feedback/vibration, basket logging, My Store analytics, rewards, rankings, and simulated
+scans in Demo Mode. Its HQ view included KPI cards, product pairs, district comparisons,
+peak hours, and a transaction feed. It used CCI-red branding (`#E61C24`), a splash screen,
+and a cashier/HQ mode switcher.
+
+Product lookup used Open Food Facts with a small fallback catalog (Coca-Cola 330ml,
+Lays Original, and Azerchay Black Tea). Camera decoding runs in the browser; the fallback
+catalog helps when lookup is unavailable, but this is not an offline guarantee for the new
+analytics dashboard.
+
+For phone camera access, use HTTPS through a hosted frontend or a secure development
+tunnel. The legacy presentation flow was Cashier View → Demo Mode/scanning → log basket →
+HQ View. Rewards, scanner-generated baskets, and this demo flow do not power the current
+retailer-export analytics pipeline.
+
+</details>
+
+## Data credits
+
+The current technical demo uses the
+[Kaggle supermarket dataset](https://www.kaggle.com/datasets/mexwell/supermarket-dataset);
+source attribution and transformation assumptions are in the [demo guide](docs/kaggle-demo.md).
+The legacy scanner uses public food-product data from
+[Open Food Facts](https://world.openfoodfacts.org/).

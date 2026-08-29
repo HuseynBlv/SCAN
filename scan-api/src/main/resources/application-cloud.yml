@@ -1,0 +1,23 @@
+# Small, occasional-use demo. The default local development profile is unchanged.
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 0
+      idle-timeout: 60000
+      keepalive-time: 0
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  address: 0.0.0.0
+  forward-headers-strategy: framework
+  shutdown: graceful
+  compression:
+    enabled: true
+  tomcat:
+    threads:
+      max: 8
+      min-spare: 2
+    max-connections: 50
+    accept-count: 20

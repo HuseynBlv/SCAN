@@ -4,6 +4,7 @@ import az.cci.scan.domain.ImportProfile;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -69,6 +70,9 @@ public class TransactionRowMapper {
         if (quantity != null && quantity.signum() <= 0) {
             errors.add(new ImportValidationError(rowNumber, profile.getQuantityColumn(), "must be greater than zero"));
         }
+        if (unitPrice != null && unitPrice.signum() < 0) {
+            errors.add(new ImportValidationError(rowNumber, profile.getUnitPriceColumn(), "must not be negative"));
+        }
         if (discount != null && discount.signum() < 0) {
             errors.add(new ImportValidationError(rowNumber, profile.getDiscountAmountColumn(), "must not be negative"));
         }
@@ -127,9 +131,21 @@ public class TransactionRowMapper {
             return null;
         }
         try {
-            return new BigDecimal(value);
+            BigDecimal normalized = new BigDecimal(value).setScale(4, RoundingMode.UNNECESSARY);
+            if (normalized.precision() > 19) {
+                errors.add(new ImportValidationError(
+                    rowNumber,
+                    column,
+                    "exceeds the supported numeric(19,4) range"
+                ));
+                return null;
+            }
+            return normalized;
         } catch (NumberFormatException exception) {
             errors.add(new ImportValidationError(rowNumber, column, "must be a plain decimal number"));
+            return null;
+        } catch (ArithmeticException exception) {
+            errors.add(new ImportValidationError(rowNumber, column, "must have at most 4 decimal places"));
             return null;
         }
     }
