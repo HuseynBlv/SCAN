@@ -57,6 +57,10 @@ export SCAN_DB_USERNAME=scan
 export SCAN_DB_PASSWORD=replace-me
 export SCAN_ADMIN_PASSWORD=replace-admin-password
 export SCAN_CCI_PASSWORD=replace-cci-password
+export SCAN_INGEST_PASSWORD=replace-connector-password
+export SCAN_RETAILER_PASSWORD=replace-retailer-password
+export SCAN_PILOT_RETAILER_CODE=DEMO
+export SCAN_PILOT_PROFILE_CODE=CANONICAL
 mvn spring-boot:run
 ```
 
@@ -93,6 +97,21 @@ curl -u scan-cci \
   'http://localhost:8080/api/v1/analytics/overview?retailerCode=DEMO'
 ```
 
+Upload through the server-bound connector identity:
+
+```bash
+curl -u scan-connector \
+  -F file=@src/test/resources/fixtures/canonical-transactions.csv \
+  http://localhost:8080/api/v1/connector/imports
+```
+
+Read the server-bound retailer dashboard:
+
+```bash
+curl -u scan-retailer \
+  'http://localhost:8080/api/v1/retailer/overview?period=ALL_TIME'
+```
+
 ## Prepare the Kaggle supermarket demo
 
 The repository includes an isolated preparation tool for the approved Kaggle 2019
@@ -120,8 +139,8 @@ created automatically by this repository.
 
 The container activates `cloud`, listens on `${PORT:8080}`, limits its Java heap to 256 MB,
 and uses a small database/thread pool. Local `mvn spring-boot:run` retains the normal profile
-unless you explicitly enable `cloud`. Set the database URL, role, password, and separate
-admin/CCI passwords in the host's environment settings, never the image or source code.
+unless you explicitly enable `cloud`. Set database and all four application-role passwords in
+the host's environment settings, never the image or source code.
 
 `GET /health` is public and returns only `{"status":"UP"}` with no database query. Page
 assets are public, but API role and retailer-sharing restrictions still apply. Check an
@@ -141,11 +160,11 @@ local database; see the hosting guide for the build and optional dataset-test co
   the real retailer export.
 - Receipt identity is currently retailer + store + receipt ID + timestamp.
 - Analytics reject mixed-currency receipt sets instead of summing unlike monetary values.
-- Analytics currently load one retailer's receipts through JPA. Production volume testing
-  will determine which calculations move to native PostgreSQL aggregation queries.
+- Time/store analytics currently load compact receipt summaries while product/category rankings
+  use database aggregation. Production volume testing will determine further pre-aggregation.
 - Pilot identities are configured from environment variables. Persistent accounts or SSO
-  are not implemented. CCI access requires the retailer's sharing flag; per-user retailer
-  permissions are not implemented.
+  are not implemented. The first retailer and connector accounts are bound to one configured
+  pilot; CCI access still requires the retailer's sharing flag.
 - Production needs HTTPS and a reachable backend, not just a static frontend deployment.
   The current security configuration does not enable cross-origin browser requests. Prefer
   same-origin frontend/API routing; a separate frontend origin requires an explicit CORS

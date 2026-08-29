@@ -24,3 +24,10 @@ scan:
     admin-password: test-admin-password
     cci-username: test-cci
     cci-password: test-cci-password
+    ingest-username: test-connector
+    ingest-password: test-connector-password
+    retailer-username: test-retailer
+    retailer-password: test-retailer-password
+  pilot:
+    retailer-code: SHARED
+    profile-code: CANONICAL

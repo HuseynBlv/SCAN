@@ -1,6 +1,7 @@
 package az.cci.scan.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,6 +16,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
+@EnableConfigurationProperties(PilotAccessProperties.class)
 public class SecurityConfig {
 
     @Bean
@@ -29,6 +31,8 @@ public class SecurityConfig {
                     "/", "/index.html", "/assets/**", "/favicon.svg", "/icons.svg", "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/imports").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/imports/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/connector/imports").hasRole("INGEST")
+                .requestMatchers("/api/v1/retailer/**").hasAnyRole("RETAILER", "ADMIN")
                 .requestMatchers("/api/v1/product-mappings/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/analytics/**").hasAnyRole("ADMIN", "CCI")
                 .requestMatchers("/error").permitAll()
@@ -44,7 +48,11 @@ public class SecurityConfig {
         @Value("${scan.security.admin-username}") String adminUsername,
         @Value("${scan.security.admin-password}") String adminPassword,
         @Value("${scan.security.cci-username}") String cciUsername,
-        @Value("${scan.security.cci-password}") String cciPassword
+        @Value("${scan.security.cci-password}") String cciPassword,
+        @Value("${scan.security.ingest-username}") String ingestUsername,
+        @Value("${scan.security.ingest-password}") String ingestPassword,
+        @Value("${scan.security.retailer-username}") String retailerUsername,
+        @Value("${scan.security.retailer-password}") String retailerPassword
     ) {
         return new InMemoryUserDetailsManager(
             User.withUsername(adminUsername)
@@ -54,6 +62,14 @@ public class SecurityConfig {
             User.withUsername(cciUsername)
                 .password(passwordEncoder.encode(cciPassword))
                 .roles("CCI")
+                .build(),
+            User.withUsername(ingestUsername)
+                .password(passwordEncoder.encode(ingestPassword))
+                .roles("INGEST")
+                .build(),
+            User.withUsername(retailerUsername)
+                .password(passwordEncoder.encode(retailerPassword))
+                .roles("RETAILER")
                 .build()
         );
     }

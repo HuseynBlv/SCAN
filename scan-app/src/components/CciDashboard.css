@@ -171,6 +171,19 @@ button:disabled {
   padding: 12px 14px;
 }
 
+.portal-switch-link {
+  display: inline-block;
+  margin-top: 24px;
+  color: #5f636c;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.portal-switch-link:hover {
+  color: #e61c24;
+}
+
 .cci-loading-shell {
   align-content: center;
   text-align: center;

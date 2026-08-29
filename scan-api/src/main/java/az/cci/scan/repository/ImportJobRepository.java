@@ -15,6 +15,9 @@ public interface ImportJobRepository extends JpaRepository<ImportJob, UUID> {
         String fileSha256
     );
 
+    @EntityGraph(attributePaths = {"retailer", "importProfile"})
+    Optional<ImportJob> findFirstByRetailerOrderByCreatedAtDesc(Retailer retailer);
+
     @Override
     @EntityGraph(attributePaths = {"retailer", "importProfile"})
     Optional<ImportJob> findById(UUID id);

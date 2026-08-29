@@ -153,6 +153,7 @@ function Login({ error, loading, onSubmit }) {
             {loading ? "Connecting…" : "Open analytics"}
           </button>
         </form>
+        <a className="portal-switch-link" href="/?portal=retailer">Retailer owner portal →</a>
       </section>
     </main>
   );
