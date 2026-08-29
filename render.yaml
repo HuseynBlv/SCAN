@@ -1,12 +1,11 @@
-# Initial demo deploy uses the unmerged, verified feature branch.
-# After PR #2 is merged, change branch to main here and in the Render service.
+# The Render service follows the protected production branch after changes are merged.
 services:
   - type: web
     name: scan-demo
     runtime: docker
     plan: free
     region: frankfurt
-    branch: codex/phase-1-kaggle-cci-dashboard
+    branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
     autoDeployTrigger: "off"
@@ -24,3 +23,11 @@ services:
         generateValue: true
       - key: SCAN_CCI_PASSWORD
         generateValue: true
+      - key: SCAN_INGEST_PASSWORD
+        generateValue: true
+      - key: SCAN_RETAILER_PASSWORD
+        generateValue: true
+      - key: SCAN_PILOT_RETAILER_CODE
+        value: KAGGLE
+      - key: SCAN_PILOT_PROFILE_CODE
+        value: KAGGLE_2019

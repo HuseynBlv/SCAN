@@ -6,3 +6,9 @@
 # Neon CLI project/branch context is machine-local.
 .neon
 .gstack/
+
+# Local build and retailer connector runtime data.
+**/target/
+**/node_modules/
+scan-data/
+scan-connector/connector.properties

@@ -170,6 +170,80 @@ class SecurityIntegrationTest {
             .andExpect(jsonPath("$.status").value("COMPLETED"));
     }
 
+    @Test
+    void letsConnectorImportOnlyForItsServerBoundRetailerAndProfile() throws Exception {
+        mockMvc.perform(multipart("/api/v1/connector/imports")
+                .file(transactionFile())
+                .param("retailerCode", "PRIVATE")
+                .param("profileCode", "DOES_NOT_EXIST")
+                .with(httpBasic("test-connector", "test-connector-password")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.retailerCode").value("SHARED"))
+            .andExpect(jsonPath("$.profileCode").value("CANONICAL"))
+            .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
+    void connectorCannotUseAdminImportOrReadAnalytics() throws Exception {
+        mockMvc.perform(multipart("/api/v1/imports")
+                .file(transactionFile())
+                .param("retailerCode", "SHARED")
+                .param("profileCode", "CANONICAL")
+                .with(httpBasic("test-connector", "test-connector-password")))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                .param("retailerCode", "SHARED")
+                .with(httpBasic("test-connector", "test-connector-password")))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cciAndRetailerUsersCannotUseConnectorUpload() throws Exception {
+        mockMvc.perform(multipart("/api/v1/connector/imports")
+                .file(transactionFile())
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(multipart("/api/v1/connector/imports")
+                .file(transactionFile())
+                .with(httpBasic("test-retailer", "test-retailer-password")))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void retailerReadsOnlyTheServerBoundRetailerDashboard() throws Exception {
+        mockMvc.perform(multipart("/api/v1/connector/imports")
+                .file(transactionFile())
+                .with(httpBasic("test-connector", "test-connector-password")))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/retailer/overview")
+                .param("period", "ALL_TIME")
+                .param("retailerCode", "PRIVATE")
+                .with(httpBasic("test-retailer", "test-retailer-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.retailerCode").value("SHARED"))
+            .andExpect(jsonPath("$.totalBaskets").value(1))
+            .andExpect(jsonPath("$.totalSales").value(1.0))
+            .andExpect(jsonPath("$.averageBasketValue").value(1.0))
+            .andExpect(jsonPath("$.topProducts[0].name").value("Local Product"))
+            .andExpect(jsonPath("$.sync.state").value("COMPLETED"))
+            .andExpect(jsonPath("$.sync.importedReceipts").value(1));
+    }
+
+    @Test
+    void cciCannotReadRetailerPrivateDashboardAndRetailerCannotReadCciEndpoint() throws Exception {
+        mockMvc.perform(get("/api/v1/retailer/overview")
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                .param("retailerCode", "SHARED")
+                .with(httpBasic("test-retailer", "test-retailer-password")))
+            .andExpect(status().isForbidden());
+    }
+
     private MockMultipartFile transactionFile() {
         String csv = """
             store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total

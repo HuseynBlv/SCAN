@@ -1,7 +1,7 @@
 # SCAN App
 
-The React frontend for SCAN. The default experience is the pivoted CCI Sales and Marketing
-dashboard backed by aggregate analytics from `scan-api`.
+The React frontend for SCAN. It provides separate retailer owner and CCI Sales/Marketing
+portals backed by deterministic analytics from `scan-api`.
 
 The original cashier-scanning prototype is preserved for reference but is not part of the
 current retailer-export workflow.
@@ -17,9 +17,10 @@ npm run dev
 
 Vite proxies `/api` to `http://localhost:8080`. Open the displayed Vite URL and sign in with:
 
-- Retailer code: `KAGGLE` for the prepared demo dataset.
-- Username: `scan-cci`.
-- Password: the value supplied to the API as `SCAN_CCI_PASSWORD`.
+- Retailer portal: `/?portal=retailer`, username `scan-retailer`, password
+  `SCAN_RETAILER_PASSWORD`.
+- CCI portal: `/`, retailer code `KAGGLE`, username `scan-cci`, password
+  `SCAN_CCI_PASSWORD`.
 
 Prepare and import the sample using the [Kaggle demo guide](../docs/kaggle-demo.md) first.
 For the smaller synthetic API fixture, use retailer code `DEMO`. No Supabase account or

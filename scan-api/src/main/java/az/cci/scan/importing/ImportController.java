@@ -34,6 +34,10 @@ public class ImportController {
         @RequestPart("file") MultipartFile file
     ) {
         ImportJobResponse response = importService.importFile(retailerCode, profileCode, file);
+        return httpResponse(response);
+    }
+
+    static ResponseEntity<ImportJobResponse> httpResponse(ImportJobResponse response) {
         if (response.duplicateFile()) {
             return ResponseEntity.ok(response);
         }

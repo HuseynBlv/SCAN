@@ -25,6 +25,8 @@ fi
 
 : "${SCAN_ADMIN_PASSWORD:?Set SCAN_ADMIN_PASSWORD in the environment or .env.neon}"
 : "${SCAN_CCI_PASSWORD:?Set SCAN_CCI_PASSWORD in the environment or .env.neon}"
+: "${SCAN_INGEST_PASSWORD:?Set SCAN_INGEST_PASSWORD in the environment or .env.neon}"
+: "${SCAN_RETAILER_PASSWORD:?Set SCAN_RETAILER_PASSWORD in the environment or .env.neon}"
 
 project_id="${SCAN_NEON_PROJECT_ID:-withered-darkness-12839995}"
 branch="${SCAN_NEON_BRANCH:-production}"

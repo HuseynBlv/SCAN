@@ -36,3 +36,10 @@ scan:
     admin-password: ${SCAN_ADMIN_PASSWORD}
     cci-username: ${SCAN_CCI_USERNAME:scan-cci}
     cci-password: ${SCAN_CCI_PASSWORD}
+    ingest-username: ${SCAN_INGEST_USERNAME:scan-connector}
+    ingest-password: ${SCAN_INGEST_PASSWORD}
+    retailer-username: ${SCAN_RETAILER_USERNAME:scan-retailer}
+    retailer-password: ${SCAN_RETAILER_PASSWORD}
+  pilot:
+    retailer-code: ${SCAN_PILOT_RETAILER_CODE:KAGGLE}
+    profile-code: ${SCAN_PILOT_PROFILE_CODE:KAGGLE_2019}

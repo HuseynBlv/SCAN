@@ -8,12 +8,12 @@ export class ScanApiError extends Error {
   }
 }
 
-function apiUrl(path) {
+export function apiUrl(path) {
   const baseUrl = `${import.meta.env.VITE_SCAN_API_BASE_URL || ""}`.replace(/\/$/, "");
   return `${baseUrl}${path}`;
 }
 
-function basicAuthorization(username, password) {
+export function basicAuthorization(username, password) {
   try {
     return `Basic ${window.btoa(`${username}:${password}`)}`;
   } catch {
@@ -21,7 +21,7 @@ function basicAuthorization(username, password) {
   }
 }
 
-async function errorMessage(response) {
+export async function errorMessage(response) {
   if ([502, 503, 504].includes(response.status)) {
     return "The SCAN API is temporarily unavailable. If the demo is waking up, wait a minute and try again.";
   }
