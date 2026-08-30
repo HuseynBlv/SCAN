@@ -13,8 +13,9 @@ Cashiers do not scan products into SCAN, and SCAN does not replace a POS, cash r
 inventory system, or ERP.
 
 **Current stage:** a working pilot prototype with CSV/XLSX ingestion, a tested unattended
-retailer connector, deterministic analytics, and separate retailer/CCI portal access. A
-reproducible Kaggle demo exercises the pipeline. The
+retailer connector, deterministic analytics, separate retailer/CCI portal access, and a
+responsive briefing-first interface based on the shared SCAN design system. A reproducible
+Kaggle demo exercises the pipeline. The
 single-container application is live on Render Free at
 [scan-demo.onrender.com](https://scan-demo.onrender.com), backed by Neon Free PostgreSQL over
 verified TLS. Real-retailer validation remains next.
@@ -35,16 +36,30 @@ prove that a promotion will increase sales.
 
 | Portal | What it shows today |
 |---|---|
-| Retailer Overview | Sales, baskets, average basket, items/basket, CCI penetration, mapping quality, and recent sales trend |
+| Retailer Overview | Three-things briefing, KPI strip, sales trend, top products, recommended actions, and sync freshness |
 | Retailer Products & Categories | Top products and categories by imported line revenue |
 | Retailer Time & Stores | Daypart, weekday/weekend, and store performance |
 | Retailer Recommendations | Rule-based facts, interpretations, and suggested actions |
 | Retailer Data Sync | Latest received file, completion state, counts, mapping gaps, and errors |
-| CCI dashboard | Approved basket, companion, CCI SKU, time/store, and recommendation analytics |
+| CCI Overview | Three-things briefing, basket KPIs, companion-category signal, top companions, actions, and data confidence |
+| CCI analysis pages | Approved companion product/category, CCI SKU, time/store, and recommendation analytics |
 
 Retailer analytics support today, last 7 days, last 30 days, and all-time periods. CCI companion
 rankings remain across all CCI baskets rather than a selected SKU. Period-over-period changes
 and CCI-side date/store/SKU filters are not implemented yet.
+
+### Interface principles
+
+- **Briefing before exploration:** each Overview starts with observed facts and interpretations,
+  then exposes KPIs, evidence, and recommended actions.
+- **One product, two permission views:** retailer and CCI portals share navigation, typography,
+  interaction, responsive behavior, and accessibility patterns while exposing different data.
+- **No invented comparisons:** visual polish does not add peer benchmarks, forecasts, uplift,
+  or period changes that the analytics API does not calculate.
+- **Visible data trust:** mapping coverage, import freshness, demo-data notices, denominators,
+  and privacy boundaries remain prominent.
+
+The implementation tokens and component rules are documented in [DESIGN.md](DESIGN.md).
 
 ### From export to insight
 
@@ -247,7 +262,8 @@ The [free-demo deployment guide](docs/free-demo-deployment.md) uses **one Render
 for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile packages
 the dashboard into the Java application. One HTTPS origin serves the page and `/api`, so no
 cross-origin configuration is needed. `render.yaml` explicitly selects the free instance and
-manual deployment. On 2026-08-28, Render deployed application commit `efdcad8` successfully at
+manual deployment. The service now follows `main`; commit `746461d` was the latest hosted
+baseline verified before the Phase 3 UI branch at
 [https://scan-demo.onrender.com](https://scan-demo.onrender.com): the React root returned 200,
 `GET /health` returned `{"status":"UP"}`, the unauthenticated analytics route returned 401,
 and startup logs confirmed Flyway schema version 4 on Neon PostgreSQL 18.6. The hosted import
@@ -257,7 +273,7 @@ was then verified at 10,000 baskets and 54,848 lines with 100% mapping; a repeat
 
 Free services can sleep, start slowly, or stop at quota limits. This is an occasional technical
 demo, not a production availability commitment. The guide covers account setup, runtime
-secrets, imports, verification, limits, and updating the tracked branch after PR #2 is merged.
+secrets, imports, verification, limits, and manual deployment from `main`.
 
 A successful frontend-only Vercel build does not deploy Spring Boot or make API sign-in work.
 The Vite development proxy is not included in production builds. A separately hosted frontend
@@ -301,6 +317,7 @@ These are planned improvements, not claims about the current feature set.
 ```text
 SCAN/
 ├── .github/                   # CI plus monthly dependency update configuration
+├── DESIGN.md                  # Approved UI system, tokens, components, and guardrails
 ├── Dockerfile                 # Builds React into the Java 21 application
 ├── render.yaml                # One Free web service; runtime secrets only
 ├── scripts/                   # Isolated deployment smoke test

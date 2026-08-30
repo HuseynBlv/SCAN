@@ -6,6 +6,18 @@ portals backed by deterministic analytics from `scan-api`.
 The original cashier-scanning prototype is preserved for reference but is not part of the
 current retailer-export workflow.
 
+## Interface
+
+Both portals use the approved Variant A design system in [`../DESIGN.md`](../DESIGN.md):
+a dark operational sidebar, warm neutral canvas, restrained SCAN red, briefing-first
+Overviews, shared KPI strips, visible data confidence, keyboard focus states, and responsive
+navigation down to mobile widths. The UI never creates comparison metrics or forecasts that
+are absent from the API.
+
+Geist is bundled as a pinned self-hosted font package. Pretext measures marked briefing text
+after fonts load and recomputes its height on resize; normal CSS remains the fallback if text
+measurement is unavailable.
+
 ## Local development
 
 Use Node.js 24 (as in CI). Start the Spring Boot API on port `8080`, then run from `scan-app/`:
