@@ -77,7 +77,7 @@ describe('RetailerDashboard', () => {
     await user.type(screen.getByLabelText('Password'), 'retailer-secret')
     await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
 
-    expect(await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Welcome back, Kaggle Demo Retailer' })).toBeInTheDocument()
     expect(fetchRetailerOverview).toHaveBeenCalledWith(expect.objectContaining({
       period: 'ALL_TIME',
       username: 'scan-retailer',
@@ -85,6 +85,8 @@ describe('RetailerDashboard', () => {
     }))
     expect(screen.getByLabelText('Retailer KPIs')).toHaveTextContent('Total sales')
     expect(screen.getByLabelText('Retailer KPIs')).toHaveTextContent('Baskets')
+    expect(screen.getByRole('heading', { name: 'Three things to know' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Overview' })[0]).toHaveAttribute('aria-current', 'page')
 
     await user.click(screen.getAllByRole('button', { name: 'Products & Categories' })[0])
     expect(screen.getByRole('heading', { name: 'What drives recorded sales?' })).toBeInTheDocument()
@@ -133,7 +135,7 @@ describe('RetailerDashboard', () => {
     expect(screen.getByRole('heading', { name: 'Loading your market…' })).toBeInTheDocument()
 
     await act(async () => resolveRequest(overview))
-    await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'Welcome back, Kaggle Demo Retailer' })
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(screen.getByRole('button', { name: 'Open my dashboard' })).toBeInTheDocument()
   })

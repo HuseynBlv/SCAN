@@ -1,5 +1,6 @@
 import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource-variable/geist/wght.css'
 import './index.css'
 import App from './AppLoader.jsx'
 import AppErrorBoundary from './AppErrorBoundary.jsx'
