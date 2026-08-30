@@ -75,15 +75,17 @@ describe('CciDashboard', () => {
     }))
 
     await act(async () => resolveFirstRequest(overview))
-    expect(await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })).toBeInTheDocument()
     expect(screen.getByText('Technical demo dataset.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Three things to know' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Overview' })[0]).toHaveAttribute('aria-current', 'page')
 
     const sections = [
       ['Basket Analysis', 'What appears alongside CCI products?'],
       ['Product Performance', 'Compare mapped CCI SKUs'],
       ['Time & Store', 'When and where baskets occur'],
       ['Recommendations', 'Actions supported by observed basket facts'],
-      ['Overview', '1 thing to know'],
+      ['Overview', 'Three things to know'],
     ]
     for (const [buttonName, headingName] of sections) {
       await user.click(screen.getAllByRole('button', { name: buttonName })[0])
@@ -126,7 +128,7 @@ describe('CciDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
-    await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
     expect(screen.getByRole('button', { name: 'Refreshing…' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
@@ -134,7 +136,7 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('button', { name: 'Open analytics' })).toBeEnabled()
     expect(fetchOverview.mock.calls[1][0].signal.aborted).toBe(true)
     await act(async () => resolveRefresh(overview))
-    expect(screen.queryByRole('heading', { name: 'Kaggle Demo Retailer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })).not.toBeInTheDocument()
   })
 
   it('clears displayed analytics when retailer permission is revoked', async () => {
@@ -146,11 +148,11 @@ describe('CciDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
-    await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Retailer access denied.')
-    expect(screen.queryByRole('heading', { name: 'Kaggle Demo Retailer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })).not.toBeInTheDocument()
   })
 
   it('provides accessible chart labels and equivalent category table data', async () => {
@@ -160,7 +162,7 @@ describe('CciDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
-    await screen.findByRole('heading', { name: 'Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })
     await user.click(screen.getAllByRole('button', { name: 'Basket Analysis' })[0])
 
     expect(screen.getByRole('img', { name: 'Companion product attachment rates' }))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -14,19 +14,22 @@ import {
   fetchOverview,
 } from "../services/scanApi";
 import { compactChartLabel } from "./chartLabels";
+import ScanBrand from "./ScanBrand";
+import ScanIcon from "./ScanIcon";
+import { usePretextLayout } from "./usePretextLayout";
 import "./CciDashboard.css";
 
 const NAV_ITEMS = [
-  { id: "overview", label: "Overview" },
-  { id: "basket", label: "Basket Analysis" },
-  { id: "products", label: "Product Performance" },
-  { id: "time-store", label: "Time & Store" },
-  { id: "recommendations", label: "Recommendations" },
+  { id: "overview", label: "Overview", icon: "overview" },
+  { id: "basket", label: "Basket Analysis", icon: "basket" },
+  { id: "products", label: "Product Performance", icon: "products" },
+  { id: "time-store", label: "Time & Store", icon: "time-store" },
+  { id: "recommendations", label: "Recommendations", icon: "recommendations" },
 ];
 
 const integerFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const decimalFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 1,
+  minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 });
 
@@ -52,7 +55,8 @@ function formatMoney(value, currency) {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
-      minimumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
     }).format(amount);
   } catch {
     return `${amount.toFixed(2)} ${currency}`;
@@ -103,13 +107,7 @@ function Login({ error, loading, onSubmit }) {
   return (
     <main className="cci-login-shell">
       <section className="cci-login-card" aria-labelledby="cci-login-title">
-        <div className="cci-brand">
-          <div className="cci-brand-mark">S</div>
-          <div>
-            <div className="cci-brand-name">SCAN</div>
-            <div className="cci-brand-subtitle">Sales & Consumption Analytics Network</div>
-          </div>
-        </div>
+        <ScanBrand subtitle="Sales & Consumption Analytics Network" />
         <div className="cci-login-copy">
           <span className="cci-eyebrow">CCI Sales & Marketing</span>
           <h1 id="cci-login-title">Basket intelligence, ready for action.</h1>
@@ -153,7 +151,7 @@ function Login({ error, loading, onSubmit }) {
             {loading ? "Connecting…" : "Open analytics"}
           </button>
         </form>
-        <a className="portal-switch-link" href="/?portal=retailer">Retailer owner portal →</a>
+        <a className="portal-switch-link" href="/?portal=retailer">Retailer owner portal <span aria-hidden="true">→</span></a>
       </section>
     </main>
   );
@@ -169,21 +167,119 @@ function KpiCard({ label, value, note, status }) {
   );
 }
 
-function InsightCard({ insight, index, actionOnly = false }) {
+function DecisionBriefing({ insights, onNavigate }) {
+  const visibleInsights = insights.slice(0, 3);
   return (
-    <article className="cci-insight-card">
-      <div className="cci-insight-number">{String(index + 1).padStart(2, "0")}</div>
-      {!actionOnly ? (
-        <>
-          <div className="cci-insight-label">Fact</div>
-          <h3>{insight.fact}</h3>
-          <div className="cci-insight-label">What it means</div>
-          <p>{insight.interpretation}</p>
-        </>
-      ) : null}
-      <div className="cci-insight-label">Recommended action</div>
-      <p className="cci-action-copy">{insight.recommendedAction}</p>
-    </article>
+    <section className="cci-panel cci-briefing" aria-labelledby="cci-briefing-title">
+      <div className="cci-section-heading compact cci-briefing-heading">
+        <div className="cci-heading-with-icon">
+          <span className="cci-heading-icon"><ScanIcon name="pulse" /></span>
+          <h2 id="cci-briefing-title">Three things to know</h2>
+        </div>
+        {insights.length ? (
+          <button className="cci-text-button" type="button" onClick={() => onNavigate("recommendations")}>
+            View all actions <ScanIcon name="chevron" size={16} />
+          </button>
+        ) : null}
+      </div>
+      {visibleInsights.length ? (
+        <div className={`cci-briefing-grid count-${visibleInsights.length}`}>
+          {visibleInsights.map((insight, index) => (
+            <article className="cci-briefing-item" key={`${insight.fact}-${index}`}>
+              <span className={`cci-briefing-number tone-${index + 1}`}>{index + 1}</span>
+              <div>
+                <h3 data-pretext>{insight.fact}</h3>
+                <p data-pretext>{insight.interpretation}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No reliable briefing yet">
+          Import complete baskets and map products before SCAN highlights a decision.
+        </EmptyState>
+      )}
+    </section>
+  );
+}
+
+function CompanionSummary({ data, onNavigate }) {
+  return (
+    <section className="cci-panel cci-overview-table-panel">
+      <div className="cci-section-heading compact"><h2>Top companion products</h2></div>
+      {data.topCompanionProducts.length ? (
+        <div className="cci-table-scroll">
+          <table className="cci-table cci-compact-table" aria-label="Top companion products">
+            <thead><tr><th>#</th><th>Product</th><th>CCI baskets</th><th>Attachment</th></tr></thead>
+            <tbody>{data.topCompanionProducts.slice(0, 5).map((item, index) => (
+              <tr key={`${item.name}-${index}`}>
+                <td>{index + 1}</td>
+                <td title={item.name}>{item.name}</td>
+                <td>{formatInteger(item.basketCount)}</td>
+                <td>{formatPercent(item.attachmentRatePercentage)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : <EmptyState title="No companion products">More mapped CCI baskets are required.</EmptyState>}
+      <button className="cci-panel-link" type="button" onClick={() => onNavigate("basket")}>
+        Open Basket Analysis <ScanIcon name="chevron" size={16} />
+      </button>
+    </section>
+  );
+}
+
+function CciActionsSummary({ insights, onNavigate }) {
+  return (
+    <section className="cci-panel cci-actions-summary">
+      <div className="cci-section-heading compact"><h2>Recommended actions</h2></div>
+      {insights.length ? (
+        <div className="cci-action-rows">
+          {insights.slice(0, 2).map((insight, index) => (
+            <article className="cci-action-row" key={`${insight.recommendedAction}-${index}`}>
+              <span className={`cci-action-icon tone-${index + 1}`}><ScanIcon name={index ? "products" : "chart"} /></span>
+              <div>
+                <h3 data-pretext>{insight.recommendedAction}</h3>
+                <p data-pretext>{insight.fact}</p>
+              </div>
+              <button
+                aria-label={`View recommendation: ${insight.recommendedAction}`}
+                className="cci-small-button"
+                type="button"
+                onClick={() => onNavigate("recommendations")}
+              >
+                View details
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : <p className="cci-muted-copy">Recommendations appear after reliable patterns are available.</p>}
+      <button className="cci-panel-link" type="button" onClick={() => onNavigate("recommendations")}>
+        View all recommendations <ScanIcon name="chevron" size={16} />
+      </button>
+    </section>
+  );
+}
+
+function DataTrustSummary({ data }) {
+  const healthy = data.mappedLinePercentage >= 90;
+  return (
+    <section className="cci-panel cci-sync-summary">
+      <div className="cci-section-heading compact"><h2>Data confidence</h2></div>
+      <div className="cci-sync-summary-body">
+        <span className={`cci-sync-icon ${healthy ? "is-healthy" : "is-warning"}`}>
+          <ScanIcon name={healthy ? "check" : "warning"} size={30} />
+        </span>
+        <div>
+          <h3>{healthy ? "Analysis-ready mapping" : "Mapping needs review"}</h3>
+          <p>{formatPercent(data.mappedLinePercentage)} of imported lines are mapped.</p>
+          <p>Generated {formatGeneratedAt(data.generatedAt)}</p>
+          <span className={`cci-status-badge ${healthy ? "is-healthy" : "is-warning"}`}>
+            {healthy ? "Reliable coverage" : "Review coverage"}
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -205,6 +301,8 @@ function Overview({ data, onNavigate }) {
 
   return (
     <div className="cci-page-stack">
+      <DecisionBriefing insights={data.insights} onNavigate={onNavigate} />
+
       <section className="cci-kpi-grid" aria-label="Retailer KPIs">
         <KpiCard
           label="Total baskets"
@@ -234,66 +332,25 @@ function Overview({ data, onNavigate }) {
         />
       </section>
 
-      <section className="cci-panel">
-        <div className="cci-section-heading">
-          <div>
-            <span className="cci-eyebrow">Decision summary</span>
-            <h2>
-              {data.insights.length
-                ? `${data.insights.length} ${data.insights.length === 1 ? "thing" : "things"} to know`
-                : "No reliable insight yet"}
-            </h2>
+      <section className="cci-overview-primary-grid">
+        <section className="cci-panel cci-overview-chart-panel">
+          <div className="cci-section-heading compact">
+            <div><h2>Companion category signal</h2><p>Attachment rate within mapped CCI baskets</p></div>
           </div>
-          <button className="cci-text-button" type="button" onClick={() => onNavigate("recommendations")}>
-            View recommended actions →
-          </button>
-        </div>
-        {data.insights.length ? (
-          <div className={`cci-insight-grid count-${Math.min(data.insights.length, 3)}`}>
-            {data.insights.slice(0, 3).map((insight, index) => (
-              <InsightCard insight={insight} index={index} key={`${insight.fact}-${index}`} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="No reliable insight yet">
-            Import complete baskets and map products before making a commercial decision.
-          </EmptyState>
-        )}
+          <CompanionChart
+            data={data.topCompanionCategories}
+            dataKey="attachmentRatePercentage"
+            nameKey="category"
+            chartLabel="Leading companion category attachment rates"
+            emptyTitle="No companion categories"
+          />
+        </section>
+        <CompanionSummary data={data} onNavigate={onNavigate} />
       </section>
 
-      <section className="cci-two-column">
-        <div className="cci-panel">
-          <div className="cci-section-heading compact">
-            <div>
-              <span className="cci-eyebrow">Leading companion</span>
-              <h2>{data.topCompanionProducts[0]?.name || "No companion yet"}</h2>
-            </div>
-          </div>
-          {data.topCompanionProducts[0] ? (
-            <div className="cci-highlight-metric">
-              <strong>{formatPercent(data.topCompanionProducts[0].attachmentRatePercentage)}</strong>
-              <span>of CCI baskets · {formatInteger(data.topCompanionProducts[0].basketCount)} baskets</span>
-            </div>
-          ) : (
-            <p className="cci-muted-copy">No mapped non-CCI companion was found.</p>
-          )}
-        </div>
-        <div className="cci-panel">
-          <div className="cci-section-heading compact">
-            <div>
-              <span className="cci-eyebrow">Strongest daypart</span>
-              <h2>{humanizeSegment(data.dayparts[0]?.segment) || "No time signal yet"}</h2>
-            </div>
-          </div>
-          {data.dayparts[0] ? (
-            <div className="cci-highlight-metric">
-              <strong>{formatPercent(data.dayparts[0].sharePercentage)}</strong>
-              <span>of all baskets · {formatInteger(data.dayparts[0].basketCount)} baskets</span>
-            </div>
-          ) : (
-            <p className="cci-muted-copy">No validated timestamp data was found.</p>
-          )}
-        </div>
+      <section className="cci-overview-secondary-grid">
+        <CciActionsSummary insights={data.insights} onNavigate={onNavigate} />
+        <DataTrustSummary data={data} />
       </section>
     </div>
   );
@@ -314,6 +371,7 @@ function CompanionChart({ data, dataKey, nameKey, chartLabel, emptyTitle }) {
         width="100%"
         height="100%"
         minWidth={0}
+        minHeight={300}
         initialDimension={{ width: 500, height: 350 }}
       >
         <BarChart data={data.slice(0, 8)} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 20 }}>
@@ -581,6 +639,9 @@ export default function CciDashboard() {
   const [loading, setLoading] = useState(false);
   const [activePage, setActivePage] = useState("overview");
   const [refreshKey, setRefreshKey] = useState(0);
+  const layoutRef = useRef(null);
+
+  usePretextLayout(layoutRef, `${activePage}:${data?.generatedAt || "login"}`);
 
   useEffect(() => {
     if (!credentials) {
@@ -617,6 +678,14 @@ export default function CciDashboard() {
     setRefreshKey((current) => current + 1);
   }
 
+  function signOut() {
+    setCredentials(null);
+    setData(null);
+    setError("");
+    setLoading(false);
+    setActivePage("overview");
+  }
+
   if (!credentials || (!data && error)) {
     return (
       <Login
@@ -646,15 +715,9 @@ export default function CciDashboard() {
   const activeLabel = NAV_ITEMS.find((item) => item.id === activePage)?.label || "Overview";
 
   return (
-    <div className="cci-dashboard-shell">
+    <div className="cci-dashboard-shell" ref={layoutRef}>
       <aside className="cci-sidebar">
-        <div className="cci-brand inverted">
-          <div className="cci-brand-mark">S</div>
-          <div>
-            <div className="cci-brand-name">SCAN</div>
-            <div className="cci-brand-subtitle">CCI Intelligence</div>
-          </div>
-        </div>
+        <ScanBrand inverted subtitle="CCI Intelligence" />
         <nav className="cci-nav" aria-label="CCI analytics">
           {NAV_ITEMS.map((item) => (
             <button
@@ -665,13 +728,14 @@ export default function CciDashboard() {
               onClick={() => setActivePage(item.id)}
               type="button"
             >
-              {item.label}
+              <ScanIcon name={item.icon} /><span>{item.label}</span>
             </button>
           ))}
         </nav>
         <div className="cci-sidebar-footer">
-          <span>Aggregate view</span>
-          <p>No customer or payment identifiers</p>
+          <div className="cci-account-row"><span className="cci-account-avatar">CCI</span><div><strong>CCI Sales & Marketing</strong><small>Aggregate view</small></div></div>
+          <p><ScanIcon name="shield" size={15} /> No customer or payment identifiers</p>
+          <button className="cci-sidebar-signout" type="button" onClick={signOut}><ScanIcon name="signout" /> Sign out</button>
         </div>
       </aside>
 
@@ -679,8 +743,8 @@ export default function CciDashboard() {
         <header className="cci-topbar">
           <div>
             <span className="cci-mobile-page">{activeLabel}</span>
-            <h1>{data.retailerName}</h1>
-            <p>Generated {formatGeneratedAt(data.generatedAt)}</p>
+            <h1>Basket intelligence for <span>{data.retailerName}</span></h1>
+            <p>CCI workspace · Generated {formatGeneratedAt(data.generatedAt)}</p>
           </div>
           <div className="cci-topbar-actions">
             <div className="cci-retailer-pill">{data.retailerCode}</div>
@@ -690,20 +754,15 @@ export default function CciDashboard() {
               onClick={refresh}
               type="button"
             >
-              {loading ? "Refreshing…" : "Refresh"}
+              <ScanIcon name="refresh" size={17} />{loading ? "Refreshing…" : "Refresh"}
             </button>
             <button
+              aria-label="Sign out from SCAN"
               className="cci-signout-button"
-              onClick={() => {
-                setCredentials(null);
-                setData(null);
-                setError("");
-                setLoading(false);
-                setActivePage("overview");
-              }}
+              onClick={signOut}
               type="button"
             >
-              Sign out
+              <ScanIcon name="signout" size={19} />
             </button>
           </div>
         </header>
@@ -718,7 +777,7 @@ export default function CciDashboard() {
               onClick={() => setActivePage(item.id)}
               type="button"
             >
-              {item.label}
+              <ScanIcon name={item.icon} size={17} />{item.label}
             </button>
           ))}
         </div>

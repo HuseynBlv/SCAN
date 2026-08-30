@@ -85,8 +85,8 @@ validated schema version 4, and completed successfully against Neon PostgreSQL 1
 ## 2. Create the Render Free service
 
 In [Render](https://dashboard.render.com/), choose **New → Blueprint**, connect
-`HuseynBlv/SCAN`, and select branch **`codex/phase-1-kaggle-cci-dashboard`**. Use the root
-`render.yaml`. Do not choose `main` yet: the deployment work is initially on PR #2's branch.
+`HuseynBlv/SCAN`, and select branch **`main`**. Use the root `render.yaml`. The manifest and
+the existing `scan-demo` service both follow the protected production branch.
 
 Review the creation screen **before applying**:
 
@@ -104,10 +104,11 @@ Render prompts for these three values:
 | `SCAN_DB_USERNAME` | `scan_app` |
 | `SCAN_DB_PASSWORD` | The private password for `scan_app` retrieved from Neon |
 
-The Blueprint generates separate random `SCAN_ADMIN_PASSWORD` and `SCAN_CCI_PASSWORD`
-values and sets `SPRING_PROFILES_ACTIVE=cloud`. Retrieve the generated passwords privately
-from the service's Environment page after creation. Usernames remain `scan-admin` and
-`scan-cci`. The app uses Render's `PORT` automatically; do not configure port forwarding.
+The Blueprint generates separate random `SCAN_ADMIN_PASSWORD`, `SCAN_CCI_PASSWORD`,
+`SCAN_INGEST_PASSWORD`, and `SCAN_RETAILER_PASSWORD` values and sets
+`SPRING_PROFILES_ACTIVE=cloud`. Retrieve the generated passwords privately from the service's
+Environment page after creation. Usernames remain `scan-admin`, `scan-cci`, `scan-ingest`,
+and `scan-retailer`. The app uses Render's `PORT` automatically; do not configure port forwarding.
 
 Deploy the service and wait for the build and startup logs to complete. Copy the **actual
 assigned HTTPS URL** from Render; the name may have an extra suffix. The deployment created
@@ -254,15 +255,12 @@ selected commit. Blueprint configuration changes may also trigger deployment whe
 review the proposed changes and disable automatic Blueprint sync if you require every
 configuration update to be manual. See [Render's Blueprint reference](https://render.com/docs/blueprint-spec).
 
-PR #2 has completed authenticated hosted analytics, demo-data import, restart persistence,
-responsive browser QA, and CI verification. It remains open for final review because this work
-does not change Vercel routing or deploy Spring Boot there. Merging the branch can still update
-that existing frontend, which currently has no hosted API route.
-
-After an approved merge, change the service branch in `render.yaml` and Render to `main`,
-then manually deploy and recheck it. Do not delete the feature branch while Render still
-depends on it. Record the actual URL and verified deployment status in `CLAUDE.md` and the
-PR. Never commit hosted passwords, database connection credentials, or private exports.
+The initial hosted analytics work completed authenticated demo-data import, restart
+persistence, responsive browser QA, and CI verification. The Render service and
+`render.yaml` now both follow `main`. After an approved merge, manually deploy the selected
+`main` commit and repeat the public health, authentication, retailer, and CCI checks. Record
+the verified commit in `CLAUDE.md` and the PR. Never commit hosted passwords, database
+connection credentials, or private exports.
 
 ## Troubleshooting
 

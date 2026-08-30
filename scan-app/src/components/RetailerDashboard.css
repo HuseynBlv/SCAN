@@ -1,48 +1,9 @@
-.retailer-login-shell {
-  background:
-    radial-gradient(circle at 12% 12%, rgba(8, 127, 91, 0.18), transparent 34%),
-    linear-gradient(145deg, #f8faf9 0%, #e9efed 100%);
-}
-
-.retailer-brand-mark,
-.retailer-primary-button {
-  background: #087f5b;
-  box-shadow: 0 12px 26px rgba(8, 127, 91, 0.25);
-}
-
-.retailer-brand-name,
-.retailer-eyebrow,
-.retailer-text-button {
-  color: #087f5b;
-}
-
-.retailer-login-shell .cci-login-form input:focus {
-  border-color: #087f5b;
-  box-shadow: 0 0 0 4px rgba(8, 127, 91, 0.1);
-}
-
-.retailer-login-shell .portal-switch-link:hover {
-  color: #087f5b;
-}
-
-.retailer-sidebar {
-  background: #102a23;
-}
-
-.retailer-sidebar .cci-nav button.active {
-  box-shadow: inset 3px 0 #20c997;
-}
-
 .retailer-kpi-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .retailer-sales-chart {
-  height: 300px;
-}
-
-.retailer-insight-card {
-  border-top: 3px solid rgba(8, 127, 91, 0.55);
+  height: 276px;
 }
 
 .retailer-segment-row {
@@ -50,7 +11,7 @@
   justify-content: space-between;
   gap: 20px;
   padding: 14px 0;
-  border-bottom: 1px solid #eceef2;
+  border-bottom: 1px solid var(--scan-border);
 }
 
 .retailer-segment-row:last-child {
@@ -58,41 +19,46 @@
 }
 
 .retailer-segment-row span {
-  color: #686c75;
+  color: var(--scan-muted);
   text-align: right;
 }
 
 .retailer-period-select {
   display: grid;
-  gap: 3px;
-  color: #686c75;
-  font-size: 0.7rem;
-  font-weight: 750;
+  gap: 4px;
+  color: var(--scan-muted);
+  font-size: 0.66rem;
+  font-weight: 620;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .retailer-period-select select {
-  min-width: 136px;
-  padding: 9px 12px;
-  border: 1px solid #d9dce2;
-  border-radius: 10px;
-  background: #fff;
-  color: #17181b;
-  font: inherit;
-  font-size: 0.82rem;
+  min-width: 150px;
+  min-height: 42px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--scan-border);
+  border-radius: 8px;
+  background: var(--scan-surface);
+  color: var(--scan-ink);
+  font-size: 0.8rem;
   text-transform: none;
 }
 
+.retailer-period-select select:focus {
+  border-color: var(--scan-red);
+}
+
 .retailer-sync-card {
-  border-left: 5px solid #d9dce2;
+  border-left: 4px solid var(--scan-border);
 }
 
 .retailer-sync-card.is-healthy {
-  border-left-color: #087f5b;
+  border-left-color: var(--scan-success);
 }
 
 .retailer-sync-card.is-warning {
-  border-left-color: #e67700;
+  border-left-color: var(--scan-warning);
 }
 
 .retailer-sync-heading {
@@ -103,9 +69,10 @@
 
 .retailer-sync-heading span,
 .retailer-sync-grid dt {
-  color: #686c75;
-  font-size: 0.75rem;
-  font-weight: 750;
+  color: var(--scan-muted);
+  font-size: 0.7rem;
+  font-weight: 620;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -114,54 +81,62 @@
 }
 
 .retailer-sync-dot {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  background: #e67700;
-  box-shadow: 0 0 0 7px rgba(230, 119, 0, 0.12);
+  background: var(--scan-warning);
+  box-shadow: 0 0 0 6px rgba(183, 110, 0, 0.12);
 }
 
 .is-healthy .retailer-sync-dot {
-  background: #087f5b;
-  box-shadow: 0 0 0 7px rgba(8, 127, 91, 0.12);
+  background: var(--scan-success);
+  box-shadow: 0 0 0 6px rgba(8, 127, 91, 0.12);
 }
 
 .retailer-sync-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  margin: 30px 0 0;
+  gap: 12px;
+  margin: 28px 0 0;
 }
 
 .retailer-sync-grid div {
-  padding: 16px;
-  border-radius: 12px;
-  background: #f7f8f9;
+  padding: 15px;
+  border: 1px solid #e7e8e9;
+  border-radius: 8px;
+  background: var(--scan-subtle);
 }
 
 .retailer-sync-grid dd {
   margin: 7px 0 0;
   overflow-wrap: anywhere;
-  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-weight: 620;
 }
 
 .retailer-privacy-note p {
   max-width: 760px;
-  color: #686c75;
+  color: var(--scan-muted);
   line-height: 1.6;
 }
 
-@media (max-width: 1050px) {
-  .retailer-kpi-grid,
+@media (max-width: 1200px) {
+  .retailer-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .retailer-kpi-grid .cci-kpi-card:nth-child(4) {
+    border-left: 0;
+  }
+
   .retailer-sync-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 700px) {
-  .retailer-kpi-grid,
-  .retailer-sync-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 720px) {
+  .retailer-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .retailer-period-select {
@@ -180,5 +155,17 @@
 
   .retailer-segment-row span {
     text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
+  .retailer-period-select {
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .retailer-kpi-grid,
+  .retailer-sync-grid {
+    grid-template-columns: 1fr;
   }
 }

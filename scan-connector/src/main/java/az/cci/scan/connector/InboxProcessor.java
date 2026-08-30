@@ -146,12 +146,16 @@ final class InboxProcessor {
     private boolean ready(Path file, Instant now) throws IOException {
         Instant lastModified = Files.getLastModifiedTime(file).toInstant();
         long size = Files.size(file);
-        if (size == 0 || lastModified.plus(config.stableAge()).isAfter(now)) {
+        if (size == 0) {
             observations.remove(file);
             return false;
         }
         if (config.stableAge().isZero()) {
             return true;
+        }
+        if (lastModified.plus(config.stableAge()).isAfter(now)) {
+            observations.remove(file);
+            return false;
         }
         FileObservation current = new FileObservation(size, lastModified);
         FileObservation previous = observations.put(file, current);
