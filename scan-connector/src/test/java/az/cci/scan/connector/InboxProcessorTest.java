@@ -106,6 +106,19 @@ class InboxProcessorTest {
     }
 
     @Test
+    void zeroStableAgeProcessesNonEmptyFilesEvenWhenFilesystemTimestampIsAheadOfClock() throws Exception {
+        InboxProcessor processor = processor(file -> new ImportClient.UploadResult(201, "completed"));
+        processor.initialize();
+        Path export = writeExport("future-timestamp.csv");
+        Files.setLastModifiedTime(export, FileTime.from(NOW.plusSeconds(30)));
+
+        InboxProcessor.ProcessingSummary summary = processor.processOnce();
+
+        assertEquals(1, summary.uploaded());
+        assertFalse(Files.exists(export));
+    }
+
+    @Test
     void requiresTwoUnchangedObservationsBeforeUploadingAStableAgedFile() throws Exception {
         AtomicInteger uploads = new AtomicInteger();
         ConnectorConfig stableConfig = new ConnectorConfig(
