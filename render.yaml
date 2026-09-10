@@ -31,3 +31,43 @@ services:
         value: KAGGLE
       - key: SCAN_PILOT_PROFILE_CODE
         value: KAGGLE_2019
+  - type: web
+    name: scan-caspos-pilot
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: cloud
+      - key: SCAN_DB_URL
+        fromService:
+          name: scan-demo
+          type: web
+          envVarKey: SCAN_DB_URL
+      - key: SCAN_DB_USERNAME
+        fromService:
+          name: scan-demo
+          type: web
+          envVarKey: SCAN_DB_USERNAME
+      - key: SCAN_DB_PASSWORD
+        fromService:
+          name: scan-demo
+          type: web
+          envVarKey: SCAN_DB_PASSWORD
+      - key: SCAN_ADMIN_PASSWORD
+        generateValue: true
+      - key: SCAN_CCI_PASSWORD
+        generateValue: true
+      - key: SCAN_INGEST_PASSWORD
+        generateValue: true
+      - key: SCAN_RETAILER_PASSWORD
+        generateValue: true
+      - key: SCAN_PILOT_RETAILER_CODE
+        value: CASPOS_PILOT
+      - key: SCAN_PILOT_PROFILE_CODE
+        value: CLOUDSALE_V1

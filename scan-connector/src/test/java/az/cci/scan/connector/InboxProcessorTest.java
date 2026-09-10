@@ -77,6 +77,31 @@ class InboxProcessorTest {
     }
 
     @Test
+    void quarantinesLocalAdapterValidationFailuresWithoutCallingTheApi() throws Exception {
+        InboxProcessor processor = new InboxProcessor(
+            config(),
+            file -> {
+                throw new AssertionError("locally invalid files must not be uploaded");
+            },
+            file -> {
+                throw new SourceFileValidationException("unsupported receipt status");
+            },
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            new ObjectMapper()
+        );
+        processor.initialize();
+        Path export = writeExport("unsafe.csv");
+
+        InboxProcessor.ProcessingSummary summary = processor.processOnce();
+
+        assertEquals(1, summary.failed());
+        assertFalse(Files.exists(export));
+        assertTrue(Files.list(config().failedDirectory())
+            .filter(path -> path.getFileName().toString().endsWith(".error.txt"))
+            .anyMatch(path -> read(path).contains("Local validation: unsupported receipt status")));
+    }
+
+    @Test
     void ignoresTemporaryAndUnsupportedFiles() throws Exception {
         InboxProcessor processor = processor(file -> {
             throw new AssertionError("unsupported files must not be uploaded");
@@ -126,6 +151,7 @@ class InboxProcessorTest {
             "connector",
             "secret",
             temporaryDirectory,
+            ConnectorConfig.SourceFormat.CANONICAL,
             Duration.ofSeconds(15),
             Duration.ofSeconds(10),
             Duration.ofSeconds(120),
@@ -167,6 +193,7 @@ class InboxProcessorTest {
             "connector",
             "secret",
             temporaryDirectory,
+            ConnectorConfig.SourceFormat.CANONICAL,
             Duration.ofSeconds(15),
             Duration.ZERO,
             Duration.ofSeconds(120),

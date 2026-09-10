@@ -15,6 +15,7 @@ record ConnectorConfig(
     String username,
     String password,
     Path workDirectory,
+    SourceFormat sourceFormat,
     Duration pollInterval,
     Duration stableAge,
     Duration requestTimeout,
@@ -34,6 +35,7 @@ record ConnectorConfig(
             username,
             password,
             workDirectory,
+            SourceFormat.parse(value(environment, "SCAN_CONNECTOR_SOURCE_FORMAT", "CANONICAL")),
             positiveSeconds(environment, "SCAN_CONNECTOR_POLL_SECONDS", 15),
             nonNegativeSeconds(environment, "SCAN_CONNECTOR_STABLE_SECONDS", 10),
             positiveSeconds(environment, "SCAN_CONNECTOR_TIMEOUT_SECONDS", 120),
@@ -133,5 +135,21 @@ record ConnectorConfig(
     private static String value(Map<String, String> environment, String key, String fallback) {
         String value = environment.get(key);
         return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    enum SourceFormat {
+        CANONICAL,
+        CASPOS_CLOUDSALE_PROVISIONAL;
+
+        static SourceFormat parse(String value) {
+            try {
+                return valueOf(value.trim().toUpperCase(java.util.Locale.ROOT).replace('-', '_'));
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException(
+                    "SCAN_CONNECTOR_SOURCE_FORMAT must be CANONICAL or CASPOS_CLOUDSALE_PROVISIONAL",
+                    exception
+                );
+            }
+        }
     }
 }

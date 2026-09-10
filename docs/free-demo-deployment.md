@@ -1,8 +1,11 @@
-# SCAN demo hosting for $0
+# SCAN demo and CASPOS pilot hosting for $0
 
 This is a small, occasional-use **technical demo**, not a production retailer deployment.
-The repository uses one Render Free web service and one Neon Free PostgreSQL project. The
-service is live at [https://scan-demo.onrender.com](https://scan-demo.onrender.com). Public
+The repository defines two isolated Render Free web services backed by one Neon Free PostgreSQL
+project. The synthetic demo is live at
+[https://scan-demo.onrender.com](https://scan-demo.onrender.com); `scan-caspos-pilot` is the
+separate, sharing-disabled retailer application identity. This is not database-level isolation:
+both services use the same Neon database. Public
 health, frontend delivery, authentication boundaries, Render-to-Neon startup, authenticated
 analytics, idempotent hosted import, and all five dashboard sections were verified on
 2026-08-28.
@@ -11,7 +14,7 @@ analytics, idempotent hosted import, and all five dashboard sections were verifi
 
 ```mermaid
 flowchart LR
-    A["Browser: one HTTPS Render URL"] --> B["Spring Boot: React pages and protected API"]
+    A["Browser: demo or pilot HTTPS URL"] --> B["Spring Boot: React pages and protected API"]
     C["Admin: prepared CSV uploads over HTTPS"] --> B
     B --> D["Neon PostgreSQL over verified TLS"]
     E["GitHub branch: Docker build"] --> B
@@ -78,25 +81,29 @@ the same value in memory without displaying or storing the database password.
 `verify-full` checks the server certificate and hostname, using Java's default trusted CAs.
 Do not remove TLS verification to fix a connection error; check the hostname and certificate
 error first. See the [PostgreSQL JDBC SSL documentation](https://jdbc.postgresql.org/documentation/ssl/).
-The JDBC path and all four Flyway migrations were verified on Neon PostgreSQL 18 on
+The JDBC path and the first four Flyway migrations were verified on Neon PostgreSQL 18 on
 2026-08-28. The first Render startup subsequently connected over the same verified-TLS path,
-validated schema version 4, and completed successfully against Neon PostgreSQL 18.6.
+validated schema version 4, and completed successfully against Neon PostgreSQL 18.6. Migration 5
+adds only the isolated `CASPOS_PILOT` retailer and canonical `CLOUDSALE_V1` import profile; verify
+schema version 5 during the first pilot deployment.
 
-## 2. Create the Render Free service
+## 2. Create the Render Free services
 
 In [Render](https://dashboard.render.com/), choose **New → Blueprint**, connect
 `HuseynBlv/SCAN`, and select branch **`main`**. Use the root `render.yaml`. The manifest and
-the existing `scan-demo` service both follow the protected production branch.
+the existing `scan-demo` service and new `scan-caspos-pilot` service both follow the protected
+production branch.
 
 Review the creation screen **before applying**:
 
-- Exactly one new web service, `scan-demo`, using Docker and the **Free** instance type.
+- Two Blueprint-managed web services using Docker and the **Free** instance type: the existing
+  `scan-demo` service and the separate `scan-caspos-pilot` service.
 - Region: Frankfurt. Build context: repository root. Dockerfile: `./Dockerfile`.
 - No Render database, persistent disk, worker, paid workspace, or paid add-on.
 - If that name already belongs to another service, stop and choose a unique name in the
   Blueprint; do not accidentally reconfigure an existing service.
 
-Render prompts for these three values:
+Render prompts for these three values when creating `scan-demo`:
 
 | Render environment variable | Value |
 |---|---|
@@ -104,16 +111,18 @@ Render prompts for these three values:
 | `SCAN_DB_USERNAME` | `scan_app` |
 | `SCAN_DB_PASSWORD` | The private password for `scan_app` retrieved from Neon |
 
-The Blueprint generates separate random `SCAN_ADMIN_PASSWORD`, `SCAN_CCI_PASSWORD`,
-`SCAN_INGEST_PASSWORD`, and `SCAN_RETAILER_PASSWORD` values and sets
-`SPRING_PROFILES_ACTIVE=cloud`. Retrieve the generated passwords privately from the service's
-Environment page after creation. Usernames remain `scan-admin`, `scan-cci`, `scan-ingest`,
-and `scan-retailer`. The app uses Render's `PORT` automatically; do not configure port forwarding.
+The pilot service references those three variables from `scan-demo` inside Render, so their secret
+values never enter Git. Each service generates separate random `SCAN_ADMIN_PASSWORD`,
+`SCAN_CCI_PASSWORD`, `SCAN_INGEST_PASSWORD`, and `SCAN_RETAILER_PASSWORD` values and sets
+`SPRING_PROFILES_ACTIVE=cloud`. Retrieve the generated passwords privately from each service's
+Environment page after creation. Usernames remain `scan-admin`, `scan-cci`, `scan-connector`, and
+`scan-retailer`. The app uses Render's `PORT` automatically; do not configure port forwarding.
 
 Deploy the service and wait for the build and startup logs to complete. Copy the **actual
 assigned HTTPS URL** from Render; the name may have an extra suffix. The deployment created
-on 2026-08-28 was assigned `https://scan-demo.onrender.com`, and that exact URL is recorded in
-`CLAUDE.md`.
+on 2026-08-28 was assigned `https://scan-demo.onrender.com`. The pilot's expected URL is
+`https://scan-caspos-pilot.onrender.com`; use the actual assigned URL if Render adds a suffix.
+Both are recorded in `CLAUDE.md`.
 
 For a strict $0 budget, remain on free plans and do not add a payment method or accept an
 upgrade. If signup requires a card or the review screen shows a charge, stop. Free quotas

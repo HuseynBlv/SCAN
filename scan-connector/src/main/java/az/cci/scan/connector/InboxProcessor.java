@@ -29,13 +29,14 @@ final class InboxProcessor {
 
     private final ConnectorConfig config;
     private final ImportClient importClient;
+    private final SourceFileAdapter sourceFileAdapter;
     private final Clock clock;
     private final ObjectMapper objectMapper;
     private final Map<Path, RetryState> retries = new HashMap<>();
     private final Map<Path, FileObservation> observations = new HashMap<>();
 
     InboxProcessor(ConnectorConfig config, ImportClient importClient) {
-        this(config, importClient, Clock.systemUTC(), new ObjectMapper());
+        this(config, importClient, SourceFileAdapter.forConfig(config), Clock.systemUTC(), new ObjectMapper());
     }
 
     InboxProcessor(
@@ -44,8 +45,19 @@ final class InboxProcessor {
         Clock clock,
         ObjectMapper objectMapper
     ) {
+        this(config, importClient, SourceFileAdapter.forConfig(config), clock, objectMapper);
+    }
+
+    InboxProcessor(
+        ConnectorConfig config,
+        ImportClient importClient,
+        SourceFileAdapter sourceFileAdapter,
+        Clock clock,
+        ObjectMapper objectMapper
+    ) {
         this.config = config;
         this.importClient = importClient;
+        this.sourceFileAdapter = sourceFileAdapter;
         this.clock = clock;
         this.objectMapper = objectMapper;
     }
@@ -90,12 +102,20 @@ final class InboxProcessor {
 
     private ProcessingOutcome process(Path file, Instant now) throws IOException {
         try {
-            ImportClient.UploadResult result = importClient.upload(file);
+            ImportClient.UploadResult result;
+            String preparationMessage;
+            try (SourceFileAdapter.PreparedUpload prepared = sourceFileAdapter.prepare(file)) {
+                preparationMessage = prepared.preparationMessage();
+                result = importClient.upload(prepared.uploadFile());
+            }
             if (result.successful()) {
                 Path archived = moveUniquely(file, config.processedDirectory(), now);
                 retries.remove(file);
                 observations.remove(file);
-                writeStatus("SYNCED", archived.getFileName().toString(), safeMessage(result.responseBody()), result.statusCode());
+                String message = preparationMessage == null
+                    ? safeMessage(result.responseBody())
+                    : preparationMessage + "; " + safeMessage(result.responseBody());
+                writeStatus("SYNCED", archived.getFileName().toString(), message, result.statusCode());
                 System.out.printf("Uploaded %s (HTTP %d)%n", file.getFileName(), result.statusCode());
                 return ProcessingOutcome.UPLOADED;
             }
@@ -104,6 +124,9 @@ final class InboxProcessor {
                 return ProcessingOutcome.DEFERRED;
             }
             failPermanently(file, now, "HTTP " + result.statusCode() + ": " + safeMessage(result.responseBody()));
+            return ProcessingOutcome.FAILED;
+        } catch (SourceFileValidationException exception) {
+            failPermanently(file, now, "Local validation: " + safeMessage(exception.getMessage()));
             return ProcessingOutcome.FAILED;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();

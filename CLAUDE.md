@@ -6,9 +6,12 @@ remain deterministic. Do not commit credentials, raw exports, or generated datas
 
 ## Deploy Configuration (configured by /setup-deploy)
 
-- **Platform:** one Render Free Docker web service, with external Neon Free PostgreSQL.
-- **Production URL:** `https://scan-demo.onrender.com`. The Render service follows `main`;
-  commit `746461d` was the latest hosted baseline verified before the Phase 3 UI branch.
+- **Platform:** Render Free Docker web services, with external Neon Free PostgreSQL. `scan-demo`
+  remains the bounded synthetic demo; `scan-caspos-pilot` is the separate CASPOS pilot application
+  identity. Both services use the same Neon database.
+- **Production URLs:** `https://scan-demo.onrender.com` for the synthetic demo and
+  `https://scan-caspos-pilot.onrender.com` for the CASPOS pilot. Both services follow `main`;
+  commit `08c9e82` is the current verified hosted demo baseline.
   Public health, frontend delivery, authentication boundaries, Neon startup, the
   10,000-basket hosted import, duplicate-file behavior, authenticated retailer/CCI analytics,
   and responsive dashboard QA are verified.
@@ -16,7 +19,7 @@ remain deterministic. Do not commit credentials, raw exports, or generated datas
 - **Configuration:** root `Dockerfile`, `render.yaml`, and the Spring `cloud` profile.
 - **Deploy trigger:** manual from Render after GitHub CI passes; service auto-deploy is off.
   Review Blueprint syncs too, because configuration changes can trigger deployment.
-- **Production branch:** `main` in both `render.yaml` and the Render service.
+- **Production branch:** `main` in `render.yaml` and both Render services.
 - **Health check:** `GET /health` returns only `{"status":"UP"}`. This is liveness, not
   database readiness; verify authenticated analytics separately.
 - **Merge policy:** reviewed PR and green CI before a manual Render deployment. Do not merge
