@@ -47,11 +47,16 @@ chmod 600 scan-connector/connector.properties
 Edit these values:
 
 ```properties
-SCAN_API_URL=https://scan-demo.onrender.com
+SCAN_API_URL=https://scan-caspos-pilot.onrender.com
 SCAN_CONNECTOR_USERNAME=scan-connector
 SCAN_CONNECTOR_PASSWORD=the-SCAN_INGEST_PASSWORD-from-Render
 SCAN_CONNECTOR_DIRECTORY=/absolute/path/to/scan-data
 ```
+
+`SCAN_CONNECTOR_SOURCE_FORMAT` defaults to `CANONICAL`. The opt-in
+`CASPOS_CLOUDSALE_PROVISIONAL` mode converts the specifically observed CloudSale-shaped Excel
+sample into SCAN's canonical columns before upload. It is not a claim about CASPOS's stable vendor
+schema. Follow [the CASPOS pilot guide](caspos-cloudsale-pilot.md) before enabling it for a shop.
 
 Environment variables with the same names override the properties file. Never commit
 `connector.properties`; it is ignored by Git.
@@ -73,9 +78,24 @@ scan-data/
 └── connector-status.json  # latest local connector state
 ```
 
-Use `--once` for a single scan cycle. Continuous mode is recommended because it retains retry
+Use `--once` for a supervised single scan cycle; set stable seconds to zero only after independently
+confirming that the test file is complete. Continuous mode is recommended because it retains retry
 state and observes files across multiple cycles. On a Windows pilot computer, use Task Scheduler
 to start the JAR at user logon or system startup. Configure automatic restart after failure.
+
+## Validate a provisional CASPOS workbook offline
+
+This command requires no connector password and performs no upload or file modification:
+
+```bash
+java -jar scan-connector/target/scan-connector.jar \
+  --validate-caspos /path/to/CloudSale-export.xlsx
+```
+
+It checks the observed worksheet and column names, completed-sale status, positive-sale semantics,
+receipt-level discounts, line arithmetic, duplicate line numbers, timestamps, and required values.
+Passing validation means the workbook fits the provisional adapter. It does not establish that the
+file is an authentic CASPOS export or that the business semantics have been confirmed.
 
 ## Demonstrate without a real POS
 

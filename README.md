@@ -258,12 +258,13 @@ The optional 10,000-basket tests require locally generated files; they are not p
 
 ## Deployment status
 
-The [free-demo deployment guide](docs/free-demo-deployment.md) uses **one Render Free service
-for both React and Spring Boot**, with PostgreSQL on **Neon Free**. The root Dockerfile packages
+The [free-demo deployment guide](docs/free-demo-deployment.md) uses separate Render Free application
+identities for the synthetic demo and CASPOS pilot, with a shared PostgreSQL database on **Neon
+Free**. The root Dockerfile packages
 the dashboard into the Java application. One HTTPS origin serves the page and `/api`, so no
 cross-origin configuration is needed. `render.yaml` explicitly selects the free instance and
-manual deployment. The service now follows `main`; commit `746461d` was the latest hosted
-baseline verified before the Phase 3 UI branch at
+manual deployment. Both services follow `main`; commit `08c9e82` is the current hosted demo
+baseline at
 [https://scan-demo.onrender.com](https://scan-demo.onrender.com): the React root returned 200,
 `GET /health` returned `{"status":"UP"}`, the unauthenticated analytics route returned 401,
 and startup logs confirmed Flyway schema version 4 on Neon PostgreSQL 18.6. The hosted import
