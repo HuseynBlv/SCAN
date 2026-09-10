@@ -19,8 +19,23 @@ class ConnectorConfigTest {
 
         assertEquals("https://scan.example.test", config.apiBaseUrl().toString());
         assertEquals("scan-connector", config.username());
+        assertEquals(ConnectorConfig.SourceFormat.CANONICAL, config.sourceFormat());
         assertEquals(15, config.pollInterval().toSeconds());
         assertEquals(10, config.stableAge().toSeconds());
+    }
+
+    @Test
+    void enablesTheProvisionalCasposAdapterOnlyWhenExplicitlyConfigured() {
+        ConnectorConfig config = ConnectorConfig.fromEnvironment(Map.of(
+            "SCAN_CONNECTOR_PASSWORD", "secret",
+            "SCAN_CONNECTOR_SOURCE_FORMAT", "caspos-cloudsale-provisional"
+        ));
+
+        assertEquals(ConnectorConfig.SourceFormat.CASPOS_CLOUDSALE_PROVISIONAL, config.sourceFormat());
+        assertThrows(IllegalArgumentException.class, () -> ConnectorConfig.fromEnvironment(Map.of(
+            "SCAN_CONNECTOR_PASSWORD", "secret",
+            "SCAN_CONNECTOR_SOURCE_FORMAT", "unknown"
+        )));
     }
 
     @Test
