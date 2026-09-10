@@ -36,6 +36,16 @@ class FlywayMigrationTest {
         assertThat(kaggle.getZoneId()).isEqualTo("Asia/Baku");
         assertThat(importProfileRepository.findByRetailerAndCodeIgnoreCase(kaggle, "KAGGLE_2019"))
             .isPresent();
+        var casposPilot = retailerRepository.findByCodeIgnoreCase("CASPOS_PILOT").orElseThrow();
+        assertThat(casposPilot.getName()).isEqualTo("CASPOS Pilot Retailer");
+        assertThat(casposPilot.getZoneId()).isEqualTo("Asia/Baku");
+        assertThat(casposPilot.isCciSharingEnabled()).isFalse();
+        assertThat(importProfileRepository.findByRetailerAndCodeIgnoreCase(casposPilot, "CLOUDSALE_V1"))
+            .hasValueSatisfying(profile -> {
+                assertThat(profile.getSourceSystem()).isEqualTo("caspos-cloudsale-provisional-v1");
+                assertThat(profile.getCurrency()).isEqualTo("AZN");
+                assertThat(profile.getDateTimePattern()).isEqualTo("yyyy-MM-dd'T'HH:mm:ss");
+            });
         assertThat(canonicalProductRepository.count()).isEqualTo(4);
         assertThat(canonicalProductRepository.findByBarcode("5449000000996"))
             .hasValueSatisfying(product -> assertThat(product.isCci()).isTrue());
