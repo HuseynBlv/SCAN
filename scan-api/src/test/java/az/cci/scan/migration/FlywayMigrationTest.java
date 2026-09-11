@@ -39,7 +39,7 @@ class FlywayMigrationTest {
         var casposPilot = retailerRepository.findByCodeIgnoreCase("CASPOS_PILOT").orElseThrow();
         assertThat(casposPilot.getName()).isEqualTo("CASPOS Pilot Retailer");
         assertThat(casposPilot.getZoneId()).isEqualTo("Asia/Baku");
-        assertThat(casposPilot.isCciSharingEnabled()).isFalse();
+        assertThat(casposPilot.isCciSharingEnabled()).isTrue();
         assertThat(importProfileRepository.findByRetailerAndCodeIgnoreCase(casposPilot, "CLOUDSALE_V1"))
             .hasValueSatisfying(profile -> {
                 assertThat(profile.getSourceSystem()).isEqualTo("caspos-cloudsale-provisional-v1");

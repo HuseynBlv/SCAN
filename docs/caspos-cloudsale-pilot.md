@@ -92,11 +92,30 @@ canonical import profile with:
 - a dedicated ingest password and separate retailer portal password.
 
 Migration `V5__seed_caspos_pilot_profile.sql` provisions a separate retailer/profile with timezone
-`Asia/Baku`, currency `AZN`, and CCI sharing disabled. The `scan-caspos-pilot` Render service points
-at that identity and generates dedicated application passwords. It references the existing demo
-service's three Neon connection variables inside Render; their values never enter Git or connector
-configuration. The two services share the same Neon database, so this pilot isolates application
-credentials and tenant identity, not database infrastructure.
+`Asia/Baku`, currency `AZN`, and sharing disabled by default. After retailer approval, migration
+`V6__enable_caspos_pilot_cci_sharing.sql` enables read-only aggregate access for the CCI role. The
+`scan-caspos-pilot` Render service points at that identity and generates dedicated application
+passwords. It references the existing demo service's three Neon connection variables inside Render;
+their values never enter Git or connector configuration. The two services share the same Neon
+database, so this pilot isolates application credentials and tenant identity, not database
+infrastructure.
+
+## CCI HQ dashboard
+
+Retailer uploads and CCI analytics read the same Neon records; there is no second file transfer or
+scheduled dashboard synchronization. After an import completes, open:
+
+```text
+https://scan-caspos-pilot.onrender.com/?retailerCode=CASPOS_PILOT
+```
+
+Sign in with username `scan-cci` and the `SCAN_CCI_PASSWORD` value from the
+`scan-caspos-pilot` Render service. CCI receives only aggregate analytics already allowed by the
+analytics API; the CloudSale adapter does not upload cashier code or payment type.
+
+Unmapped retailer products contribute to total basket and sales metrics, but they cannot be
+classified as CCI products or power CCI-product companion analysis. Complete reviewed product
+mapping before relying on product-level CCI recommendations.
 
 The generic identity is deliberate for the first controlled visit. Replace the display name and
 codes with confirmed shop identifiers before treating the environment as a permanent production

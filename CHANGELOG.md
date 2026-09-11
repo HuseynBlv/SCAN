@@ -2,6 +2,18 @@
 
 All notable changes to SCAN are documented in this file.
 
+## [0.2.0.0] - 2026-09-11
+
+### Added
+
+- Open the CCI HQ dashboard with `CASPOS_PILOT` preselected through a retailer-specific URL.
+
+### Changed
+
+- Allow the CCI role to read retailer-approved aggregate analytics for the CASPOS pilot without a
+  second export or synchronization job.
+- Document the CCI login path and the product-mapping requirement for CCI-specific analysis.
+
 ## [0.1.0.0] - 2026-09-10
 
 ### Added

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ScanApiError, fetchOverview } from './scanApi'
+import { configuredRetailerCode, ScanApiError, fetchOverview } from './scanApi'
 
 function response({ ok, status, body }) {
   return {
@@ -34,6 +34,13 @@ function validOverview(overrides = {}) {
 describe('fetchOverview', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    window.history.replaceState({}, '', '/')
+  })
+
+  it('prefills a retailer code from the HQ dashboard URL', () => {
+    window.history.replaceState({}, '', '/?retailerCode=caspos_pilot')
+
+    expect(configuredRetailerCode()).toBe('CASPOS_PILOT')
   })
 
   it('sends Basic Auth and normalizes a complete analytics response', async () => {

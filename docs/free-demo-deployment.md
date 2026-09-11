@@ -4,8 +4,9 @@ This is a small, occasional-use **technical demo**, not a production retailer de
 The repository defines two isolated Render Free web services backed by one Neon Free PostgreSQL
 project. The synthetic demo is live at
 [https://scan-demo.onrender.com](https://scan-demo.onrender.com); `scan-caspos-pilot` is the
-separate, sharing-disabled retailer application identity. This is not database-level isolation:
-both services use the same Neon database. Public
+separate retailer application identity. CCI sharing is disabled when the pilot retailer is first
+created and enabled only by migration 6 after retailer approval. This is not database-level
+isolation: both services use the same Neon database. Public
 health, frontend delivery, authentication boundaries, Render-to-Neon startup, authenticated
 analytics, idempotent hosted import, and all five dashboard sections were verified on
 2026-08-28.
@@ -84,8 +85,9 @@ error first. See the [PostgreSQL JDBC SSL documentation](https://jdbc.postgresql
 The JDBC path and the first four Flyway migrations were verified on Neon PostgreSQL 18 on
 2026-08-28. The first Render startup subsequently connected over the same verified-TLS path,
 validated schema version 4, and completed successfully against Neon PostgreSQL 18.6. Migration 5
-adds only the isolated `CASPOS_PILOT` retailer and canonical `CLOUDSALE_V1` import profile; verify
-schema version 5 during the first pilot deployment.
+adds only the isolated `CASPOS_PILOT` retailer and canonical `CLOUDSALE_V1` import profile.
+Migration 6 enables CCI access to that retailer's aggregate analytics after approval; verify schema
+version 6 and an authenticated CCI request when deploying this release.
 
 ## 2. Create the Render Free services
 
