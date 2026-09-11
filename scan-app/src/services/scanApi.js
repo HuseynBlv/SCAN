@@ -199,7 +199,8 @@ function normalizeOverview(data) {
 }
 
 export function configuredRetailerCode() {
-  return `${import.meta.env.VITE_SCAN_RETAILER_CODE || DEFAULT_RETAILER_CODE}`
+  const queryRetailerCode = new URLSearchParams(window.location.search).get("retailerCode");
+  return `${queryRetailerCode || import.meta.env.VITE_SCAN_RETAILER_CODE || DEFAULT_RETAILER_CODE}`
     .trim()
     .toUpperCase();
 }
