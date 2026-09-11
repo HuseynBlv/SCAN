@@ -34,6 +34,10 @@ Vite proxies `/api` to `http://localhost:8080`. Open the displayed Vite URL and 
 - CCI portal: `/`, retailer code `KAGGLE`, username `scan-cci`, password
   `SCAN_CCI_PASSWORD`.
 
+The CCI portal also accepts `?retailerCode=CASPOS_PILOT` to preselect a retailer on its sign-in
+screen. The query parameter is a convenience only: it does not bypass CCI authentication or the
+retailer's server-side sharing permission.
+
 Prepare and import the sample using the [Kaggle demo guide](../docs/kaggle-demo.md) first.
 For the smaller synthetic API fixture, use retailer code `DEMO`. No Supabase account or
 legacy scanner environment variables are required for the default dashboard.
