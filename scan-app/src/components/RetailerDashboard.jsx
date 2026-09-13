@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -15,15 +13,25 @@ import { fetchRetailerOverview } from '../services/retailerApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
 import { usePretextLayout } from './usePretextLayout'
+import {
+  ChartPanel,
+  DataFreshness,
+  EmptyState,
+  LoadingState,
+  MetricStrip,
+  PageIntro,
+  StatusBadge,
+  WorkspaceHeader,
+  WorkspaceShell,
+} from './WorkspaceUI'
 import './CciDashboard.css'
 import './RetailerDashboard.css'
 
 const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview', icon: 'overview' },
-  { id: 'products', label: 'Products & Categories', icon: 'products' },
-  { id: 'time-store', label: 'Time & Stores', icon: 'time-store' },
-  { id: 'recommendations', label: 'Recommendations', icon: 'recommendations' },
-  { id: 'sync', label: 'Data Sync', icon: 'sync' },
+  { id: 'today', label: 'Today', icon: 'home' },
+  { id: 'sales', label: 'Sales', icon: 'chart' },
+  { id: 'products', label: 'Products', icon: 'products' },
+  { id: 'alerts', label: 'Alerts', icon: 'alerts' },
 ]
 
 const PERIODS = [
@@ -35,17 +43,13 @@ const PERIODS = [
 
 const integer = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 const decimal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+const MIN_PATTERN_BASKETS = 5
 
 function formatMoney(value, currency) {
   const amount = Number(value || 0)
   if (!currency || currency === 'N/A') return amount.toFixed(2)
   try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount)
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
   } catch {
     return `${amount.toFixed(2)} ${currency}`
   }
@@ -53,14 +57,80 @@ function formatMoney(value, currency) {
 
 function formatDateTime(value) {
   if (!value) return 'Not available'
-  return new Intl.DateTimeFormat('en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 function humanize(value) {
   return `${value || ''}`.toLowerCase().replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
+}
+
+function formatDay(value) {
+  if (!value) return 'Today'
+  return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(value))
+}
+
+function retailerDisplayName(data) {
+  return data.retailerCode === 'KAGGLE' ? 'Demo shop' : data.retailerName
+}
+
+function isCciOnlyInsight(insight) {
+  return /CCI product|CCI basket|CCI penetration|contained a CCI/i.test(`${insight.fact} ${insight.interpretation}`)
+}
+
+function isDataInsight(insight) {
+  return /mapping|mapped|unmapped|unresolved|data sync|transaction export/i.test(`${insight.fact} ${insight.interpretation} ${insight.recommendedAction}`)
+}
+
+function operationalInsights(data) {
+  if (data.totalBaskets < MIN_PATTERN_BASKETS) return []
+  return data.insights.filter((insight) => !isCciOnlyInsight(insight) && !isDataInsight(insight))
+}
+
+function retailerAction(insight) {
+  return /\btest\b|promotion|placement|bundle|experiment/i.test(insight.recommendedAction)
+    ? null
+    : insight.recommendedAction
+}
+
+function attentionItems(data) {
+  const items = []
+  if (data.sync.state !== 'COMPLETED' || data.sync.errors.length) {
+    items.push({
+      id: 'sync',
+      title: 'Checkout data needs attention',
+      description: data.sync.errors[0] || `The latest feed is ${humanize(data.sync.state)}.`,
+      action: 'Check the latest checkout export or reconnect the feed.',
+      timestamp: data.sync.receivedAt || data.generatedAt,
+      type: 'Data feed',
+    })
+  }
+  if (data.totalBaskets > 0 && data.mappedLinePercentage < 90) {
+    const noProductsMapped = data.mappedLinePercentage === 0
+    items.push({
+      id: 'mapping',
+      title: noProductsMapped ? 'Product analysis is unavailable' : 'Product matching needs review',
+      description: noProductsMapped
+        ? 'No transaction lines are matched to normalized products.'
+        : `${decimal.format(data.mappedLinePercentage)}% of transaction lines are matched to normalized products.`,
+      action: 'Ask the SCAN administrator to review unmatched products.',
+      timestamp: data.generatedAt,
+      type: 'Product data',
+    })
+  }
+  return items
+}
+
+function alertFeed(data) {
+  const operational = operationalInsights(data).map((insight, index) => ({
+    id: `insight-${index}`,
+    title: insight.fact,
+    description: insight.interpretation,
+    action: retailerAction(insight),
+    timestamp: data.generatedAt,
+    type: /baskets occurred|busiest part of the day/i.test(`${insight.fact} ${insight.interpretation}`) ? 'Busy time' : 'Shop update',
+  }))
+  return [...attentionItems(data), ...operational]
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
 }
 
 function Login({ error, loading, onSubmit }) {
@@ -77,417 +147,223 @@ function Login({ error, loading, onSubmit }) {
       <section className="cci-login-card" aria-labelledby="retailer-login-title">
         <ScanBrand subtitle="Sales & Consumption Analytics Network" />
         <div className="cci-login-copy">
-          <span className="cci-eyebrow">Retailer owner portal</span>
-          <h1 id="retailer-login-title">Your market, clearly explained.</h1>
-          <p>
-            See sales, basket behavior, product performance and data synchronization without
-            changing how the cashier checks out customers.
-          </p>
+          <span className="cci-eyebrow">Retailer workspace</span>
+          <h1 id="retailer-login-title">Know what needs your attention.</h1>
+          <p>See how the shop is doing, what is selling, and whether the latest checkout data arrived.</p>
         </div>
         <form className="cci-login-form" onSubmit={submit}>
-          <label>
-            Username
-            <input
-              autoComplete="username"
-              required
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              autoComplete="current-password"
-              required
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
+          <label>Username<input autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+          <label>Password<input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
-          <button className="cci-primary-button" disabled={loading} type="submit">
-            {loading ? 'Connecting…' : 'Open my dashboard'}
-          </button>
+          <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Connecting…' : 'Open my dashboard'}</button>
         </form>
-        <a className="portal-switch-link" href="/?portal=cci">CCI Sales & Marketing portal <span aria-hidden="true">→</span></a>
+        <div className="portal-switch-links">
+          <a className="portal-switch-link" href="/?portal=cci">CCI intelligence workspace <span aria-hidden="true">→</span></a>
+          <a className="portal-switch-link" href="/?portal=connection">Data connection <span aria-hidden="true">→</span></a>
+        </div>
       </section>
     </main>
   )
 }
 
-function Kpi({ label, value, note, status }) {
+function PeriodControl({ loading, onChange, value }) {
   return (
-    <article className={`cci-kpi-card ${status ? `is-${status}` : ''}`}>
-      <div className="cci-kpi-label">{label}</div>
-      <div className="cci-kpi-value">{value}</div>
-      <div className="cci-kpi-note">{note}</div>
-    </article>
+    <label className="retailer-period-select">
+      <span>Period</span>
+      <select aria-label="Period" disabled={loading} value={value} onChange={(event) => onChange(event.target.value)}>
+        {PERIODS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+      </select>
+    </label>
   )
 }
 
-function Empty({ title, children }) {
+function SalesTrend({ data }) {
+  if (!data.dailySales.length) return <EmptyState compact title="No daily sales trend">Imported transactions will appear here.</EmptyState>
+  const accessibleSummary = data.dailySales
+    .map((day) => `${formatDay(day.date)}: ${formatMoney(day.totalSales, data.currency)}`)
+    .join('; ')
   return (
-    <div className="cci-empty-state">
-      <div className="cci-empty-icon" aria-hidden="true">○</div>
-      <h3>{title}</h3>
-      <p>{children}</p>
+    <div className="scan-chart retailer-sales-chart" role="img" aria-label={`Daily retailer sales. ${accessibleSummary}`}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260} initialDimension={{ width: 600, height: 300 }}>
+        <LineChart data={data.dailySales} margin={{ top: 10, right: 20, bottom: 8, left: 4 }}>
+          <CartesianGrid vertical={false} stroke="#e4e2dd" />
+          <XAxis axisLine={false} dataKey="date" tickFormatter={(value) => `${value}`.slice(5)} tickLine={false} />
+          <YAxis axisLine={false} tickLine={false} width={54} />
+          <Tooltip formatter={(value) => formatMoney(value, data.currency)} />
+          <Line dataKey="totalSales" dot={data.dailySales.length < 12} stroke="#e41e2b" strokeWidth={2.5} type="monotone" isAnimationActive />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
-function InsightCards({ insights }) {
+function SyncStatus({ data, detailed = false }) {
+  const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
   return (
-    <div className={`cci-insight-grid count-${Math.min(insights.length, 3)}`}>
-      {insights.map((insight, index) => (
-        <article className="cci-insight-card retailer-insight-card" key={`${insight.fact}-${index}`}>
-          <div className="cci-insight-number">{String(index + 1).padStart(2, '0')}</div>
-          <div className="cci-insight-label">Fact</div>
-          <h3>{insight.fact}</h3>
-          <div className="cci-insight-label">What it means</div>
-          <p>{insight.interpretation}</p>
-          <div className="cci-insight-label">Recommended action</div>
-          <p className="cci-action-copy">{insight.recommendedAction}</p>
-        </article>
-      ))}
-    </div>
+    <section className={`scan-panel retailer-sync-card ${healthy ? 'is-healthy' : 'is-warning'}`}>
+      <header className="scan-panel-header"><div><h3>{healthy ? 'Checkout data is connected' : 'Data sync needs attention'}</h3><p>{data.sync.filename || 'No source file received'}</p></div><StatusBadge tone={healthy ? 'success' : 'warning'}>{healthy ? 'Up to date' : humanize(data.sync.state)}</StatusBadge></header>
+      {detailed ? (
+        <dl className="retailer-sync-grid">
+          <div><dt>Completed</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
+          <div><dt>Receipts</dt><dd>{integer.format(data.sync.importedReceipts)}</dd></div>
+          <div><dt>Transaction lines</dt><dd>{integer.format(data.sync.importedLines)}</dd></div>
+          <div><dt>Unresolved products</dt><dd>{integer.format(data.sync.unresolvedProducts)}</dd></div>
+        </dl>
+      ) : <p className="retailer-sync-copy">Last completed {formatDateTime(data.sync.completedAt)} · {integer.format(data.sync.importedReceipts)} receipts imported</p>}
+      {data.sync.errors.length ? <div className="scan-inline-notice scan-inline-error" role="alert">{data.sync.errors.join(' · ')}</div> : null}
+    </section>
   )
 }
 
-function Briefing({ insights, onNavigate }) {
-  const visibleInsights = insights.slice(0, 3)
+function TodayHero({ data }) {
   return (
-    <section className="cci-panel cci-briefing" aria-labelledby="retailer-briefing-title">
-      <div className="cci-section-heading compact cci-briefing-heading">
-        <div className="cci-heading-with-icon">
-          <span className="cci-heading-icon"><ScanIcon name="pulse" /></span>
-          <h2 id="retailer-briefing-title">Three things to know</h2>
-        </div>
-        {insights.length ? (
-          <button className="cci-text-button" type="button" onClick={() => onNavigate('recommendations')}>
-            View all actions <ScanIcon name="chevron" size={16} />
-          </button>
-        ) : null}
+    <section className="retailer-today-hero" aria-labelledby="retailer-today-title">
+      <header><div><span className="scan-eyebrow">Shop summary</span><h2 id="retailer-today-title">Today</h2></div><p>{formatDay(data.generatedAt)}</p></header>
+      <div className="retailer-today-numbers">
+        <div className="is-primary"><span>Sales today</span><strong>{formatMoney(data.totalSales, data.currency)}</strong></div>
+        <div><span>Transactions</span><strong>{integer.format(data.totalBaskets)}</strong></div>
+        <div><span>Average basket</span><strong>{formatMoney(data.averageBasketValue, data.currency)}</strong></div>
       </div>
-      {visibleInsights.length ? (
-        <div className={`cci-briefing-grid count-${visibleInsights.length}`}>
-          {visibleInsights.map((insight, index) => (
-            <article className="cci-briefing-item" key={`${insight.fact}-${index}`}>
-              <span className={`cci-briefing-number tone-${index + 1}`}>{index + 1}</span>
-              <div>
-                <h3 data-pretext>{insight.fact}</h3>
-                <p data-pretext>{insight.interpretation}</p>
-              </div>
-            </article>
-          ))}
+    </section>
+  )
+}
+
+function NeedsAttention({ data, onNavigate }) {
+  const items = attentionItems(data)
+  return (
+    <section className="retailer-simple-section retailer-needs-attention">
+      <header><h2>Needs attention</h2>{items.length ? <StatusBadge tone="warning">{items.length} {items.length === 1 ? 'item' : 'items'}</StatusBadge> : null}</header>
+      {items.length ? (
+        <div className="retailer-attention-list">
+          {items.map((item) => <article key={item.id}><ScanIcon name="alerts" size={21} /><div><strong>{item.title}</strong><p>{item.description}</p></div><button onClick={() => onNavigate('alerts')} type="button">View details <ScanIcon name="chevron" size={16} /></button></article>)}
         </div>
       ) : (
-        <Empty title="No reliable briefing yet">
-          Import complete baskets and map products before SCAN highlights a decision.
-        </Empty>
+        <div className="retailer-normal-state"><span aria-hidden="true">✓</span><div><strong>{data.totalBaskets ? 'Everything looks normal.' : 'No sales recorded yet.'}</strong><p>{data.totalBaskets ? 'The checkout feed has no data issue requiring action.' : 'Sales will appear after today’s first completed transaction.'}</p></div></div>
       )}
     </section>
   )
 }
 
-function TopProductsSummary({ data, onNavigate }) {
+function TopSellers({ data, limit = 3 }) {
   return (
-    <section className="cci-panel cci-overview-table-panel">
-      <div className="cci-section-heading compact">
-        <h2>Top products by sales</h2>
-      </div>
+    <section className="retailer-simple-section">
+      <header><div><h2>Top sellers today</h2><p>Ranked by recorded sales</p></div></header>
       {data.topProducts.length ? (
-        <div className="cci-table-wrap">
-          <table className="cci-table cci-compact-table" aria-label="Top products by retailer sales">
-            <thead><tr><th>#</th><th>Product</th><th>Category</th><th>Sales</th></tr></thead>
-            <tbody>{data.topProducts.slice(0, 5).map((product, index) => (
-              <tr key={`${product.name}-${product.category}`}>
-                <td>{index + 1}</td>
-                <td title={product.name}>{product.name}</td>
-                <td>{product.category}</td>
-                <td>{formatMoney(product.revenue, data.currency)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      ) : <Empty title="No products yet">Imported product sales will appear here.</Empty>}
-      <button className="cci-panel-link" type="button" onClick={() => onNavigate('products')}>
-        View all products <ScanIcon name="chevron" size={16} />
-      </button>
-    </section>
-  )
-}
-
-function RecommendedActionsSummary({ insights, onNavigate }) {
-  return (
-    <section className="cci-panel cci-actions-summary">
-      <div className="cci-section-heading compact"><h2>Recommended actions</h2></div>
-      {insights.length ? (
-        <div className="cci-action-rows">
-          {insights.slice(0, 2).map((insight, index) => (
-            <article className="cci-action-row" key={`${insight.recommendedAction}-${index}`}>
-              <span className={`cci-action-icon tone-${index + 1}`}><ScanIcon name={index ? 'products' : 'chart'} /></span>
-              <div>
-                <h3 data-pretext>{insight.recommendedAction}</h3>
-                <p data-pretext>{insight.fact}</p>
-              </div>
-              <button
-                aria-label={`View recommendation: ${insight.recommendedAction}`}
-                className="cci-small-button"
-                type="button"
-                onClick={() => onNavigate('recommendations')}
-              >
-                View details
-              </button>
-            </article>
+        <ol className="retailer-seller-list">
+          {data.topProducts.slice(0, limit).map((product, index) => (
+            <li key={`${product.name}-${product.category}`}><span>{index + 1}</span><div><strong title={product.name}>{product.name}</strong><small>{product.category} · {integer.format(product.basketCount)} transactions</small></div><b>{formatMoney(product.revenue, data.currency)}</b></li>
           ))}
-        </div>
-      ) : <p className="cci-muted-copy">Recommendations appear after reliable patterns are available.</p>}
-      <button className="cci-panel-link" type="button" onClick={() => onNavigate('recommendations')}>
-        View all recommendations <ScanIcon name="chevron" size={16} />
-      </button>
+        </ol>
+      ) : <EmptyState compact title="No products sold yet">Today’s sellers will appear after transactions are received.</EmptyState>}
     </section>
   )
 }
 
-function SyncSummary({ sync, onNavigate }) {
-  const healthy = sync.state === 'COMPLETED'
+function BusyHours({ data }) {
+  const sufficient = data.totalBaskets >= MIN_PATTERN_BASKETS && data.dayparts.length
   return (
-    <section className="cci-panel cci-sync-summary">
-      <div className="cci-section-heading compact"><h2>Data sync status</h2></div>
-      <div className="cci-sync-summary-body">
-        <span className={`cci-sync-icon ${healthy ? 'is-healthy' : 'is-warning'}`}>
-          <ScanIcon name={healthy ? 'check' : 'warning'} size={30} />
-        </span>
-        <div>
-          <h3>{healthy ? 'Latest import completed' : 'Synchronization needs attention'}</h3>
-          <p>{sync.filename || 'No source file received'}</p>
-          <p>Completed {formatDateTime(sync.completedAt)}</p>
-          <span className={`cci-status-badge ${healthy ? 'is-healthy' : 'is-warning'}`}>
-            {healthy ? 'Up to date' : humanize(sync.state)}
-          </span>
+    <section className="retailer-simple-section">
+      <header><div><h2>Busy hours</h2><p>Share of today’s transactions</p></div></header>
+      {sufficient ? (
+        <div className="retailer-busy-hours">
+          {data.dayparts.slice(0, 4).map((item) => <div key={item.segment}><span>{humanize(item.segment)}</span><i aria-hidden="true"><b style={{ width: `${Math.min(item.sharePercentage, 100)}%` }} /></i><strong>{decimal.format(item.sharePercentage)}%</strong><small>{integer.format(item.basketCount)} transactions</small></div>)}
         </div>
-      </div>
-      <button className="cci-secondary-button cci-sync-history" type="button" onClick={() => onNavigate('sync')}>Sync details</button>
+      ) : <EmptyState compact title="Not enough transactions yet">At least five transactions are needed before showing a time pattern.</EmptyState>}
     </section>
   )
 }
 
-function Overview({ data, onNavigate }) {
-  if (data.totalBaskets === 0) {
-    return (
-      <div className="cci-page-stack">
-        <section className="cci-panel">
-          <Empty title="No baskets in this period">
-            Choose a longer period or open Data Sync to check whether SCAN has received the latest export.
-          </Empty>
+function Today({ data, onNavigate }) {
+  return (
+    <div className="scan-page-stack retailer-today">
+      <TodayHero data={data} />
+      <NeedsAttention data={data} onNavigate={onNavigate} />
+      <div className="retailer-today-grid"><TopSellers data={data} /><BusyHours data={data} /></div>
+    </div>
+  )
+}
+
+function Sales({ data, loading, onPeriodChange, period }) {
+  return (
+    <div className="scan-page-stack">
+      <PageIntro eyebrow="Sales" title="Sales history" description="Recorded sales, transactions, and average basket for the selected period." aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} />
+      <MetricStrip label="Sales summary" items={[
+        { label: 'Sales', value: formatMoney(data.totalSales, data.currency), note: humanize(data.period) },
+        { label: 'Transactions', value: integer.format(data.totalBaskets), note: 'Validated receipts' },
+        { label: 'Average basket', value: formatMoney(data.averageBasketValue, data.currency), note: 'Sales divided by transactions' },
+      ]} />
+      <ChartPanel title="How are sales changing over time?" description="Recorded daily sales"><SalesTrend data={data} /></ChartPanel>
+    </div>
+  )
+}
+
+function ProductList({ data, products, search }) {
+  if (!products.length) return search
+    ? <EmptyState compact title="No matching products">Try another product name.</EmptyState>
+    : <EmptyState compact title="No product sales">No products were sold in this period.</EmptyState>
+  return (
+    <ol className="retailer-product-list">
+      {products.map((product, index) => (
+        <li key={`${product.name}-${product.category}`}>
+          <span className="retailer-product-rank">{String(index + 1).padStart(2, '0')}</span>
+          <div><strong title={product.name}>{product.name}</strong><small>{product.category}</small></div>
+          <dl><div><dt>Sales</dt><dd>{formatMoney(product.revenue, data.currency)}</dd></div><div><dt>Transactions</dt><dd>{integer.format(product.basketCount)}</dd></div><div><dt>Units</dt><dd>{decimal.format(product.quantity)}</dd></div></dl>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function Products({ data, loading, onPeriodChange, period }) {
+  const [search, setSearch] = useState('')
+  const products = data.topProducts.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const shortPeriod = data.period === 'TODAY' || data.period === 'LAST_7_DAYS'
+  return (
+    <div className="scan-page-stack">
+      <PageIntro eyebrow="Products" title="Product performance" description="What is selling in this shop, based on recorded transaction lines." aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} />
+      <section className="retailer-simple-section retailer-products-section">
+        <header><div><h2>Best sellers</h2><p>Top products by recorded sales</p></div>{data.topProducts.length > 6 ? <label className="retailer-product-search"><span className="sr-only">Search products</span><ScanIcon name="explore" size={18} /><input onChange={(event) => setSearch(event.target.value)} placeholder="Search products" type="search" value={search} /></label> : null}</header>
+        <ProductList data={data} products={products} search={search.trim()} />
+      </section>
+      <div className="retailer-product-secondary">
+        <section className="retailer-simple-section retailer-unavailable-section"><header><h2>Slow movers</h2><StatusBadge tone="neutral">Not available</StatusBadge></header><p>A complete product list is needed to identify products selling more slowly than the rest.</p></section>
+        <section className="retailer-simple-section retailer-stock-check"><header><div><h2>High sales activity</h2><p>Products worth checking on the shelf</p></div><StatusBadge tone="neutral">Inventory not connected</StatusBadge></header>
+          {shortPeriod && data.topProducts.length ? <ul>{[...data.topProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 3).map((product) => <li key={product.name}><div><strong>{product.name}</strong><small>{decimal.format(product.quantity)} units sold · {humanize(data.period)}</small></div><span>Check stock</span></li>)}</ul> : <p>Choose Today or Last 7 days to see products with the most recorded unit sales. SCAN does not know current stock levels.</p>}
         </section>
       </div>
-    )
-  }
-
-  return (
-    <div className="cci-page-stack">
-      <Briefing insights={data.insights} onNavigate={onNavigate} />
-
-      <section className="cci-kpi-grid retailer-kpi-grid" aria-label="Retailer KPIs">
-        <Kpi label="Total sales" value={formatMoney(data.totalSales, data.currency)} note="Validated receipt value" />
-        <Kpi label="Baskets" value={integer.format(data.totalBaskets)} note="Complete reconstructed receipts" />
-        <Kpi label="Average basket" value={formatMoney(data.averageBasketValue, data.currency)} note="Sales divided by baskets" />
-        <Kpi label="CCI penetration" value={`${decimal.format(data.cciPenetrationPercentage)}%`} note={`${integer.format(data.cciBaskets)} baskets with CCI`} />
-        <Kpi
-          label="Product mapping"
-          value={`${decimal.format(data.mappedLinePercentage)}%`}
-          note={data.mappedLinePercentage >= 90 ? 'Healthy for analysis' : 'Mapping review recommended'}
-          status={data.mappedLinePercentage >= 90 ? 'healthy' : 'warning'}
-        />
-      </section>
-
-      <section className="cci-overview-primary-grid">
-        <section className="cci-panel cci-overview-chart-panel">
-          <div className="cci-section-heading compact">
-            <div><h2>Sales trend</h2><p>{decimal.format(data.productsPerBasket)} items per basket · {decimal.format(data.totalItems)} units recorded</p></div>
-          </div>
-          {data.dailySales.length ? (
-            <div className="cci-chart retailer-sales-chart" role="img" aria-label="Daily retailer sales">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260} initialDimension={{ width: 600, height: 300 }}>
-                <LineChart data={data.dailySales} margin={{ top: 10, right: 20, bottom: 8, left: 4 }}>
-                  <CartesianGrid vertical={false} stroke="#e5e6e7" />
-                  <XAxis axisLine={false} dataKey="date" tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} width={54} />
-                  <Tooltip formatter={(value) => formatMoney(value, data.currency)} />
-                  <Line dataKey="totalSales" dot={data.dailySales.length < 12} stroke="#e61c24" strokeWidth={2.5} type="monotone" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          ) : <Empty title="No daily trend yet">Imported transactions will appear here.</Empty>}
-        </section>
-        <TopProductsSummary data={data} onNavigate={onNavigate} />
-      </section>
-
-      <section className="cci-overview-secondary-grid">
-        <RecommendedActionsSummary insights={data.insights} onNavigate={onNavigate} />
-        <SyncSummary sync={data.sync} onNavigate={onNavigate} />
-      </section>
     </div>
   )
 }
 
-function Products({ data }) {
+function Alerts({ data }) {
+  const alerts = alertFeed(data)
   return (
-    <div className="cci-page-stack">
-      <section className="cci-page-intro">
-        <span className="cci-eyebrow retailer-eyebrow">Products & categories</span>
-        <h2>What drives recorded sales?</h2>
-        <p>Ranked by line revenue from validated retailer exports.</p>
+    <div className="scan-page-stack">
+      <PageIntro eyebrow="Alerts" title="Alerts" description="Shop updates that may need attention." aside={<StatusBadge tone={alerts.length ? 'warning' : 'success'}>{alerts.length ? `${alerts.length} ${alerts.length === 1 ? 'item' : 'items'}` : 'All clear'}</StatusBadge>} />
+      <section className="retailer-simple-section">
+        {alerts.length ? <ol className="retailer-alert-feed">{alerts.map((alert) => <li key={alert.id}><div className="retailer-alert-marker"><ScanIcon name={alert.id === 'sync' || alert.id === 'mapping' ? 'alerts' : 'chart'} size={19} /></div><article><header><StatusBadge tone={alert.id === 'sync' || alert.id === 'mapping' ? 'warning' : 'neutral'}>{alert.type}</StatusBadge><time dateTime={alert.timestamp}>{formatDateTime(alert.timestamp)}</time></header><h2>{alert.title}</h2><p>{alert.description}</p>{alert.action ? <div><span>What to do</span><strong>{alert.action}</strong></div> : null}</article></li>)}</ol> : <div className="retailer-normal-state is-large"><span aria-hidden="true">✓</span><div><strong>Everything looks normal.</strong><p>There are no shop or data-feed alerts for today.</p></div></div>}
       </section>
-      <section className="cci-panel">
-        <div className="cci-section-heading compact"><h2>Top products</h2></div>
-        {data.topProducts.length ? (
-          <div className="cci-table-wrap">
-            <table className="cci-table">
-              <thead><tr><th>Product</th><th>Category</th><th>Baskets</th><th>Quantity</th><th>Sales</th></tr></thead>
-              <tbody>{data.topProducts.map((product) => (
-                <tr key={`${product.name}-${product.category}`}>
-                  <td>{product.name}</td><td>{product.category}</td>
-                  <td>{integer.format(product.basketCount)}</td><td>{decimal.format(product.quantity)}</td>
-                  <td>{formatMoney(product.revenue, data.currency)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        ) : <Empty title="No products found">Choose a period with imported baskets.</Empty>}
-      </section>
-      <section className="cci-panel">
-        <div className="cci-section-heading compact"><h2>Top categories</h2></div>
-        {data.topCategories.length ? (
-          <div className="cci-chart" role="img" aria-label="Top retailer categories by sales">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300} initialDimension={{ width: 600, height: 340 }}>
-              <BarChart data={data.topCategories.slice(0, 8)} layout="vertical" margin={{ left: 20, right: 24 }}>
-                <CartesianGrid horizontal={false} stroke="rgba(18, 18, 18, 0.08)" strokeDasharray="3 3" />
-                <XAxis type="number" tickLine={false} />
-                <YAxis dataKey="category" type="category" tickLine={false} width={120} />
-                <Tooltip formatter={(value) => formatMoney(value, data.currency)} />
-                <Bar dataKey="revenue" fill="#e61c24" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : <Empty title="No category data">Map retailer products to categories to populate this view.</Empty>}
-      </section>
+      <details className="retailer-data-details"><summary>Checkout data details <ScanIcon name="chevron" size={17} /></summary><SyncStatus data={data} detailed /></details>
+      <section className="scan-panel retailer-privacy-note"><header className="scan-panel-header"><div><h3>Your sales stay private</h3><p>How SCAN uses this data</p></div><ScanIcon name="shield" /></header><p>SCAN analyzes transaction and product data for this retailer account. No customer identity is shown. CCI receives only aggregates approved for sharing.</p></section>
     </div>
   )
 }
 
-function TimeAndStores({ data }) {
-  return (
-    <div className="cci-page-stack">
-      <section className="cci-page-intro">
-        <span className="cci-eyebrow retailer-eyebrow">Time & stores</span>
-        <h2>When and where does business happen?</h2>
-      </section>
-      <section className="cci-two-column">
-        <div className="cci-panel">
-          <div className="cci-section-heading compact"><h2>Dayparts</h2></div>
-          {data.dayparts.map((item) => (
-            <div className="retailer-segment-row" key={item.segment}>
-              <strong>{humanize(item.segment)}</strong>
-              <span>{integer.format(item.basketCount)} baskets · {decimal.format(item.sharePercentage)}%</span>
-            </div>
-          ))}
-        </div>
-        <div className="cci-panel">
-          <div className="cci-section-heading compact"><h2>Week pattern</h2></div>
-          {data.weekdayWeekend.map((item) => (
-            <div className="retailer-segment-row" key={item.segment}>
-              <strong>{humanize(item.segment)}</strong>
-              <span>{integer.format(item.basketCount)} baskets · {decimal.format(item.sharePercentage)}%</span>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="cci-panel">
-        <div className="cci-section-heading compact"><h2>Store performance</h2></div>
-        {data.stores.length ? (
-          <div className="cci-table-wrap">
-            <table className="cci-table">
-              <thead><tr><th>Store</th><th>Baskets</th><th>Sales</th><th>Average basket</th><th>CCI baskets</th></tr></thead>
-              <tbody>{data.stores.map((store) => (
-                <tr key={store.storeId}>
-                  <td>{store.storeId}</td><td>{integer.format(store.basketCount)}</td>
-                  <td>{formatMoney(store.totalSales, data.currency)}</td>
-                  <td>{formatMoney(store.averageBasketValue, data.currency)}</td>
-                  <td>{integer.format(store.cciBasketCount)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        ) : <Empty title="No store activity">Choose a period with imported baskets.</Empty>}
-      </section>
-    </div>
-  )
-}
-
-function Recommendations({ data }) {
-  return (
-    <div className="cci-page-stack">
-      <section className="cci-page-intro">
-        <span className="cci-eyebrow retailer-eyebrow">Recommendations</span>
-        <h2>Actions supported by your sales data</h2>
-        <p>Every recommendation follows a deterministic fact, interpretation and action.</p>
-      </section>
-      <InsightCards insights={data.insights} />
-    </div>
-  )
-}
-
-function DataSync({ data }) {
-  const healthy = data.sync.state === 'COMPLETED'
-  return (
-    <div className="cci-page-stack">
-      <section className="cci-page-intro">
-        <span className="cci-eyebrow retailer-eyebrow">Data sync</span>
-        <h2>{healthy ? 'Retailer data is connected' : 'Synchronization needs attention'}</h2>
-        <p>SCAN shows the latest server-side import received from the retailer connector.</p>
-      </section>
-      <section className={`cci-panel retailer-sync-card ${healthy ? 'is-healthy' : 'is-warning'}`}>
-        <div className="retailer-sync-heading">
-          <div className="retailer-sync-dot" aria-hidden="true" />
-          <div><span>Latest import</span><h2>{humanize(data.sync.state)}</h2></div>
-        </div>
-        <dl className="retailer-sync-grid">
-          <div><dt>File</dt><dd>{data.sync.filename || 'No file received'}</dd></div>
-          <div><dt>Completed</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
-          <div><dt>Receipts imported</dt><dd>{integer.format(data.sync.importedReceipts)}</dd></div>
-          <div><dt>Lines imported</dt><dd>{integer.format(data.sync.importedLines)}</dd></div>
-          <div><dt>Unresolved products</dt><dd>{integer.format(data.sync.unresolvedProducts)}</dd></div>
-        </dl>
-        {data.sync.errors.length ? (
-          <div className="cci-inline-error" role="alert">{data.sync.errors.join(' · ')}</div>
-        ) : null}
-      </section>
-      <section className="cci-panel retailer-privacy-note">
-        <span className="cci-eyebrow retailer-eyebrow">Privacy boundary</span>
-        <h2>Your retailer account is isolated</h2>
-        <p>This portal is bound to one retailer. CCI receives only aggregates the retailer has approved for sharing.</p>
-      </section>
-    </div>
-  )
-}
-
-function Page({ activePage, data, onNavigate }) {
-  if (activePage === 'products') return <Products data={data} />
-  if (activePage === 'time-store') return <TimeAndStores data={data} />
-  if (activePage === 'recommendations') return <Recommendations data={data} />
-  if (activePage === 'sync') return <DataSync data={data} />
-  return <Overview data={data} onNavigate={onNavigate} />
+function Page({ activePage, data, loading, onNavigate, onPeriodChange, period }) {
+  if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
+  if (activePage === 'sales') return <Sales data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
+  if (activePage === 'products') return <Products data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
+  if (activePage === 'alerts') return <Alerts data={data} />
+  return <Today data={data} onNavigate={onNavigate} />
 }
 
 export default function RetailerDashboard() {
   const [credentials, setCredentials] = useState(null)
-  const [period, setPeriod] = useState('ALL_TIME')
+  const [period, setPeriod] = useState('TODAY')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [activePage, setActivePage] = useState('overview')
+  const [activePage, setActivePage] = useState('today')
   const [refreshKey, setRefreshKey] = useState(0)
   const layoutRef = useRef(null)
 
@@ -497,95 +373,42 @@ export default function RetailerDashboard() {
     if (!credentials) return undefined
     const controller = new AbortController()
     fetchRetailerOverview({ ...credentials, period, signal: controller.signal })
-      .then((overview) => {
-        if (!controller.signal.aborted) setData(overview)
-      })
+      .then((overview) => { if (!controller.signal.aborted) setData(overview) })
       .catch((requestError) => {
         if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
           setError(requestError?.message || 'Unable to load retailer analytics.')
           if (requestError instanceof ScanApiError && [401, 403].includes(requestError.status)) setData(null)
         }
       })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [credentials, period, refreshKey])
 
-  function refresh() {
-    setLoading(true)
-    setError('')
-    setRefreshKey((value) => value + 1)
+  function refresh() { setLoading(true); setError(''); setRefreshKey((value) => value + 1) }
+  function changePeriod(nextPeriod) { setLoading(true); setError(''); setPeriod(nextPeriod) }
+  function navigate(nextPage) {
+    if ((nextPage === 'today' || nextPage === 'alerts') && period !== 'TODAY') changePeriod('TODAY')
+    setActivePage(nextPage)
   }
+  function signOut() { setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('TODAY'); setActivePage('today') }
 
-  function signOut() {
-    setCredentials(null)
-    setData(null)
-    setError('')
-    setLoading(false)
-    setPeriod('ALL_TIME')
-    setActivePage('overview')
-  }
+  if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={(next) => { setCredentials(next); setData(null); setError(''); setLoading(true); setRefreshKey((value) => value + 1) }} />
+  if (!data) return <LoadingState title="Reading your latest sales…" description="Preparing your shop summary." />
 
-  if (!credentials || (!data && error)) {
-    return <Login error={error} loading={loading} onSubmit={(next) => {
-      setCredentials(next)
-      setData(null)
-      setError('')
-      setLoading(true)
-      setRefreshKey((value) => value + 1)
-    }} />
-  }
+  const actions = (
+    <>
+      {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
+      <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
+      <button className="scan-icon-button" disabled={loading} onClick={refresh} type="button" aria-label={loading ? 'Refreshing…' : 'Refresh'}><ScanIcon name="refresh" size={18} /></button>
+    </>
+  )
 
-  if (!data) {
-    return (
-      <main className="cci-loading-shell retailer-login-shell" aria-live="polite">
-        <div className="cci-loading-mark">S</div>
-        <h1>Loading your market…</h1>
-        <p>SCAN is calculating deterministic retailer metrics.</p>
-      </main>
-    )
-  }
-
-  const activeLabel = NAV_ITEMS.find((item) => item.id === activePage)?.label || 'Overview'
   return (
-    <div className="cci-dashboard-shell retailer-dashboard-shell" ref={layoutRef}>
-      <aside className="cci-sidebar">
-        <ScanBrand inverted subtitle="Retailer Intelligence" />
-        <nav className="cci-nav" aria-label="Retailer analytics">
-          {NAV_ITEMS.map((item) => (
-            <button aria-current={activePage === item.id ? 'page' : undefined} className={activePage === item.id ? 'active' : ''} key={item.id} onClick={() => setActivePage(item.id)} type="button">
-              <ScanIcon name={item.icon} /><span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="cci-sidebar-footer">
-          <div className="cci-account-row"><span className="cci-account-avatar">{data.retailerName.slice(0, 2).toUpperCase()}</span><div><strong>{data.retailerName}</strong><small>Retailer</small></div></div>
-          <p><ScanIcon name="shield" size={15} /> Private retailer view</p>
-          <button className="cci-sidebar-signout" type="button" onClick={signOut}><ScanIcon name="signout" /> Sign out</button>
-        </div>
-      </aside>
-      <main className="cci-main">
-        <header className="cci-topbar">
-          <div><span className="cci-mobile-page">{activeLabel}</span><h1>Welcome back, <span>{data.retailerName}</span></h1><p>Retailer workspace · Updated {formatDateTime(data.generatedAt)}</p></div>
-          <div className="cci-topbar-actions">
-            <label className="retailer-period-select">
-              <span>Period</span>
-              <select value={period} onChange={(event) => { setLoading(true); setError(''); setPeriod(event.target.value) }}>
-                {PERIODS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            </label>
-            <button className="cci-secondary-button" disabled={loading} onClick={refresh} type="button"><ScanIcon name="refresh" size={17} />{loading ? 'Refreshing…' : 'Refresh'}</button>
-            <button aria-label="Sign out from SCAN" className="cci-signout-button" onClick={signOut} type="button"><ScanIcon name="signout" size={19} /></button>
-          </div>
-        </header>
-        <div className="cci-mobile-nav" aria-label="Retailer analytics sections">
-          {NAV_ITEMS.map((item) => <button aria-current={activePage === item.id ? 'page' : undefined} className={activePage === item.id ? 'active' : ''} key={item.id} onClick={() => setActivePage(item.id)} type="button"><ScanIcon name={item.icon} size={17} />{item.label}</button>)}
-        </div>
-        {data.retailerCode === 'KAGGLE' ? <div className="cci-demo-notice"><strong>Technical demo dataset.</strong> Replace this with a retailer export for current market evidence.</div> : null}
-        {error ? <div className="cci-inline-error" role="alert"><span>{error}</span><button type="button" onClick={refresh}>Retry</button></div> : null}
-        <Page activePage={activePage} data={data} onNavigate={setActivePage} />
-      </main>
+    <div ref={layoutRef}>
+      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={actions} eyebrow="My shop" meta={<p>Private retailer view</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
+        {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" type="button" onClick={refresh}>Retry</button></div> : null}
+        <Page activePage={activePage} data={data} loading={loading} onNavigate={navigate} onPeriodChange={changePeriod} period={period} />
+      </WorkspaceShell>
     </div>
   )
 }

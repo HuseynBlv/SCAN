@@ -104,15 +104,37 @@
 - **Elevation:** No shadow by default. A subtle shadow is allowed only for menus, dialogs,
   mobile navigation overlays, and other truly floating layers.
 
-## Overview Information Order
+## Product Information Architecture
 
-1. Page title, retailer/account context, period, and store filter.
-2. **Three things to know** briefing.
-3. Primary KPI strip.
-4. One dominant trend visualization.
-5. Supporting product, category, store, or basket evidence.
-6. Recommended actions.
-7. Data synchronization and freshness status.
+- **CCI workspace:** Home, Opportunities, Explore, Stores, Ask SCAN.
+- **Retailer workspace:** Today, Sales, Products, Alerts.
+- **Data connection workspace:** Connections, Import data, Product mapping. This is an
+  administrator surface and is not part of the CCI or retailer information architecture.
+- Basket, product, and time analysis live inside CCI Explore instead of competing with
+  commercial actions in the top-level navigation.
+- Retailer synchronization and deterministic recommendations live together under Alerts so
+  shop owners have one place to check what requires attention.
+- Ask SCAN answers only questions that can be resolved from the current normalized analytics
+  response. Unsupported free-form questions receive an explicit unavailable state.
+
+## Home Information Order
+
+### CCI workspace
+
+1. Retailer scope, data freshness, and discreet demo-data disclosure.
+2. One dynamic discovery statement with an integrated, constrained Ask SCAN entry point.
+3. No more than three action-ready opportunities, or an explicit no-opportunity state.
+4. Four decision-context metrics: baskets, CCI penetration, average basket, and data health.
+5. Basket DNA co-occurrence evidence with visible support and denominator.
+6. Recommended actions followed by data health and freshness.
+
+### Retailer workspace
+
+1. Today and shop context with three core metrics: sales, transactions, and average basket.
+2. Needs-attention items grounded in synchronization or mapping data, or an explicit normal state.
+3. A short ranked list of today’s top sellers.
+4. A simple busy-hours view, shown only after the minimum transaction threshold is met.
+5. Detailed synchronization evidence and the privacy boundary live under Alerts, not on every page.
 
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.
@@ -125,6 +147,8 @@ decision or help establish data trust.
 - Inactive labels use a muted light gray; hover adds a subtle translucent white fill.
 - Mobile navigation becomes a compact drawer or bottom navigation. Preserve a 44px minimum
   target size.
+- Retailer mobile navigation is a fixed four-item bottom bar. CCI uses a horizontally scrollable
+  section bar at smaller widths because it remains desktop-first.
 
 ### Buttons
 
@@ -163,6 +187,17 @@ decision or help establish data trust.
 - Data freshness must be visible without entering a settings page.
 - Success, warning, and failure states include an icon, label, timestamp, and next action.
 - Do not imply real-time synchronization when the source is a scheduled file export.
+
+### Data Connection and Imports
+
+- Distinguish working import paths, setup-required connector software, provisional adapters,
+  and future integrations with explicit text labels.
+- Use the actual import-job result for receipt, line, duplicate, unresolved-product, error,
+  attempt, and completion values. Do not derive a mapping percentage from unlike units.
+- The current upload API is synchronous, so show one honest processing state instead of simulated
+  stage progress. Completed or failed stage markers appear only after the API responds.
+- Column mapping remains profile-controlled until the backend exposes an editable profile API.
+  Product mapping may be corrected through the implemented unresolved-product and catalog APIs.
 
 ### Login and Portal Selection
 
@@ -216,3 +251,7 @@ decision or help establish data trust.
 | 2026-08-30 | Use restrained Coca-Cola/CCI styling | Red remains distinctive when supported by black, white, and precise information design. |
 | 2026-08-30 | Make Overview a decision briefing | Retailer owners and CCI users need actions, not a configurable BI canvas. |
 | 2026-08-30 | Preserve numerical trust boundary | Visual polish must never introduce unsupported comparisons, forecasts, or causal claims. |
+| 2026-09-13 | Separate opportunities from observed signals | Weak relationships and data-quality findings remain visible but cannot become the CCI home headline. |
+| 2026-09-13 | Consolidate the two workspace navigation models | CCI is action-first with analysis under Explore; retailer is glanceable with Today, Sales, Products, and Alerts. |
+| 2026-09-13 | Keep retailer intelligence operational and honest | Today leads with shop performance and actual data issues; stock and prior-period claims remain unavailable until those data contracts exist. |
+| 2026-09-13 | Make data connection capability states explicit | Manual file import and product mapping are working; the folder connector requires installation, CASPOS is provisional, and unimplemented POS integrations remain clearly labeled. |

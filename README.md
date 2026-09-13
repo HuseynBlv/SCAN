@@ -36,24 +36,29 @@ prove that a promotion will increase sales.
 
 | Portal | What it shows today |
 |---|---|
-| Retailer Overview | Three-things briefing, KPI strip, sales trend, top products, recommended actions, and sync freshness |
-| Retailer Products & Categories | Top products and categories by imported line revenue |
-| Retailer Time & Stores | Daypart, weekday/weekend, and store performance |
-| Retailer Recommendations | Rule-based facts, interpretations, and suggested actions |
-| Retailer Data Sync | Latest received file, completion state, counts, mapping gaps, and errors |
-| CCI Overview | Three-things briefing, basket KPIs, companion-category signal, top companions, actions, and data confidence |
-| CCI analysis pages | Approved companion product/category, CCI SKU, time/store, and recommendation analytics |
+| Retailer Today | Today’s sales, transactions, average basket, actual data issues, top sellers, and busy hours |
+| Retailer Sales | Three core metrics and one daily sales trend for the selected supported period |
+| Retailer Products | Searchable best sellers plus honest slow-mover and stock-data limitations |
+| Retailer Alerts | A chronological feed of grounded shop updates, import issues, mapping gaps, and the privacy boundary |
+| CCI Home | A dynamic discovery statement, up to three action-ready opportunities, four context metrics, Basket DNA, and data health |
+| CCI Opportunities | Action-ready recommendations separated from weak or data-quality signals |
+| CCI Explore and Stores | Companion, CCI SKU, time-pattern, and store-level descriptive analytics |
+| Ask SCAN | A constrained question shell that answers only from the current normalized analytics response |
+| Data Connection | Admin-only connection methods, real CSV/XLS/XLSX upload, import results, and product mapping |
 
-Retailer analytics support today, last 7 days, last 30 days, and all-time periods. CCI companion
-rankings remain across all CCI baskets rather than a selected SKU. Period-over-period changes
-and CCI-side date/store/SKU filters are not implemented yet.
+Retailer analytics support today, last 7 days, last 30 days, and all-time periods. Custom ranges,
+inventory quantities, complete slow-mover rankings, and period-over-period comparisons are not
+available in the current retailer contract, so the interface does not imply them. CCI companion
+rankings remain across all CCI baskets rather than a selected SKU. CCI-side date/store/SKU filters
+are not implemented yet.
 
 ### Interface principles
 
 - **Briefing before exploration:** each Overview starts with observed facts and interpretations,
   then exposes KPIs, evidence, and recommended actions.
-- **One product, two permission views:** retailer and CCI portals share navigation, typography,
-  interaction, responsive behavior, and accessibility patterns while exposing different data.
+- **One product, permissioned workspaces:** retailer, CCI, and data-connection surfaces share
+  typography, interaction, responsive behavior, and accessibility patterns while exposing
+  different capabilities and data.
 - **No invented comparisons:** visual polish does not add peer benchmarks, forecasts, uplift,
   or period changes that the analytics API does not calculate.
 - **Visible data trust:** mapping coverage, import freshness, demo-data notices, denominators,
@@ -65,15 +70,18 @@ The implementation tokens and component rules are documented in [DESIGN.md](DESI
 
 ```mermaid
 flowchart LR
-    A["POS scheduled CSV / XLSX export"] --> B["SCAN Retailer Connector"]
-    B --> C["Authenticated HTTPS upload"]
-    C --> D["Column mapping and validation"]
-    D --> E["Canonical lines and product mapping"]
-    E --> F["Receipt reconstruction and duplicate checks"]
-    F --> G["Deterministic analytics"]
-    G --> H["Retailer portal"]
-    G --> I["CCI sharing permission"]
-    I --> J["CCI dashboard"]
+    A["POS CSV / XLS / XLSX export"] --> B{"Delivery"}
+    B -->|"Scheduled folder"| C["SCAN Retailer Connector"]
+    B -->|"Manual file"| D["Admin upload"]
+    C --> E["Authenticated HTTPS import"]
+    D --> E
+    E --> F["Profile mapping and validation"]
+    F --> G["Canonical lines and product mapping"]
+    G --> H["Receipt reconstruction and duplicate checks"]
+    H --> I["Deterministic analytics"]
+    I --> J["Retailer portal"]
+    I --> K["CCI sharing permission"]
+    K --> L["CCI dashboard"]
 ```
 
 - **Repeatable imports:** uploading identical bytes returns the active/completed import job;
@@ -85,6 +93,9 @@ flowchart LR
 - **Explicit product mapping:** exact barcodes, saved retailer mappings, and manual/catalog
   mapping; canonical names have a stable case-insensitive identity, with no fuzzy or AI matching.
 - **Traceability:** import jobs retain status, counts, and validation errors.
+- **Honest connection states:** browser upload is working; the scheduled-folder connector must be
+  installed separately; the CASPOS CloudSale adapter is provisional; 1C and generic POS connectors
+  are not implemented.
 - **Separation of access:** connector credentials can only upload for their server-bound pilot;
   retailer credentials can only read the server-bound retailer portal; CCI receives aggregate
   analytics only for retailers with sharing enabled; administrative imports/mappings stay separate.
@@ -199,17 +210,20 @@ Open the URL Vite prints, usually `http://localhost:5173`, then sign in:
   password `SCAN_RETAILER_PASSWORD`.
 - CCI portal: `http://localhost:5173/`, retailer `KAGGLE` (or `DEMO` for the small fixture),
   username `scan-cci`, password `SCAN_CCI_PASSWORD`.
+- Data connection: `http://localhost:5173/?portal=connection`, retailer/import profile context,
+  username `scan-admin`, password `SCAN_ADMIN_PASSWORD`.
 
 Vite forwards `/api` requests to `localhost:8080` during development. The frontend holds
 credentials in memory only; reloading the page requires signing in again.
 
 ### A short demo walkthrough
 
-1. Start the connector and run `bash scripts/simulate-retailer-export.sh`.
-2. Open the retailer portal **Data Sync** page and show the completed automatic import.
-3. Use **Overview**, **Products & Categories**, and **Time & Stores** to show retailer value.
-4. Open the CCI portal and explain that it receives only approved aggregate basket intelligence.
-5. Simulate the same export again and verify unchanged basket totals, demonstrating idempotency.
+1. Open **Data Connection** and show which connection methods are implemented, provisional, or planned.
+2. Import a canonical CSV/XLS/XLSX file, or start the connector and run `bash scripts/simulate-retailer-export.sh`.
+3. Review the real import result and resolve any source products under **Product mapping**.
+4. Open the retailer portal **Today** page and show sales, grounded attention items, and top sellers.
+5. Open the CCI portal and explain that it receives only approved aggregate basket intelligence.
+6. Submit the same file again and verify the duplicate-safe import result and unchanged basket totals.
 
 ## Tests and continuous integration
 
