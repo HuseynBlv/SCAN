@@ -11,8 +11,8 @@ vi.mock('../services/retailerApi', () => ({
 
 const overview = {
   generatedAt: '2026-08-29T10:00:00Z',
-  period: 'ALL_TIME',
-  periodStart: null,
+  period: 'TODAY',
+  periodStart: '2026-08-29T00:00:00Z',
   retailerCode: 'KAGGLE',
   retailerName: 'Kaggle Demo Retailer',
   totalBaskets: 10000,
@@ -77,37 +77,130 @@ describe('RetailerDashboard', () => {
     await user.type(screen.getByLabelText('Password'), 'retailer-secret')
     await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
 
-    expect(await screen.findByRole('heading', { name: 'Welcome back, Kaggle Demo Retailer' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Demo shop' })).toBeInTheDocument()
     expect(fetchRetailerOverview).toHaveBeenCalledWith(expect.objectContaining({
-      period: 'ALL_TIME',
+      period: 'TODAY',
       username: 'scan-retailer',
       password: 'retailer-secret',
     }))
-    expect(screen.getByLabelText('Retailer KPIs')).toHaveTextContent('Total sales')
-    expect(screen.getByLabelText('Retailer KPIs')).toHaveTextContent('Baskets')
-    expect(screen.getByRole('heading', { name: 'Three things to know' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Overview' })[0]).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: 'Today' })).toBeInTheDocument()
+    expect(screen.getByText('Sales today')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeInTheDocument()
+    expect(screen.getByText('Everything looks normal.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Top sellers today' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Busy hours' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Today' })[0]).toHaveAttribute('aria-current', 'page')
 
-    await user.click(screen.getAllByRole('button', { name: 'Products & Categories' })[0])
-    expect(screen.getByRole('heading', { name: 'What drives recorded sales?' })).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'Coca-Cola 500ml' })).toBeInTheDocument()
-
-    await user.click(screen.getAllByRole('button', { name: 'Time & Stores' })[0])
-    expect(screen.getByRole('heading', { name: 'When and where does business happen?' })).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'STORE-01' })).toBeInTheDocument()
-
-    await user.click(screen.getAllByRole('button', { name: 'Recommendations' })[0])
-    expect(screen.getByText('Replenish before the evening peak.')).toBeInTheDocument()
-
-    await user.click(screen.getAllByRole('button', { name: 'Data Sync' })[0])
-    expect(screen.getByRole('heading', { name: 'Retailer data is connected' })).toBeInTheDocument()
-    expect(screen.getByText('transactions.csv')).toBeInTheDocument()
-    expect(screen.getByText('54,848')).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Products' })[0])
+    expect(screen.getByRole('heading', { name: 'Product performance' })).toBeInTheDocument()
+    expect(screen.getAllByText('Coca-Cola 500ml')).not.toHaveLength(0)
+    expect(screen.getByText('Inventory not connected')).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Period'), 'LAST_7_DAYS')
     await waitFor(() => expect(fetchRetailerOverview).toHaveBeenCalledWith(expect.objectContaining({
       period: 'LAST_7_DAYS',
     })))
+
+    await user.click(screen.getAllByRole('button', { name: 'Sales' })[0])
+    expect(screen.getByRole('heading', { name: 'Sales history' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Sales summary')).toHaveTextContent('Transactions')
+    expect(screen.getByRole('img', { name: /Daily retailer sales/ })).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: 'Alerts' })[0])
+    expect(screen.getByText('Replenish before the evening peak.')).toBeInTheDocument()
+    await user.click(screen.getByText('Checkout data details'))
+    expect(screen.getByRole('heading', { name: 'Checkout data is connected' })).toBeInTheDocument()
+    expect(screen.getByText('transactions.csv')).toBeInTheDocument()
+    expect(screen.getByText('54,848')).toBeInTheDocument()
+
+  })
+
+  it('does not turn a tiny sample into an operational alert', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue({
+      ...overview,
+      totalBaskets: 2,
+      totalSales: 8,
+      averageBasketValue: 4,
+      insights: [{
+        fact: 'One product led recorded sales.',
+        interpretation: 'It appeared in two transactions.',
+        recommendedAction: 'Change the shelf immediately.',
+      }],
+    })
+    render(<RetailerDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'retailer-secret')
+    await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
+    await screen.findByRole('heading', { name: 'Today' })
+    await user.click(screen.getAllByRole('button', { name: 'Alerts' })[0])
+
+    expect(screen.getByText('All clear')).toBeInTheDocument()
+    expect(screen.queryByText('Change the shelf immediately.')).not.toBeInTheDocument()
+  })
+
+  it('does not treat zero sales as a product-mapping problem', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue({
+      ...overview,
+      totalBaskets: 0,
+      totalSales: 0,
+      averageBasketValue: 0,
+      mappedLinePercentage: 0,
+      topProducts: [],
+      dayparts: [],
+      insights: [],
+    })
+    render(<RetailerDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'retailer-secret')
+    await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
+
+    expect(await screen.findByText('No sales recorded yet.')).toBeInTheDocument()
+    expect(screen.queryByText('Product analysis is unavailable')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a failed checkout feed without inventing a sales problem', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue({
+      ...overview,
+      insights: [],
+      sync: {
+        ...overview.sync,
+        state: 'FAILED',
+        errors: ['The latest file could not be imported.'],
+        completedAt: null,
+      },
+    })
+    render(<RetailerDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'retailer-secret')
+    await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
+
+    expect(await screen.findByText('Checkout data needs attention')).toBeInTheDocument()
+    expect(screen.getByText('The latest file could not be imported.')).toBeInTheDocument()
+    expect(screen.queryByText(/sales decline/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps CCI-wide penetration language out of the retailer alerts feed', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue({
+      ...overview,
+      insights: [{
+        fact: '2.1% of baskets contained a CCI product.',
+        interpretation: 'CCI basket penetration is below the technical dataset average.',
+        recommendedAction: 'Test a CCI placement campaign.',
+      }],
+    })
+    render(<RetailerDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'retailer-secret')
+    await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
+    await screen.findByRole('heading', { name: 'Today' })
+    await user.click(screen.getAllByRole('button', { name: 'Alerts' })[0])
+
+    expect(screen.getByText('All clear')).toBeInTheDocument()
+    expect(screen.queryByText(/CCI basket penetration/i)).not.toBeInTheDocument()
   })
 
   it('returns to a recoverable login when retailer credentials are invalid', async () => {
@@ -132,10 +225,10 @@ describe('RetailerDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'retailer-secret')
     await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
-    expect(screen.getByRole('heading', { name: 'Loading your market…' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Reading your latest sales…' })).toBeInTheDocument()
 
     await act(async () => resolveRequest(overview))
-    await screen.findByRole('heading', { name: 'Welcome back, Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'Demo shop' })
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(screen.getByRole('button', { name: 'Open my dashboard' })).toBeInTheDocument()
   })

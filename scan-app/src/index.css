@@ -1,3 +1,30 @@
+:root {
+  color-scheme: light;
+  font-family: "Geist Variable", Arial, sans-serif;
+  color: #17181b;
+  background: #f4f4f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --scan-red: #e61c24;
+  --scan-red-dark: #c9141c;
+  --scan-ink: #17181b;
+  --scan-charcoal: #202124;
+  --scan-sidebar: #101214;
+  --scan-canvas: #f4f4f2;
+  --scan-surface: #fff;
+  --scan-subtle: #f7f7f5;
+  --scan-muted: #686c75;
+  --scan-border: #dde0e3;
+  --scan-success: #087f5b;
+  --scan-warning: #9a650c;
+  --scan-info: #2563c9;
+  --scan-critical: #a50f17;
+  --scan-focus: #2563c9;
+  --scan-enter: cubic-bezier(.2, .8, .2, 1);
+}
+
+* { box-sizing: border-box; }
+
 html,
 body,
 #root {
@@ -9,11 +36,40 @@ html {
 }
 
 body {
+  min-width: 320px;
   margin: 0;
   color: #17181b;
   background: #f4f4f2;
   font-family: "Geist Variable", Arial, sans-serif;
 }
+
+button,
+input,
+select { font: inherit; }
+
+button,
+select { cursor: pointer; }
+
+button:disabled { cursor: wait; opacity: .58; }
+
+button,
+a,
+input,
+select { transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 120ms ease; }
+
+button:active:not(:disabled) { transform: translateY(1px); }
+
+:focus-visible {
+  outline: 3px solid rgba(37, 99, 201, .34);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+.scan-wordmark-text { font-family: "Geist Variable", Arial, sans-serif; }
+
+.scan-icon { display: block; flex: 0 0 auto; }
 
 #root {
   min-height: 100vh;

@@ -67,7 +67,7 @@ describe('CciDashboard', () => {
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
 
-    expect(screen.getByRole('heading', { name: 'Loading retailer analytics…' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Reading retailer evidence…' })).toBeInTheDocument()
     expect(fetchOverview).toHaveBeenCalledWith(expect.objectContaining({
       retailerCode: 'KAGGLE',
       username: 'scan-cci',
@@ -75,17 +75,18 @@ describe('CciDashboard', () => {
     }))
 
     await act(async () => resolveFirstRequest(overview))
-    expect(await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })).toBeInTheDocument()
-    expect(screen.getByText('Technical demo dataset.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Three things to know' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Overview' })[0]).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })).toBeInTheDocument()
+    expect(screen.getByText('Demo data')).toBeInTheDocument()
+    expect(screen.getByText(/not current CCI market evidence/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'SCAN found 1 opportunity' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Home' })[0]).toHaveAttribute('aria-current', 'page')
 
     const sections = [
-      ['Basket Analysis', 'What appears alongside CCI products?'],
-      ['Product Performance', 'Compare mapped CCI SKUs'],
-      ['Time & Store', 'When and where baskets occur'],
-      ['Recommendations', 'Actions supported by observed basket facts'],
-      ['Overview', 'Three things to know'],
+      ['Opportunities', 'Actions worth testing.'],
+      ['Explore', 'Explore the evidence.'],
+      ['Stores', 'Where the evidence comes from.'],
+      ['Ask SCAN', 'Ask only what the data can answer.'],
+      ['Home', 'SCAN found 1 opportunity'],
     ]
     for (const [buttonName, headingName] of sections) {
       await user.click(screen.getAllByRole('button', { name: buttonName })[0])
@@ -128,7 +129,7 @@ describe('CciDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
-    await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
     expect(screen.getByRole('button', { name: 'Refreshing…' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
@@ -136,7 +137,7 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('button', { name: 'Open analytics' })).toBeEnabled()
     expect(fetchOverview.mock.calls[1][0].signal.aborted).toBe(true)
     await act(async () => resolveRefresh(overview))
-    expect(screen.queryByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'SCAN intelligence workspace' })).not.toBeInTheDocument()
   })
 
   it('clears displayed analytics when retailer permission is revoked', async () => {
@@ -148,11 +149,11 @@ describe('CciDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
-    await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })
+    await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Retailer access denied.')
-    expect(screen.queryByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'SCAN intelligence workspace' })).not.toBeInTheDocument()
   })
 
   it('provides accessible chart labels and equivalent category table data', async () => {
@@ -162,12 +163,19 @@ describe('CciDashboard', () => {
 
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
-    await screen.findByRole('heading', { name: 'Basket intelligence for Kaggle Demo Retailer' })
-    await user.click(screen.getAllByRole('button', { name: 'Basket Analysis' })[0])
+    await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
+    expect(screen.getByRole('group', { name: 'Basket co-occurrence with companion categories' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'What appears most often with CCI products?' }))
+    expect(screen.getByText(/Snacks is the leading companion category at 43.1%/)).toBeInTheDocument()
+    expect(screen.getByText('90 of 209 mapped CCI baskets contain this category.')).toBeInTheDocument()
+    expect(screen.getByText('No action is supported by this response alone.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Open underlying evidence/ }))
+    expect(screen.getByRole('heading', { name: 'Explore the evidence.' })).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Explore' })[0])
 
-    expect(screen.getByRole('img', { name: 'Companion product attachment rates' }))
+    expect(screen.getByRole('img', { name: /Companion product attachment rates/ }))
       .toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Companion category attachment rates' }))
+    expect(screen.getByRole('img', { name: /Companion category attachment rates/ }))
       .toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'SWEET HOME FALQA ALUMIN 10M' }))
       .toBeInTheDocument()
@@ -195,7 +203,30 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'No transaction data imported yet' }))
       .toBeInTheDocument()
     expect(screen.queryByLabelText('Retailer KPIs')).not.toBeInTheDocument()
-    screen.getAllByRole('button', { name: 'Basket Analysis' })
+    screen.getAllByRole('button', { name: 'Explore' })
       .forEach((button) => expect(button).toBeDisabled())
+  })
+
+  it('keeps a weak relationship as a signal instead of making it the home headline', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue({
+      ...overviewWithCompanions,
+      insights: [{
+        fact: 'SWEET HOME FALQA ALUMIN 10M appears in 1.4% of mapped CCI baskets.',
+        interpretation: 'The relationship is currently present but weak.',
+        recommendedAction: 'Collect more baskets before changing promotion or placement.',
+      }],
+    })
+    render(<CciDashboard />)
+
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open analytics' }))
+
+    expect(await screen.findByRole('heading', { name: 'SCAN analyzed 10,000 baskets' })).toBeInTheDocument()
+    expect(screen.getByText('No commercial action meets the current evidence threshold.')).toBeInTheDocument()
+    expect(screen.queryByText('SWEET HOME FALQA ALUMIN 10M appears in 1.4% of mapped CCI baskets.')).not.toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
+    expect(screen.getByText('Observed signal')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'SWEET HOME FALQA ALUMIN 10M appears in 1.4% of mapped CCI baskets.' })).toBeInTheDocument()
   })
 })

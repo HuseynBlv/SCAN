@@ -7,6 +7,8 @@ const AppLoader = lazy(() =>
     ? import("./App.jsx")
     : selectedPortal === "retailer"
       ? import("./components/RetailerDashboard.jsx")
+      : selectedPortal === "connection" || selectedPortal === "connect"
+        ? import("./components/DataConnection.jsx")
       : import("./components/CciDashboard.jsx")
 );
 
