@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  fetchImportContext,
   fetchImportJob,
   fetchUnresolvedProducts,
+  previewImport,
   saveProductMapping,
+  updateImportMapping,
   uploadImport,
 } from './importApi'
 
@@ -62,20 +65,42 @@ function retailerProduct(overrides = {}) {
 describe('importApi', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('uploads the real file with admin authentication and import context', async () => {
+  it('loads the server-bound import context for the signed-in account', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ body: {
+      retailerCode: 'SHOP_01', retailerName: 'Corner Market', profileCode: 'CANONICAL',
+      profileName: 'Daily sales export', sourceSystem: 'shop-export', importEnabled: true,
+      sampleValidated: true, demoData: false,
+      delimiter: ',', dateTimePattern: "yyyy-MM-dd'T'HH:mm:ss", currency: 'AZN',
+      mapping: {
+        storeId: 'store_id', receiptId: 'receipt_id', timestamp: 'transaction_timestamp',
+        productCode: 'product_code', barcode: 'barcode', productName: 'product_name',
+        quantity: 'quantity', unitPrice: 'unit_price', discountAmount: 'discount_amount',
+        lineTotal: 'line_total',
+      },
+    } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await fetchImportContext({ username: 'shop-admin', password: 'secret' })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/imports/context')
+    expect(result.retailerCode).toBe('SHOP_01')
+    expect(result.importEnabled).toBe(true)
+  })
+
+  it('uploads the real file without accepting client-selected tenant context', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ status: 201, body: importJob() }))
     vi.stubGlobal('fetch', fetchMock)
     const file = new File(['header\nvalue'], 'sales.csv', { type: 'text/csv' })
 
     const result = await uploadImport({
-      retailerCode: 'DEMO', profileCode: 'CANONICAL', file,
-      username: 'scan-admin', password: 'secret',
+      file, previewId: 'preview-1', username: 'scan-admin', password: 'secret',
     })
 
     const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toBe('/api/v1/imports?retailerCode=DEMO&profileCode=CANONICAL')
+    expect(url).toBe('/api/v1/imports')
     expect(options.method).toBe('POST')
     expect(options.body).toBeInstanceOf(FormData)
+    expect(options.body.get('previewId')).toBe('preview-1')
     expect(options.headers.Authorization).toBe(`Basic ${window.btoa('scan-admin:secret')}`)
     expect(result.importedReceipts).toBe(6)
     expect(result.unresolvedProducts).toBe(1)
@@ -93,12 +118,53 @@ describe('importApi', () => {
     })))
 
     const result = await uploadImport({
-      retailerCode: 'DEMO', profileCode: 'CANONICAL',
-      file: new File(['bad'], 'bad.csv'), username: 'scan-admin', password: 'secret',
+      file: new File(['bad'], 'bad.csv'), previewId: 'preview-1', username: 'scan-admin', password: 'secret',
     })
 
     expect(result.status).toBe('FAILED')
     expect(result.errors).toEqual(['row 2: quantity must be greater than zero'])
+  })
+
+  it('previews reconciliation totals before importing and saves editable mappings separately', async () => {
+    const preview = {
+      previewId: 'preview-1', readyForImport: true, mappingRequired: false,
+      filename: 'cloudsale.xlsx', adapterCode: 'CLOUDSALE_OBSERVED',
+      adapterName: 'CloudSale workbook adapter', rowsChecked: 38, receiptsDetected: 20,
+      productLines: 38, distinctProducts: 15, detectedColumns: ['Obyekt_kodu'],
+      detectedStoreIds: ['BK-0147'], quantity: 39, grossSales: 50.19, discounts: 0,
+      reportedNetSales: 50.19, calculatedNetSales: 50.19, difference: 0, currency: 'AZN',
+      firstTransactionAt: '2026-09-10T04:07:14Z', lastTransactionAt: '2026-09-10T16:00:00Z',
+      expiresAt: '2026-09-18T10:30:00Z', fields: [], errors: [],
+    }
+    const contextBody = {
+      retailerCode: 'SHOP_01', retailerName: 'Corner Market', profileCode: 'FORMAT_1',
+      profileName: 'Daily export', sourceSystem: 'Unknown POS', importEnabled: false,
+      sampleValidated: false, demoData: false, delimiter: ';',
+      dateTimePattern: 'yyyy-MM-dd HH:mm:ss', currency: 'AZN',
+      mapping: {
+        storeId: 'Shop', receiptId: 'Receipt', timestamp: 'Date', productCode: null,
+        barcode: null, productName: 'Product', quantity: 'Qty', unitPrice: 'Price',
+        discountAmount: 'Discount', lineTotal: 'Total',
+      },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ body: preview }))
+      .mockResolvedValueOnce(response({ body: contextBody }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const checked = await previewImport({
+      file: new File(['sheet'], 'cloudsale.xlsx'), username: 'scan-admin', password: 'secret',
+    })
+    const updated = await updateImportMapping({
+      request: { delimiter: ';', dateTimePattern: 'yyyy-MM-dd HH:mm:ss', columns: contextBody.mapping },
+      username: 'scan-admin', password: 'secret',
+    })
+
+    expect(checked.receiptsDetected).toBe(20)
+    expect(checked.reportedNetSales).toBe(50.19)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/imports/preview')
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/imports/profile')
+    expect(updated.sampleValidated).toBe(false)
   })
 
   it('reads the stored state of an active import job', async () => {
@@ -122,7 +188,7 @@ describe('importApi', () => {
       .mockResolvedValueOnce(response({ body: mapped }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await fetchUnresolvedProducts({ retailerCode: 'DEMO', username: 'scan-admin', password: 'secret' })
+    const result = await fetchUnresolvedProducts({ username: 'scan-admin', password: 'secret' })
     const saved = await saveProductMapping({
       retailerProductId: unresolved.id,
       canonicalProductId: mapped.canonicalProduct.id,
@@ -141,7 +207,7 @@ describe('importApi', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ok: false, status: 403, body: {} })))
 
     await expect(fetchUnresolvedProducts({
-      retailerCode: 'DEMO', username: 'scan-retailer', password: 'secret',
+      username: 'scan-retailer', password: 'secret',
     })).rejects.toEqual(expect.objectContaining({
       status: 403,
       message: 'This account does not have data-import administrator access.',

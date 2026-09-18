@@ -36,6 +36,11 @@ public class ProductMappingService {
     @Transactional(readOnly = true)
     public List<RetailerProductResponse> unresolved(String retailerCode) {
         Retailer retailer = retailer(retailerCode);
+        return unresolved(retailer);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RetailerProductResponse> unresolved(Retailer retailer) {
         return retailerProductRepository
             .findAllByRetailerAndCanonicalProductIsNullOrderByOriginalProductNameAsc(retailer)
             .stream()
@@ -70,6 +75,20 @@ public class ProductMappingService {
     @Transactional
     public RetailerProductResponse map(UUID retailerProductId, UUID canonicalProductId) {
         RetailerProduct retailerProduct = retailerProductRepository.findById(retailerProductId)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Unknown retailer product: " + retailerProductId
+            ));
+        return map(retailerProduct.getRetailer(), retailerProductId, canonicalProductId);
+    }
+
+    @Transactional
+    public RetailerProductResponse map(
+        Retailer retailer,
+        UUID retailerProductId,
+        UUID canonicalProductId
+    ) {
+        RetailerProduct retailerProduct = retailerProductRepository
+            .findByIdAndRetailer(retailerProductId, retailer)
             .orElseThrow(() -> new IllegalArgumentException(
                 "Unknown retailer product: " + retailerProductId
             ));

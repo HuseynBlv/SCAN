@@ -12,10 +12,12 @@ import az.cci.scan.domain.RetailerProduct;
 import az.cci.scan.repository.CanonicalProductRepository;
 import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportProfileRepository;
+import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
+import az.cci.scan.repository.ScanAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,6 +63,9 @@ class ImportServiceIntegrationTest {
     private ImportJobRepository importJobRepository;
 
     @Autowired
+    private ImportPreviewRepository importPreviewRepository;
+
+    @Autowired
     private ImportProfileRepository importProfileRepository;
 
     @Autowired
@@ -69,11 +74,16 @@ class ImportServiceIntegrationTest {
     @Autowired
     private RetailerRepository retailerRepository;
 
+    @Autowired
+    private ScanAccountRepository accountRepository;
+
     @BeforeEach
     void setUp() {
+        accountRepository.deleteAll();
         receiptRepository.deleteAll();
         retailerProductRepository.deleteAll();
         importJobRepository.deleteAll();
+        importPreviewRepository.deleteAll();
         canonicalProductRepository.deleteAll();
         importProfileRepository.deleteAll();
         storeRepository.deleteAll();
@@ -265,7 +275,7 @@ class ImportServiceIntegrationTest {
         importService.importFile("DEMO", "CANONICAL", canonicalFixture());
         String conflict = """
             store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
-            STORE-01,R-1001,2026-08-22T18:45:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,9.99
+            STORE-01,R-1001,2026-08-22T18:45:00,COKE-500,5449000000996,Coca-Cola 500ml changed,1,1.50,0.00,1.50
             STORE-03,R-3001,2026-08-24T10:00:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,1.50
             """;
 
@@ -284,6 +294,25 @@ class ImportServiceIntegrationTest {
         assertThat(storeRepository.findAll())
             .extracting(store -> store.getExternalStoreId())
             .doesNotContain("STORE-03");
+    }
+
+    @Test
+    void rejectsUnreconciledLineTotalsBeforeWritingTransactions() {
+        String invalid = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-01,R-MISMATCH,2026-08-24T10:00:00,COKE-500,5449000000996,Coca-Cola 500ml,2,1.50,0.25,9.99
+            """;
+
+        var result = importService.importFile(
+            "DEMO",
+            "CANONICAL",
+            csv("unreconciled.csv", invalid)
+        );
+
+        assertThat(result.status()).isEqualTo(ImportJob.Status.FAILED);
+        assertThat(result.errors()).singleElement().asString()
+            .contains("line total does not equal quantity");
+        assertThat(receiptRepository.count()).isZero();
     }
 
     @Test

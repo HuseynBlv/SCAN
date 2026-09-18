@@ -1,5 +1,7 @@
 package az.cci.scan.retailer;
 
+import az.cci.scan.config.TenantAccessService;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,15 +15,21 @@ import static az.cci.scan.retailer.RetailerAnalyticsDtos.Period;
 public class RetailerAnalyticsController {
 
     private final RetailerAnalyticsService analyticsService;
+    private final TenantAccessService tenantAccess;
 
-    public RetailerAnalyticsController(RetailerAnalyticsService analyticsService) {
+    public RetailerAnalyticsController(
+        RetailerAnalyticsService analyticsService,
+        TenantAccessService tenantAccess
+    ) {
         this.analyticsService = analyticsService;
+        this.tenantAccess = tenantAccess;
     }
 
     @GetMapping("/overview")
     public OverviewResponse overview(
-        @RequestParam(defaultValue = "ALL_TIME") Period period
+        @RequestParam(defaultValue = "ALL_TIME") Period period,
+        Authentication authentication
     ) {
-        return analyticsService.overview(period);
+        return analyticsService.overview(period, tenantAccess.retailer(authentication));
     }
 }

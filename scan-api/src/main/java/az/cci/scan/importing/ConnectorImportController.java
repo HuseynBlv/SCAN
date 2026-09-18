@@ -1,6 +1,7 @@
 package az.cci.scan.importing;
 
-import az.cci.scan.config.PilotAccessProperties;
+import az.cci.scan.config.TenantAccessService;
+import org.springframework.security.core.Authentication;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,22 +17,24 @@ import static az.cci.scan.importing.ImportDtos.ImportJobResponse;
 public class ConnectorImportController {
 
     private final ImportService importService;
-    private final PilotAccessProperties pilotAccess;
+    private final TenantAccessService tenantAccess;
 
     public ConnectorImportController(
         ImportService importService,
-        PilotAccessProperties pilotAccess
+        TenantAccessService tenantAccess
     ) {
         this.importService = importService;
-        this.pilotAccess = pilotAccess;
+        this.tenantAccess = tenantAccess;
     }
 
     @PostMapping(path = "/imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ImportJobResponse> upload(@RequestPart("file") MultipartFile file) {
-        ImportJobResponse response = importService.importFile(
-            pilotAccess.retailerCode(),
-            pilotAccess.profileCode(),
-            file
+    public ResponseEntity<ImportJobResponse> upload(
+        @RequestPart("file") MultipartFile file,
+        Authentication authentication
+    ) {
+        TenantAccessService.ImportScope scope = tenantAccess.importScope(authentication);
+        ImportJobResponse response = importService.enqueueFile(
+            scope.retailer(), scope.profile(), file, authentication
         );
         return ImportController.httpResponse(response);
     }

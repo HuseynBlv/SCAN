@@ -99,6 +99,9 @@ docker run --detach --rm --name "$SCAN_SMOKE_APP" \
   --env SCAN_CCI_PASSWORD=smoke-only-cci-password \
   --env SCAN_INGEST_PASSWORD=smoke-only-ingest-password \
   --env SCAN_RETAILER_PASSWORD=smoke-only-retailer-password \
+  --env SCAN_ONBOARDING_PASSWORD=smoke-only-onboarding-password \
+  --env SCAN_RUNTIME_ENVIRONMENT=test \
+  --env SCAN_DATABASE_ID=scan-container-smoke \
   --env SCAN_PILOT_RETAILER_CODE=DEMO \
   --env SCAN_PILOT_PROFILE_CODE=CANONICAL "$SCAN_SMOKE_IMAGE" >/dev/null
 SCAN_SMOKE_APP_CREATED=1
@@ -122,19 +125,39 @@ assert_json '.totalBaskets == 0'
 expect_http 403 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/retailer/overview"
 expect_http 200 --user scan-retailer:smoke-only-retailer-password "$SCAN_SMOKE_URL/api/v1/retailer/overview"
 assert_json '.retailerCode == "DEMO" and .totalBaskets == 0 and .sync.state == "NEVER_SYNCED"'
+expect_http 200 --user scan-admin:smoke-only-admin-password \
+  "$SCAN_SMOKE_URL/api/v1/imports/context?retailerCode=KAGGLE&profileCode=KAGGLE_2019"
+assert_json '.retailerCode == "DEMO" and .profileCode == "CANONICAL" and .importEnabled == true'
+expect_http 403 --user scan-admin:smoke-only-admin-password "$SCAN_SMOKE_URL/api/v1/onboarding/context"
+expect_http 200 --user scan-onboarding:smoke-only-onboarding-password \
+  "$SCAN_SMOKE_URL/api/v1/onboarding/context"
+assert_json '.operatorUsername == "scan-onboarding"'
 
 SCAN_SMOKE_FIXTURE="$SCAN_SMOKE_REPO_DIR/scan-api/src/test/resources/fixtures/canonical-transactions.csv"
 expect_http 403 --user scan-cci:smoke-only-cci-password \
-  -F retailerCode=DEMO -F profileCode=CANONICAL -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
+  -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
 expect_http 403 --user scan-cci:smoke-only-cci-password \
   -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/connector/imports"
-expect_http 201 --user scan-connector:smoke-only-ingest-password \
+expect_http 202 --user scan-connector:smoke-only-ingest-password \
   -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/connector/imports"
-assert_json '.status == "COMPLETED" and .attemptNumber == 1 and .importedReceipts == 6 and .importedLines == 11'
+assert_json '.status == "RECEIVED" and .attemptNumber == 1'
 SCAN_SMOKE_JOB_ID="$(jq --raw-output .id "$SCAN_SMOKE_TMP_DIR/response")"
+for _ in $(seq 1 30); do
+  expect_http 200 --user scan-admin:smoke-only-admin-password "$SCAN_SMOKE_URL/api/v1/imports/$SCAN_SMOKE_JOB_ID"
+  if jq -e '.status == "COMPLETED"' "$SCAN_SMOKE_TMP_DIR/response" >/dev/null; then break; fi
+  sleep 1
+done
+assert_json '.status == "COMPLETED" and .importedReceipts == 6 and .importedLines == 11'
 expect_http 403 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/imports/$SCAN_SMOKE_JOB_ID"
 expect_http 200 --user scan-admin:smoke-only-admin-password \
-  -F retailerCode=DEMO -F profileCode=CANONICAL -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
+  -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports/preview"
+assert_json '.readyForImport == true and .receiptsDetected == 6 and .productLines == 11
+  and .reportedNetSales == 13.5 and .difference == 0'
+SCAN_SMOKE_PREVIEW_ID="$(jq --raw-output .previewId "$SCAN_SMOKE_TMP_DIR/response")"
+expect_http 200 --user scan-admin:smoke-only-admin-password \
+  -F retailerCode=KAGGLE -F profileCode=KAGGLE_2019 \
+  -F "previewId=$SCAN_SMOKE_PREVIEW_ID" \
+  -F "file=@$SCAN_SMOKE_FIXTURE" "$SCAN_SMOKE_URL/api/v1/imports"
 assert_json '.duplicateFile == true and .attemptNumber == 1 and .status == "COMPLETED"'
 expect_http 200 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/analytics/overview?retailerCode=DEMO"
 assert_json '.totalBaskets == 6 and .cciBaskets == 5 and .mappedLinePercentage == 100
@@ -145,22 +168,6 @@ assert_json '.retailerCode == "DEMO" and .totalBaskets == 6 and .totalSales == 1
   and .mappedLinePercentage == 100 and (.topProducts | length) > 0
   and .sync.state == "COMPLETED" and .sync.importedReceipts == 6'
 
-if [ -n "${SCAN_SMOKE_KAGGLE_DIR:-}" ]; then
-  printf 'Importing the optional 10,000-receipt Kaggle sample under the same memory limit...\n'
-  test -f "$SCAN_SMOKE_KAGGLE_DIR/product-catalog.csv"
-  test -f "$SCAN_SMOKE_KAGGLE_DIR/canonical-transactions.csv"
-  expect_http 201 --user scan-admin:smoke-only-admin-password \
-    -F retailerCode=KAGGLE -F "file=@$SCAN_SMOKE_KAGGLE_DIR/product-catalog.csv" \
-    "$SCAN_SMOKE_URL/api/v1/product-mappings/catalog-imports"
-  expect_http 201 --user scan-admin:smoke-only-admin-password \
-    -F retailerCode=KAGGLE -F profileCode=KAGGLE_2019 \
-    -F "file=@$SCAN_SMOKE_KAGGLE_DIR/canonical-transactions.csv" "$SCAN_SMOKE_URL/api/v1/imports"
-  assert_json '.status == "COMPLETED" and .importedReceipts == 10000 and .importedLines == 54848'
-  expect_http 200 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/analytics/overview?retailerCode=KAGGLE"
-  assert_json '.totalBaskets == 10000 and .cciBaskets == 209 and .mappedLinePercentage == 100'
-  jq '{totalBaskets, cciBaskets, cciPenetrationPercentage, mappedLinePercentage}' "$SCAN_SMOKE_TMP_DIR/response"
-fi
-
 printf 'Restarting the app to verify that database records survive app restarts...\n'
 docker restart "$SCAN_SMOKE_APP" >/dev/null
 resolve_app_url
@@ -169,10 +176,6 @@ expect_http 200 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/
 assert_json '.totalBaskets == 6 and .cciBaskets == 5'
 expect_http 200 --user scan-retailer:smoke-only-retailer-password "$SCAN_SMOKE_URL/api/v1/retailer/overview?period=ALL_TIME"
 assert_json '.totalBaskets == 6 and .sync.state == "COMPLETED"'
-if [ -n "${SCAN_SMOKE_KAGGLE_DIR:-}" ]; then
-  expect_http 200 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/analytics/overview?retailerCode=KAGGLE"
-  assert_json '.totalBaskets == 10000 and .cciBaskets == 209'
-fi
 test "$(docker inspect --format '{{.Config.User}}' "$SCAN_SMOKE_APP")" = scan
 docker stats --no-stream --format 'Application memory now: {{.MemUsage}} (not peak)' "$SCAN_SMOKE_APP"
 printf 'Container smoke test passed. Cleaning up only the temporary test containers and network.\n'

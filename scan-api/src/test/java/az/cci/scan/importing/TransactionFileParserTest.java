@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -96,5 +97,71 @@ class TransactionFileParserTest {
         assertThat(result.errors())
             .extracting(ImportValidationError::field)
             .contains("receipt_id", "transaction_timestamp", "product_name", "line_total");
+    }
+
+    @Test
+    void adaptsObservedCloudSaleWorkbookAndReconcilesFormulaTotals() throws Exception {
+        byte[] workbookBytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("Satış çekləri");
+            List<String> headers = List.of(
+                "Obyekt_kodu", "Kassa_kodu", "Çek_nömrəsi", "Çek_tarixi", "Sətir_nömrəsi",
+                "Barkod", "Məhsul_kodu", "Məhsul_adı", "Kateqoriya", "Miqdar",
+                "Vahid_qiyməti_AZN", "Sətir_endirimi_AZN", "Sətir_məbləği_AZN",
+                "Çek_endirimi_AZN", "ƏDV_faizi", "Ödəniş_növü", "Çek_statusu", "Kassir_kodu"
+            );
+            var header = sheet.createRow(0);
+            for (int index = 0; index < headers.size(); index++) {
+                header.createCell(index).setCellValue(headers.get(index));
+            }
+            addCloudSaleRow(sheet.createRow(1), "00018402", 1, "SKU-1", "Coca-Cola 500ml", 1.15);
+            addCloudSaleRow(sheet.createRow(2), "00018402", 2, "SKU-2", "Chips 45g", 2.89);
+            workbook.write(output);
+            workbookBytes = output.toByteArray();
+        }
+
+        IngestionAnalysis analysis = new CloudSaleWorkbookAdapter()
+            .analyze("CloudSale_export.xlsx", workbookBytes, profile)
+            .orElseThrow();
+
+        assertThat(analysis.valid()).isTrue();
+        assertThat(analysis.adapterCode()).isEqualTo("CLOUDSALE_OBSERVED");
+        assertThat(analysis.lines()).hasSize(2).allSatisfy(line -> {
+            assertThat(line.storeId()).isEqualTo("BK-0147");
+            assertThat(line.receiptId()).isEqualTo("KASSA-01:00018402");
+        });
+        assertThat(analysis.reconciliation().receipts()).isEqualTo(1);
+        assertThat(analysis.reconciliation().productLines()).isEqualTo(2);
+        assertThat(analysis.reconciliation().reportedNetSales()).isEqualByComparingTo("4.04");
+        assertThat(analysis.reconciliation().difference()).isEqualByComparingTo("0.00");
+    }
+
+    private void addCloudSaleRow(
+        org.apache.poi.ss.usermodel.Row row,
+        String receiptId,
+        int lineNumber,
+        String productCode,
+        String productName,
+        double unitPrice
+    ) {
+        row.createCell(0).setCellValue("BK-0147");
+        row.createCell(1).setCellValue("KASSA-01");
+        row.createCell(2).setCellValue(receiptId);
+        row.createCell(3).setCellValue("2026-09-10T11:35:00");
+        row.createCell(4).setCellValue(lineNumber);
+        row.createCell(5).setCellValue("");
+        row.createCell(6).setCellValue(productCode);
+        row.createCell(7).setCellValue(productName);
+        row.createCell(8).setCellValue("Test category");
+        row.createCell(9).setCellValue(1);
+        row.createCell(10).setCellValue(unitPrice);
+        row.createCell(11).setCellValue(0);
+        row.createCell(12).setCellFormula("ROUND(J" + (row.getRowNum() + 1) + "*K"
+            + (row.getRowNum() + 1) + "-L" + (row.getRowNum() + 1) + ",2)");
+        row.createCell(13).setCellValue(0);
+        row.createCell(14).setCellValue(18);
+        row.createCell(15).setCellValue("Kart");
+        row.createCell(16).setCellValue("Tamamlanıb");
+        row.createCell(17).setCellValue("K-01");
     }
 }

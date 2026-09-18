@@ -76,8 +76,17 @@ public class ImportJob {
     @Column(name = "error_summary")
     private String errorSummary;
 
+    @Column(name = "submitted_by", nullable = false, length = 128)
+    private String submittedBy;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
+
+    @Column(name = "started_at")
+    private Instant startedAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt = Instant.now();
 
     @Column(name = "completed_at")
     private Instant completedAt;
@@ -90,22 +99,27 @@ public class ImportJob {
         ImportProfile importProfile,
         String originalFilename,
         String fileSha256,
-        int attemptNumber
+        int attemptNumber,
+        String submittedBy
     ) {
         this.retailer = retailer;
         this.importProfile = importProfile;
         this.originalFilename = originalFilename;
         this.fileSha256 = fileSha256;
         this.attemptNumber = attemptNumber;
+        this.submittedBy = submittedBy;
     }
 
     public void markValidating() {
         status = Status.VALIDATING;
+        if (startedAt == null) startedAt = Instant.now();
+        updatedAt = Instant.now();
     }
 
     public void markImporting(int totalRows) {
         status = Status.IMPORTING;
         this.totalRows = totalRows;
+        updatedAt = Instant.now();
     }
 
     public void markCompleted(
@@ -122,6 +136,7 @@ public class ImportJob {
         this.duplicateReceipts = duplicateReceipts;
         this.unresolvedProducts = unresolvedProducts;
         this.completedAt = Instant.now();
+        this.updatedAt = completedAt;
         this.errorSummary = null;
     }
 
@@ -134,6 +149,13 @@ public class ImportJob {
         this.unresolvedProducts = 0;
         this.errorSummary = errorSummary;
         this.completedAt = Instant.now();
+        this.updatedAt = completedAt;
+    }
+
+    public void requeue() {
+        status = Status.RECEIVED;
+        startedAt = null;
+        updatedAt = Instant.now();
     }
 
     public UUID getId() {
@@ -195,4 +217,8 @@ public class ImportJob {
     public Instant getCompletedAt() {
         return completedAt;
     }
+
+    public String getSubmittedBy() { return submittedBy; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

@@ -108,8 +108,10 @@
 
 - **CCI workspace:** Home, Opportunities, Explore, Stores, Ask SCAN.
 - **Retailer workspace:** Today, Sales, Products, Alerts.
-- **Data connection workspace:** Connections, Import data, Product mapping. This is an
-  administrator surface and is not part of the CCI or retailer information architecture.
+- **Data connection workspace:** Connections, Import data, Product mapping. This is a
+  retailer-bound administrator surface and is not part of the CCI or retailer information architecture.
+- **Retailer onboarding workspace:** Retailers with a guarded four-step flow: tenant/stores,
+  named import format, no-write sample validation, and one-time credential issuance.
 - Basket, product, and time analysis live inside CCI Explore instead of competing with
   commercial actions in the top-level navigation.
 - Retailer synchronization and deterministic recommendations live together under Alerts so
@@ -196,8 +198,17 @@ decision or help establish data trust.
   attempt, and completion values. Do not derive a mapping percentage from unlike units.
 - The current upload API is synchronous, so show one honest processing state instead of simulated
   stage progress. Completed or failed stage markers appear only after the API responds.
-- Column mapping remains profile-controlled until the backend exposes an editable profile API.
+- Browser uploads run a no-write preview first. The preview reports receipt, line, quantity, gross,
+  discount, reported-net, calculated-net, difference, store, product, and date controls. Import
+  requires the same file fingerprint and an unexpired preview.
+- The onboarding operator configures the initial source-column mapping. Retailer-bound data
+  administrators can correct their own assigned profile in the import workflow; saving a change
+  returns the profile to draft until the same file validates again.
   Product mapping may be corrected through the implemented unresolved-product and catalog APIs.
+- New retailers remain import-locked until a sample file passes the same parser and row validation
+  used by production imports. Sample validation must never create receipts or product records.
+- Show issued passwords once and explain that SCAN stores only password hashes. Never retain
+  plaintext credentials in browser storage or display them after the operator leaves the result.
 
 ### Login and Portal Selection
 

@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ScanApiError, configuredRetailerCode, fetchOverview } from '../services/scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
 import { compactChartLabel } from './chartLabels'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
@@ -116,13 +116,12 @@ function partitionInsights(data) {
 }
 
 function Login({ error, loading, onSubmit }) {
-  const [username, setUsername] = useState('scan-cci')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [retailerCode, setRetailerCode] = useState(configuredRetailerCode)
 
   function submit(event) {
     event.preventDefault()
-    onSubmit({ username: username.trim(), password, retailerCode: retailerCode.trim().toUpperCase() })
+    onSubmit({ username: username.trim(), password })
   }
 
   return (
@@ -135,9 +134,9 @@ function Login({ error, loading, onSubmit }) {
           <p>Review retailer-approved aggregate evidence, separate meaningful opportunities from early signals, and decide what to test.</p>
         </div>
         <form className="cci-login-form" onSubmit={submit}>
-          <label>Retailer code<input autoCapitalize="characters" autoComplete="organization" required value={retailerCode} onChange={(event) => setRetailerCode(event.target.value)} /></label>
           <label>Username<input autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
           <label>Password<input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          <p className="cci-login-context"><strong>Retailer access is assigned to this account.</strong> SCAN opens only approved aggregate data after sign-in.</p>
           {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
           <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Connecting…' : 'Open analytics'}</button>
         </form>
@@ -578,10 +577,23 @@ export default function CciDashboard() {
   }, [credentials, refreshKey])
 
   function refresh() { setLoading(true); setError(''); setRefreshKey((value) => value + 1) }
+  async function signIn(accountCredentials) {
+    setData(null)
+    setError('')
+    setLoading(true)
+    try {
+      const access = await fetchAnalyticsContext(accountCredentials)
+      setCredentials({ ...accountCredentials, retailerCode: access.retailers[0].code })
+      setRefreshKey((value) => value + 1)
+    } catch (requestError) {
+      setError(requestError?.message || 'Unable to open SCAN analytics.')
+      setLoading(false)
+    }
+  }
   function signOut() { setCredentials(null); setData(null); setError(''); setLoading(false); setActivePage('home'); setAskQuestion('') }
   function openAsk(question) { setAskQuestion(question.trim()); setActivePage('ask') }
 
-  if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={(next) => { setData(null); setError(''); setLoading(true); setCredentials(next); setRefreshKey((value) => value + 1) }} />
+  if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={signIn} />
   if (!data) return <LoadingState title="Reading retailer evidence…" description="Preparing basket and product analysis." />
 
   const header = (

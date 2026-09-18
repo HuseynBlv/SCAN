@@ -1,11 +1,9 @@
 package az.cci.scan.retailer;
 
 import az.cci.scan.analytics.AnalyticsDataException;
-import az.cci.scan.config.PilotAccessProperties;
 import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.Retailer;
 import az.cci.scan.repository.ImportJobRepository;
-import az.cci.scan.repository.RetailerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,33 +41,23 @@ public class RetailerAnalyticsService {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
-    private final RetailerRepository retailerRepository;
     private final ImportJobRepository importJobRepository;
     private final RetailerAnalyticsQueryRepository queryRepository;
-    private final PilotAccessProperties pilotAccess;
     private final Clock clock;
 
     public RetailerAnalyticsService(
-        RetailerRepository retailerRepository,
         ImportJobRepository importJobRepository,
         RetailerAnalyticsQueryRepository queryRepository,
-        PilotAccessProperties pilotAccess,
         Clock clock
     ) {
-        this.retailerRepository = retailerRepository;
         this.importJobRepository = importJobRepository;
         this.queryRepository = queryRepository;
-        this.pilotAccess = pilotAccess;
         this.clock = clock;
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    public OverviewResponse overview(Period period) {
+    public OverviewResponse overview(Period period, Retailer retailer) {
         Instant now = clock.instant();
-        Retailer retailer = retailerRepository.findByCodeIgnoreCase(pilotAccess.retailerCode())
-            .orElseThrow(() -> new IllegalArgumentException(
-                "Unknown pilot retailer: " + pilotAccess.retailerCode()
-            ));
         ZoneId zoneId = ZoneId.of(retailer.getZoneId());
         Instant startInclusive = start(period, now, zoneId);
         List<RetailerAnalyticsQueryRepository.BasketRow> baskets = queryRepository.findBaskets(

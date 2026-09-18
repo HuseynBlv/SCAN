@@ -59,6 +59,7 @@ export SCAN_ADMIN_PASSWORD=replace-admin-password
 export SCAN_CCI_PASSWORD=replace-cci-password
 export SCAN_INGEST_PASSWORD=replace-connector-password
 export SCAN_RETAILER_PASSWORD=replace-retailer-password
+export SCAN_ONBOARDING_PASSWORD=replace-onboarding-password
 export SCAN_PILOT_RETAILER_CODE=DEMO
 export SCAN_PILOT_PROFILE_CODE=CANONICAL
 mvn spring-boot:run
@@ -69,25 +70,48 @@ and four-product demo catalog. It also creates the `KAGGLE` retailer and `KAGGLE
 profile. These support testing before a real retailer export is available; migrations do
 not load transaction files.
 
+## Onboard a retailer
+
+The onboarding operator is separate from every retailer account. It can create tenant metadata
+and credentials, but cannot use import, mapping, retailer analytics, or CCI analytics endpoints.
+Open `/?portal=onboarding` or use `/api/v1/onboarding/**` with `scan-onboarding`.
+
+The enforced order is:
+
+1. Create the retailer and at least one store. SCAN generates the internal tenant code.
+2. Save a named import format and exact source-column map.
+3. Validate a CSV/XLS/XLSX sample. Validation uses the production parser but writes no receipts.
+4. After a successful sample, issue retailer, data-administrator, and connector credentials.
+
+Passwords are returned only by the credential-issuance response. Only password hashes are stored;
+the plaintext values cannot be retrieved later. New retailers keep transaction imports disabled
+until one of their profiles passes sample validation.
+
 ## Exercise the Phase 0 API
 
-Upload the synthetic fixture as the admin user. Run these examples from `scan-api/` in
+Preview the synthetic fixture as the admin user. Run these examples from `scan-api/` in
 another terminal while the API is running. Curl prompts for the corresponding password
 configured on the backend, so it does not need password variables in this second terminal:
 
 ```bash
+curl -u scan-admin -o /tmp/scan-preview.json \
+  -F file=@src/test/resources/fixtures/canonical-transactions.csv \
+  http://localhost:8080/api/v1/imports/preview
+
 curl -u scan-admin \
-  -F retailerCode=DEMO \
-  -F profileCode=CANONICAL \
+  -F previewId="$(jq -r .previewId /tmp/scan-preview.json)" \
   -F file=@src/test/resources/fixtures/canonical-transactions.csv \
   http://localhost:8080/api/v1/imports
 ```
+
+The preview writes no receipts. It returns actual receipt, line, quantity, sales, discount, store,
+and date totals. Import succeeds only for the same unchanged file while that preview is valid.
 
 List unresolved retailer products:
 
 ```bash
 curl -u scan-admin \
-  'http://localhost:8080/api/v1/product-mappings/unresolved?retailerCode=DEMO'
+  'http://localhost:8080/api/v1/product-mappings/unresolved'
 ```
 
 Read aggregate metrics as the CCI user:
@@ -139,7 +163,7 @@ created automatically by this repository.
 
 The container activates `cloud`, listens on `${PORT:8080}`, limits its Java heap to 256 MB,
 and uses a small database/thread pool. Local `mvn spring-boot:run` retains the normal profile
-unless you explicitly enable `cloud`. Set database and all four application-role passwords in
+unless you explicitly enable `cloud`. Set database and the application-role passwords in
 the host's environment settings, never the image or source code.
 
 `GET /health` is public and returns only `{"status":"UP"}` with no database query. Page
@@ -162,9 +186,12 @@ local database; see the hosting guide for the build and optional dataset-test co
 - Analytics reject mixed-currency receipt sets instead of summing unlike monetary values.
 - Time/store analytics currently load compact receipt summaries while product/category rankings
   use database aggregation. Production volume testing will determine further pre-aggregation.
-- Pilot identities are configured from environment variables. Persistent accounts or SSO
-  are not implemented. The first retailer and connector accounts are bound to one configured
-  pilot; CCI access still requires the retailer's sharing flag.
+- Bootstrap identities are configured from environment variables and persisted with immutable
+  role/retailer/profile scope. Changing request parameters cannot change that scope. A conflicting
+  username binding fails startup. Controlled retailer onboarding is implemented; public signup,
+  SSO, credential rotation, and revocation are not.
+- The `KAGGLE` tenant is import-locked. It remains available for the already loaded public demo,
+  but new transaction and catalog uploads must target a separate retailer tenant.
 - Production needs HTTPS and a reachable backend, not just a static frontend deployment.
   The current security configuration does not enable cross-origin browser requests. Prefer
   same-origin frontend/API routing; a separate frontend origin requires an explicit CORS

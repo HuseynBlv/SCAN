@@ -32,7 +32,14 @@ unverified.
 
 ## What the provisional adapter does
 
-Enable it explicitly:
+The SCAN API now contains the same observed-workbook adapter for supervised browser uploads. On
+the **Data connection → Import data** screen, the original `.xls` or `.xlsx` file is read directly;
+SCAN shows receipt, line, quantity, gross, discount, net-sales, store, product, and date controls
+before anything is written. The user must explicitly approve those totals, and the resulting
+preview can import only the exact same file bytes.
+
+The folder connector remains useful for scheduled unattended delivery. Enable its local adapter
+explicitly:
 
 ```properties
 SCAN_CONNECTOR_SOURCE_FORMAT=CASPOS_CLOUDSALE_PROVISIONAL
@@ -87,8 +94,8 @@ canonical import profile with:
 - timezone `Asia/Baku`, if confirmed for the shop;
 - currency `AZN`, if confirmed;
 - canonical column mappings from `docs/pilot-data-contract.md`;
-- retailer code `CASPOS_PILOT` and profile code `CLOUDSALE_V1`, bound through
-  `SCAN_PILOT_RETAILER_CODE` and `SCAN_PILOT_PROFILE_CODE`;
+- retailer code `CASPOS_PILOT` and profile code `CLOUDSALE_V1`, persisted on the connector,
+  retailer, and data-administrator accounts during controlled bootstrap;
 - a dedicated ingest password and separate retailer portal password.
 
 Migration `V5__seed_caspos_pilot_profile.sql` provisions a separate retailer/profile with timezone
@@ -106,10 +113,10 @@ Retailer uploads and CCI analytics read the same Neon records; there is no secon
 scheduled dashboard synchronization. After an import completes, open:
 
 ```text
-https://scan-caspos-pilot.onrender.com/?retailerCode=CASPOS_PILOT
+https://scan-caspos-pilot.onrender.com/
 ```
 
-Sign in with username `scan-cci` and the `SCAN_CCI_PASSWORD` value from the
+Sign in with username `scan-caspos-cci` and the `SCAN_CCI_PASSWORD` value from the
 `scan-caspos-pilot` Render service. CCI receives only aggregate analytics already allowed by the
 analytics API; the CloudSale adapter does not upload cashier code or payment type.
 

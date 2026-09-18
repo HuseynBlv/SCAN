@@ -28,6 +28,10 @@ fi
 : "${SCAN_INGEST_PASSWORD:?Set SCAN_INGEST_PASSWORD in the environment or .env.neon}"
 : "${SCAN_RETAILER_PASSWORD:?Set SCAN_RETAILER_PASSWORD in the environment or .env.neon}"
 
+if [[ -z "${SCAN_ONBOARDING_PASSWORD:-}" ]]; then
+  echo "SCAN_ONBOARDING_PASSWORD is not set; the retailer onboarding operator will be disabled." >&2
+fi
+
 project_id="${SCAN_NEON_PROJECT_ID:-withered-darkness-12839995}"
 branch="${SCAN_NEON_BRANCH:-production}"
 role="${SCAN_NEON_ROLE:-scan_app}"

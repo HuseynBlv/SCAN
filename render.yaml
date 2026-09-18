@@ -13,6 +13,10 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: cloud
+      - key: SCAN_RUNTIME_ENVIRONMENT
+        value: demo
+      - key: SCAN_DATABASE_ID
+        value: scan-demo
       - key: SCAN_DB_URL
         sync: false
       - key: SCAN_DB_USERNAME
@@ -21,12 +25,24 @@ services:
         sync: false
       - key: SCAN_ADMIN_PASSWORD
         generateValue: true
+      - key: SCAN_ADMIN_USERNAME
+        value: scan-demo-admin
       - key: SCAN_CCI_PASSWORD
         generateValue: true
+      - key: SCAN_CCI_USERNAME
+        value: scan-demo-cci
       - key: SCAN_INGEST_PASSWORD
         generateValue: true
+      - key: SCAN_INGEST_USERNAME
+        value: scan-demo-connector
       - key: SCAN_RETAILER_PASSWORD
         generateValue: true
+      - key: SCAN_RETAILER_USERNAME
+        value: scan-demo-retailer
+      - key: SCAN_ONBOARDING_PASSWORD
+        generateValue: true
+      - key: SCAN_ONBOARDING_USERNAME
+        value: scan-demo-onboarding
       - key: SCAN_PILOT_RETAILER_CODE
         value: KAGGLE
       - key: SCAN_PILOT_PROFILE_CODE
@@ -44,29 +60,36 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: cloud
+      - key: SCAN_RUNTIME_ENVIRONMENT
+        value: production
+      - key: SCAN_DATABASE_ID
+        value: scan-production
       - key: SCAN_DB_URL
-        fromService:
-          name: scan-demo
-          type: web
-          envVarKey: SCAN_DB_URL
+        sync: false
       - key: SCAN_DB_USERNAME
-        fromService:
-          name: scan-demo
-          type: web
-          envVarKey: SCAN_DB_USERNAME
+        sync: false
       - key: SCAN_DB_PASSWORD
-        fromService:
-          name: scan-demo
-          type: web
-          envVarKey: SCAN_DB_PASSWORD
+        sync: false
       - key: SCAN_ADMIN_PASSWORD
         generateValue: true
+      - key: SCAN_ADMIN_USERNAME
+        value: scan-caspos-admin
       - key: SCAN_CCI_PASSWORD
         generateValue: true
+      - key: SCAN_CCI_USERNAME
+        value: scan-caspos-cci
       - key: SCAN_INGEST_PASSWORD
         generateValue: true
+      - key: SCAN_INGEST_USERNAME
+        value: scan-caspos-connector
       - key: SCAN_RETAILER_PASSWORD
         generateValue: true
+      - key: SCAN_RETAILER_USERNAME
+        value: scan-caspos-retailer
+      - key: SCAN_ONBOARDING_PASSWORD
+        generateValue: true
+      - key: SCAN_ONBOARDING_USERNAME
+        value: scan-caspos-onboarding
       - key: SCAN_PILOT_RETAILER_CODE
         value: CASPOS_PILOT
       - key: SCAN_PILOT_PROFILE_CODE

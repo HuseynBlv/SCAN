@@ -8,7 +8,8 @@ remain deterministic. Do not commit credentials, raw exports, or generated datas
 
 - **Platform:** Render Free Docker web services, with external Neon Free PostgreSQL. `scan-demo`
   remains the bounded synthetic demo; `scan-caspos-pilot` is the separate CASPOS pilot application
-  identity. Both services use the same Neon database.
+  identity. Demo and pilot use separate PostgreSQL databases and database credentials. Their
+  persisted runtime claims prevent either service from opening the other's database.
 - **Production URLs:** `https://scan-demo.onrender.com` for the synthetic demo and
   `https://scan-caspos-pilot.onrender.com` for the CASPOS pilot. Both services follow `main`;
   commit `08c9e82` is the current verified hosted demo baseline.

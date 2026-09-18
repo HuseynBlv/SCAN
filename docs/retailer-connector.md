@@ -14,8 +14,8 @@ POS scheduled export -> scan-data/inbox -> SCAN Connector -> HTTPS -> SCAN impor
 ## Safety properties
 
 - The connector makes outbound HTTPS requests only; the shop does not open an inbound port.
-- Credentials can only call the connector upload endpoint and are bound server-side to the
-  configured pilot retailer and import profile.
+- Credentials can only call the connector upload endpoint and are persisted with one server-side
+  retailer and import-profile binding.
 - A supported file must be old enough and unchanged across two polling cycles before upload.
 - Successful files are archived, never silently deleted.
 - Validation failures move to `failed/` with an `.error.txt` explanation.
@@ -48,7 +48,7 @@ Edit these values:
 
 ```properties
 SCAN_API_URL=https://scan-caspos-pilot.onrender.com
-SCAN_CONNECTOR_USERNAME=scan-connector
+SCAN_CONNECTOR_USERNAME=the-retailer-assigned-connector-username
 SCAN_CONNECTOR_PASSWORD=the-SCAN_INGEST_PASSWORD-from-Render
 SCAN_CONNECTOR_DIRECTORY=/absolute/path/to/scan-data
 ```

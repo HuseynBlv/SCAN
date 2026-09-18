@@ -1,24 +1,22 @@
 # SCAN demo and CASPOS pilot hosting for $0
 
-This is a small, occasional-use **technical demo**, not a production retailer deployment.
-The repository defines two isolated Render Free web services backed by one Neon Free PostgreSQL
-project. The synthetic demo is live at
+The repository defines a technical demo and a separate pilot service. They must use different
+PostgreSQL databases and database credentials. The synthetic demo is live at
 [https://scan-demo.onrender.com](https://scan-demo.onrender.com); `scan-caspos-pilot` is the
-separate retailer application identity. CCI sharing is disabled when the pilot retailer is first
-created and enabled only by migration 6 after retailer approval. This is not database-level
-isolation: both services use the same Neon database. Public
-health, frontend delivery, authentication boundaries, Render-to-Neon startup, authenticated
-analytics, idempotent hosted import, and all five dashboard sections were verified on
-2026-08-28.
+production pilot identity. Never point the pilot at the demo database. SCAN also records an
+environment claim inside each database and refuses to start when a demo/production identity does
+not match.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A["Browser: demo or pilot HTTPS URL"] --> B["Spring Boot: React pages and protected API"]
-    C["Admin: prepared CSV uploads over HTTPS"] --> B
-    B --> D["Neon PostgreSQL over verified TLS"]
-    E["GitHub branch: Docker build"] --> B
+    A["Demo browser"] --> B["scan-demo service"]
+    C["Pilot browser or connector"] --> D["scan-caspos-pilot service"]
+    B --> E["Demo PostgreSQL"]
+    D --> F["Production PostgreSQL"]
+    G["GitHub branch: Docker build"] --> B
+    G --> D
 ```
 
 The root `Dockerfile` builds React, copies its production files into the Java application,
@@ -27,8 +25,10 @@ do not run in the final service. Spring Boot serves the dashboard at `/` and the
 `/api/v1/...`, so browser requests stay on the same origin. No CORS change or Vercel proxy
 is needed for this demo.
 
-Only the page assets and minimal `GET /health` response are public. `scan-admin` can import
-and map products; `scan-cci` can read aggregates for retailers with CCI sharing enabled.
+Only the page assets and minimal `GET /health` response are public. Each deployment has unique
+account usernames. Data administrators, connectors, and retailer users are persisted with one
+retailer binding; import accounts also carry one profile binding. CCI accounts can read aggregates
+only for retailers with CCI sharing enabled.
 Passwords stay in Render's environment settings and in browser memory during sign-in, not
 in the frontend build or Git. Use **new, different hosted passwords**, not the local ones.
 
@@ -105,20 +105,24 @@ Review the creation screen **before applying**:
 - If that name already belongs to another service, stop and choose a unique name in the
   Blueprint; do not accidentally reconfigure an existing service.
 
-Render prompts for these three values when creating `scan-demo`:
+Render prompts for these three values on **each** service. Enter demo database values for
+`scan-demo` and separate production database values for `scan-caspos-pilot`:
 
 | Render environment variable | Value |
 |---|---|
-| `SCAN_DB_URL` | The direct JDBC URL from step 1 |
-| `SCAN_DB_USERNAME` | `scan_app` |
-| `SCAN_DB_PASSWORD` | The private password for `scan_app` retrieved from Neon |
+| `SCAN_DB_URL` | That service's direct JDBC database URL |
+| `SCAN_DB_USERNAME` | That service's database role |
+| `SCAN_DB_PASSWORD` | The private password for that database role |
 
-The pilot service references those three variables from `scan-demo` inside Render, so their secret
-values never enter Git. Each service generates separate random `SCAN_ADMIN_PASSWORD`,
-`SCAN_CCI_PASSWORD`, `SCAN_INGEST_PASSWORD`, and `SCAN_RETAILER_PASSWORD` values and sets
+Do not copy the demo values into the pilot. Secret values never enter Git. Each service generates
+separate random `SCAN_ADMIN_PASSWORD`,
+`SCAN_CCI_PASSWORD`, `SCAN_INGEST_PASSWORD`, `SCAN_RETAILER_PASSWORD`, and
+`SCAN_ONBOARDING_PASSWORD` values and sets
 `SPRING_PROFILES_ACTIVE=cloud`. Retrieve the generated passwords privately from each service's
-Environment page after creation. Usernames remain `scan-admin`, `scan-cci`, `scan-connector`, and
-`scan-retailer`. The app uses Render's `PORT` automatically; do not configure port forwarding.
+Environment page after creation. `render.yaml` uses `scan-demo-*` usernames for the demo and
+`scan-caspos-*` usernames for the pilot. It also assigns `demo/scan-demo` and
+`production/scan-production` runtime claims. The app uses Render's `PORT` automatically; do not
+configure port forwarding.
 
 Deploy the service and wait for the build and startup logs to complete. Copy the **actual
 assigned HTTPS URL** from Render; the name may have an extra suffix. The deployment created
@@ -141,7 +145,7 @@ From a terminal, replace the placeholder with your real URL, without a trailing 
 export SCAN_DEMO_URL='https://YOUR_ASSIGNED_HOST.onrender.com'
 curl --fail-with-body "$SCAN_DEMO_URL/health"
 curl -i "$SCAN_DEMO_URL/api/v1/analytics/overview?retailerCode=KAGGLE"
-curl --fail-with-body -u scan-cci \
+curl --fail-with-body -u scan-demo-cci \
   "$SCAN_DEMO_URL/api/v1/analytics/overview?retailerCode=KAGGLE"
 ```
 
@@ -150,34 +154,13 @@ and the authenticated request returns **200** with zero baskets before import. C
 for the **hosted** CCI password. A health response checks application liveness only, not
 database reachability; the authenticated analytics request checks the database path.
 
-## 4. Load the bounded demo sample
+## 4. Verify the bounded demo sample
 
-Prepare the 10,000-receipt files using the [Kaggle guide](kaggle-demo.md#1-prepare-a-bounded-sample),
-or reuse your existing generated files. Do not upload the original ZIP or unfiltered source.
-The container deliberately includes neither the dataset nor credentials.
+The production database already contains the verified 10,000-receipt sample. Migration 7 makes
+`KAGGLE` read-only: the browser, transaction API, catalog API, and connector cannot add more data.
+Do not unlock it for a retailer test. Use a separately provisioned retailer tenant.
 
-From the repository root, run these **one at a time**. Curl prompts for the hosted admin
-password each time. Allow the import to finish before refreshing analytics or uploading again.
-
-```bash
-curl --fail-with-body -u scan-admin \
-  -F retailerCode=KAGGLE \
-  -F file=@scan-api/target/kaggle-demo/product-catalog.csv \
-  "$SCAN_DEMO_URL/api/v1/product-mappings/catalog-imports"
-
-curl --fail-with-body -u scan-admin \
-  -F retailerCode=KAGGLE -F profileCode=KAGGLE_2019 \
-  -F file=@scan-api/target/kaggle-demo/canonical-transactions.csv \
-  "$SCAN_DEMO_URL/api/v1/imports"
-```
-
-Catalog first, transactions second. Check that the transaction response says `COMPLETED`.
-The database starts separately from your laptop database: local imports are not automatically
-copied to Neon. If a request times out, inspect Render's logs and import status before retrying.
-The API serializes same-retailer persistence and keeps failed retries as numbered attempts, but
-the pilot remains synchronous, so wait for a final status before starting another large upload.
-
-Sign into the hosted page with retailer `KAGGLE`, username `scan-cci`, and the generated
+Sign into the hosted page with username `scan-demo-cci` and the generated
 CCI password. For the identified source ZIP and a fresh demo retailer, verify:
 
 | Check | Expected |
@@ -188,8 +171,7 @@ CCI password. For the identified source ZIP and a fresh demo retailer, verify:
 | CCI penetration | 2.1% |
 | Mapped lines | 100% |
 
-Check all five dashboard tabs. Repeat the transaction upload: `duplicateFile` should be
-`true` and totals unchanged. Confirm that `scan-cci` receives **403** for
+Check all five dashboard tabs. Confirm that `scan-demo-cci` receives **403** for
 `/api/v1/product-mappings/catalog`. Restart the app from Render and verify the same totals.
 Only then share the demo link and CCI credentials privately. Do not share admin credentials.
 
@@ -241,15 +223,8 @@ On exit it removes only its temporary containers, their test data, and its tempo
 If Docker Hub is temporarily rate-limiting downloads, a locally cached version can be selected
 with `SCAN_SMOKE_POSTGRES_IMAGE`; CI and the default command continue to use PostgreSQL 18.
 
-To exercise the prepared 10,000-basket sample under the same memory limit:
-
-```bash
-SCAN_SMOKE_KAGGLE_DIR="$PWD/scan-api/target/kaggle-demo" \
-  bash scripts/smoke-container.sh scan-demo:local
-```
-
 GitHub CI runs the small-fixture container test after the backend and frontend checks.
-The optional dataset is not committed or uploaded to CI. Local Docker results do not prove
+The Kaggle dataset is not committed or uploaded to CI. Local Docker results do not prove
 Render's CPU speed, cold-start time, Neon connectivity, or behavior under concurrent traffic;
 the hosted checks above are still required.
 
@@ -285,4 +260,4 @@ connection credentials, or private exports.
 | Sign-in returns 403 | Check account role and the retailer's CCI-sharing permission. |
 | 502/503/504 after inactivity | Wait for wake-up and retry. Check service logs and quota status if it persists. |
 | App exits with an out-of-memory error | Stop repeated/concurrent imports; inspect the dataset size and logs. Do not silently upgrade the plan. |
-| Empty dashboard after deployment | Import catalog and transactions into the hosted API, then use the matching retailer code. |
+| Empty dashboard after deployment | Confirm the signed-in CCI account has an explicit retailer grant. `KAGGLE` is read-only; use a separate tenant for import tests. |

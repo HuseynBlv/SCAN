@@ -31,15 +31,16 @@ Vite proxies `/api` to `http://localhost:8080`. Open the displayed Vite URL and 
 
 - Retailer portal: `/?portal=retailer`, username `scan-retailer`, password
   `SCAN_RETAILER_PASSWORD`.
-- CCI portal: `/`, retailer code `KAGGLE`, username `scan-cci`, password
-  `SCAN_CCI_PASSWORD`.
+- CCI portal: `/`, username `scan-cci`, password `SCAN_CCI_PASSWORD`. The API returns the
+  retailer access granted to that account; there is no retailer-code field on sign-in.
+- Data connection: `/?portal=connection`, username `scan-admin`, password
+  `SCAN_ADMIN_PASSWORD`. The assigned retailer and file profile are returned after sign-in.
+- Retailer onboarding: `/?portal=onboarding`, username `scan-onboarding`, password
+  `SCAN_ONBOARDING_PASSWORD`. Retailers remain import-locked until a sample export passes the
+  production parser without writing transaction data.
 
-The CCI portal also accepts `?retailerCode=CASPOS_PILOT` to preselect a retailer on its sign-in
-screen. The query parameter is a convenience only: it does not bypass CCI authentication or the
-retailer's server-side sharing permission.
-
-Prepare and import the sample using the [Kaggle demo guide](../docs/kaggle-demo.md) first.
-For the smaller synthetic API fixture, use retailer code `DEMO`. No Supabase account or
+The `KAGGLE` tenant is read-only. For local import testing, bind the bootstrap accounts to the
+smaller synthetic `DEMO` retailer/profile as shown in the backend guide. No Supabase account or
 legacy scanner environment variables are required for the default dashboard.
 
 The password is held only in React memory for the current tab. Do not put it in a `VITE_*`
@@ -49,7 +50,7 @@ environment variable because Vite variables are embedded in the browser bundle.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `VITE_SCAN_RETAILER_CODE` | `KAGGLE` | Initial retailer code on the sign-in screen |
+| `SCAN_DEV_API_TARGET` | `http://localhost:8080` | Local API target used by the Vite development proxy |
 | `VITE_SCAN_API_BASE_URL` | same origin | API origin for deployments where frontend and API are on different origins |
 | `VITE_ENABLE_LEGACY_SCANNER` | `false` | Set to `true` to open the retired cashier-scanning prototype |
 

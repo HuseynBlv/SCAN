@@ -31,6 +31,12 @@ server:
     include-message: never
 
 scan:
+  runtime:
+    environment: ${SCAN_RUNTIME_ENVIRONMENT:development}
+    database-id: ${SCAN_DATABASE_ID:local}
+  import-worker:
+    poll-delay-ms: ${SCAN_IMPORT_POLL_DELAY_MS:1000}
+    initial-delay-ms: ${SCAN_IMPORT_INITIAL_DELAY_MS:1000}
   security:
     admin-username: ${SCAN_ADMIN_USERNAME:scan-admin}
     admin-password: ${SCAN_ADMIN_PASSWORD}
@@ -40,6 +46,9 @@ scan:
     ingest-password: ${SCAN_INGEST_PASSWORD}
     retailer-username: ${SCAN_RETAILER_USERNAME:scan-retailer}
     retailer-password: ${SCAN_RETAILER_PASSWORD}
+    onboarding-username: ${SCAN_ONBOARDING_USERNAME:scan-onboarding}
+    onboarding-password: ${SCAN_ONBOARDING_PASSWORD:}
+    bootstrap-enabled: ${SCAN_ACCOUNT_BOOTSTRAP_ENABLED:true}
   pilot:
-    retailer-code: ${SCAN_PILOT_RETAILER_CODE:KAGGLE}
-    profile-code: ${SCAN_PILOT_PROFILE_CODE:KAGGLE_2019}
+    retailer-code: ${SCAN_PILOT_RETAILER_CODE:DEMO}
+    profile-code: ${SCAN_PILOT_PROFILE_CODE:CANONICAL}

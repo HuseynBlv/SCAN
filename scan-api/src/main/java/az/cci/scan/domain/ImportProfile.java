@@ -25,6 +25,11 @@ import java.util.UUID;
 )
 public class ImportProfile {
 
+    public enum ValidationStatus {
+        DRAFT,
+        VALIDATED
+    }
+
     @Id
     @UuidGenerator
     private UUID id;
@@ -38,6 +43,9 @@ public class ImportProfile {
 
     @Column(name = "source_system", nullable = false, length = 128)
     private String sourceSystem;
+
+    @Column(name = "display_name", nullable = false, length = 128)
+    private String displayName;
 
     @Column(nullable = false, length = 1)
     private String delimiter = ",";
@@ -81,6 +89,13 @@ public class ImportProfile {
     @Column(name = "line_total_column", nullable = false, length = 128)
     private String lineTotalColumn;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "validation_status", nullable = false, length = 32)
+    private ValidationStatus validationStatus = ValidationStatus.VALIDATED;
+
+    @Column(name = "validated_at")
+    private Instant validatedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -98,6 +113,7 @@ public class ImportProfile {
         this.retailer = retailer;
         this.code = code;
         this.sourceSystem = sourceSystem;
+        this.displayName = sourceSystem;
         this.dateTimePattern = dateTimePattern;
         this.zoneId = zoneId;
         this.currency = currency;
@@ -111,6 +127,53 @@ public class ImportProfile {
         this.unitPriceColumn = "unit_price";
         this.discountAmountColumn = "discount_amount";
         this.lineTotalColumn = "line_total";
+        this.validationStatus = ValidationStatus.VALIDATED;
+        this.validatedAt = Instant.now();
+    }
+
+    public static ImportProfile draft(
+        Retailer retailer,
+        String code,
+        String displayName,
+        String sourceSystem,
+        char delimiter,
+        String dateTimePattern,
+        String zoneId,
+        String currency,
+        String storeIdColumn,
+        String receiptIdColumn,
+        String timestampColumn,
+        String productCodeColumn,
+        String barcodeColumn,
+        String productNameColumn,
+        String quantityColumn,
+        String unitPriceColumn,
+        String discountAmountColumn,
+        String lineTotalColumn
+    ) {
+        ImportProfile profile = new ImportProfile(
+            retailer,
+            code,
+            sourceSystem,
+            dateTimePattern,
+            zoneId,
+            currency
+        );
+        profile.displayName = displayName;
+        profile.delimiter = String.valueOf(delimiter);
+        profile.storeIdColumn = storeIdColumn;
+        profile.receiptIdColumn = receiptIdColumn;
+        profile.timestampColumn = timestampColumn;
+        profile.productCodeColumn = productCodeColumn;
+        profile.barcodeColumn = barcodeColumn;
+        profile.productNameColumn = productNameColumn;
+        profile.quantityColumn = quantityColumn;
+        profile.unitPriceColumn = unitPriceColumn;
+        profile.discountAmountColumn = discountAmountColumn;
+        profile.lineTotalColumn = lineTotalColumn;
+        profile.validationStatus = ValidationStatus.DRAFT;
+        profile.validatedAt = null;
+        return profile;
     }
 
     public UUID getId() {
@@ -127,6 +190,10 @@ public class ImportProfile {
 
     public String getSourceSystem() {
         return sourceSystem;
+    }
+
+    public String getDisplayName() {
+        return displayName;
     }
 
     public char delimiterCharacter() {
@@ -183,6 +250,53 @@ public class ImportProfile {
 
     public String getLineTotalColumn() {
         return lineTotalColumn;
+    }
+
+    public ValidationStatus getValidationStatus() {
+        return validationStatus;
+    }
+
+    public Instant getValidatedAt() {
+        return validatedAt;
+    }
+
+    public boolean isValidated() {
+        return validationStatus == ValidationStatus.VALIDATED;
+    }
+
+    public void markValidated() {
+        validationStatus = ValidationStatus.VALIDATED;
+        validatedAt = Instant.now();
+    }
+
+    public void updateMapping(
+        char delimiter,
+        String dateTimePattern,
+        String storeIdColumn,
+        String receiptIdColumn,
+        String timestampColumn,
+        String productCodeColumn,
+        String barcodeColumn,
+        String productNameColumn,
+        String quantityColumn,
+        String unitPriceColumn,
+        String discountAmountColumn,
+        String lineTotalColumn
+    ) {
+        this.delimiter = String.valueOf(delimiter);
+        this.dateTimePattern = dateTimePattern;
+        this.storeIdColumn = storeIdColumn;
+        this.receiptIdColumn = receiptIdColumn;
+        this.timestampColumn = timestampColumn;
+        this.productCodeColumn = productCodeColumn;
+        this.barcodeColumn = barcodeColumn;
+        this.productNameColumn = productNameColumn;
+        this.quantityColumn = quantityColumn;
+        this.unitPriceColumn = unitPriceColumn;
+        this.discountAmountColumn = discountAmountColumn;
+        this.lineTotalColumn = lineTotalColumn;
+        validationStatus = ValidationStatus.DRAFT;
+        validatedAt = null;
     }
 
     public Set<String> requiredColumns() {

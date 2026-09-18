@@ -19,6 +19,11 @@ spring:
         order_updates: true
 
 scan:
+  runtime:
+    environment: test
+    database-id: scan-test
+  import-worker:
+    initial-delay-ms: 3600000
   security:
     admin-username: test-admin
     admin-password: test-admin-password
@@ -28,6 +33,9 @@ scan:
     ingest-password: test-connector-password
     retailer-username: test-retailer
     retailer-password: test-retailer-password
+    onboarding-username: test-onboarding
+    onboarding-password: test-onboarding-password
+    bootstrap-enabled: false
   pilot:
     retailer-code: SHARED
     profile-code: CANONICAL

@@ -68,6 +68,16 @@ public class ProductCatalogImportService {
     public CatalogImportResponse importCatalog(String retailerCode, MultipartFile file) {
         Retailer retailer = retailerRepository.findByCodeIgnoreCase(retailerCode)
             .orElseThrow(() -> new IllegalArgumentException("Unknown retailer: " + retailerCode));
+        return importCatalog(retailer, file);
+    }
+
+    @Transactional
+    public CatalogImportResponse importCatalog(Retailer retailer, MultipartFile file) {
+        if (!retailer.isTransactionImportEnabled()) {
+            throw new IllegalArgumentException(
+                retailer.getCode() + " is a locked demo tenant and does not accept catalog imports"
+            );
+        }
         List<CatalogRow> rows = parse(file);
 
         Map<String, CanonicalProduct> canonicalByName = loadCanonicalByName(rows);
