@@ -35,6 +35,36 @@ const DEFAULT_COLUMNS = {
   lineTotal: 'line_total',
 }
 
+// SCAN's CloudSale adapter recognizes this exact shape by sheet name and header text alone, so
+// these values only matter as a first, silent guess: if the file really is a CloudSale export the
+// adapter ignores them entirely, and if it isn't, validation fails cleanly and we fall back to the
+// manual format form. Nothing here is ever shown to the operator on the happy path.
+const CLOUDSALE_AUTO_FORMAT = {
+  name: 'CloudSale export',
+  sourceSystem: 'CloudSale',
+  delimiter: ',',
+  dateTimePattern: "yyyy-MM-dd'T'HH:mm:ss",
+  currency: 'AZN',
+  columns: {
+    storeId: 'Obyekt_kodu',
+    receiptId: 'Çek_nömrəsi',
+    timestamp: 'Çek_tarixi',
+    productCode: 'Məhsul_kodu',
+    barcode: 'Barkod',
+    productName: 'Məhsul_adı',
+    quantity: 'Miqdar',
+    unitPrice: 'Vahid_qiyməti_AZN',
+    discountAmount: 'Sətir_endirimi_AZN',
+    lineTotal: 'Sətir_məbləği_AZN',
+  },
+}
+
+const UNREGISTERED_STORE_PATTERN = /^store_id: (.+) is not registered for this retailer$/
+
+function unregisteredStoreId(message) {
+  return UNREGISTERED_STORE_PATTERN.exec(message)?.[1] || null
+}
+
 function Login({ error, loading, onSubmit }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -147,6 +177,75 @@ function AddStoreForm({ busy, error, onSubmit }) {
   )
 }
 
+function SampleUpload({ busy, error, onDescribeManually, onUpload }) {
+  const [file, setFile] = useState(null)
+  const [fileError, setFileError] = useState('')
+
+  function selectFile(event) {
+    const next = event.target.files?.[0] || null
+    if (!next) return
+    if (!SUPPORTED_FILE.test(next.name)) {
+      setFileError('Choose a CSV, XLS, or XLSX file.')
+      setFile(null)
+    } else if (next.size > MAX_FILE_BYTES) {
+      setFileError('The sample must be 25 MB or smaller.')
+      setFile(null)
+    } else {
+      setFileError('')
+      setFile(next)
+    }
+  }
+
+  return (
+    <section className="scan-panel onboarding-form-panel">
+      <header><span className="scan-eyebrow">Step 2 of 4</span><h2>Upload a sample export</h2><p>SCAN reads the file and fills in the format automatically when it recognizes it — most retailers never see a mapping form.</p></header>
+      <div className="onboarding-sample-boundary"><ScanIcon name="shield" /><p><strong>No production write</strong><span>This step checks structure, values, baskets, and registered store IDs only.</span></p></div>
+      <label className="onboarding-file-picker"><input accept=".csv,.xls,.xlsx" onChange={selectFile} type="file" /><ScanIcon name="upload" size={22} /><span><strong>{file ? file.name : 'Choose a sample export'}</strong><small>CSV, XLS, or XLSX · maximum 25 MB</small></span></label>
+      {fileError || error ? <div className="cci-form-error" role="alert">{fileError || error}</div> : null}
+      <div className="onboarding-form-actions">
+        <button className="scan-button scan-button-secondary" disabled={busy} onClick={() => onDescribeManually(file)} type="button">Describe the format manually</button>
+        <button className="scan-button scan-button-dark" disabled={!file || busy} onClick={() => onUpload(file)} type="button">{busy ? 'Reading file…' : 'Upload and detect format'}</button>
+      </div>
+    </section>
+  )
+}
+
+function MissingStores({ busy, errors, onRegister }) {
+  const missing = useMemo(() => {
+    const seen = new Set()
+    const codes = []
+    for (const message of errors) {
+      const code = unregisteredStoreId(message)
+      if (code && !seen.has(code)) {
+        seen.add(code)
+        codes.push(code)
+      }
+    }
+    return codes
+  }, [errors])
+  const [names, setNames] = useState(() => Object.fromEntries(missing.map((code) => [code, code])))
+
+  if (missing.length === 0) return null
+
+  function submit(event) {
+    event.preventDefault()
+    onRegister(missing.map((code) => ({ externalStoreId: code, name: (names[code] || code).trim() })))
+  }
+
+  return (
+    <form className="onboarding-missing-stores" onSubmit={submit}>
+      <p><strong>SCAN found {missing.length} store {missing.length === 1 ? 'code' : 'codes'} in this file that {missing.length === 1 ? "isn't" : "aren't"} registered yet.</strong> Name {missing.length === 1 ? 'it' : 'them'} to register and try again.</p>
+      {missing.map((code) => (
+        <div key={code}>
+          <span className="onboarding-missing-store-code">{code}</span>
+          <input aria-label={`Name for store ${code}`} required value={names[code] || ''} onChange={(event) => setNames((current) => ({ ...current, [code]: event.target.value }))} />
+        </div>
+      ))}
+      <div className="onboarding-form-actions"><button className="scan-button scan-button-dark" disabled={busy} type="submit">{busy ? 'Registering…' : 'Register and re-validate'}</button></div>
+    </form>
+  )
+}
+
 function FormatForm({ busy, error, onSubmit }) {
   const [name, setName] = useState('Daily sales export')
   const [sourceSystem, setSourceSystem] = useState('Excel / CSV export')
@@ -198,8 +297,8 @@ function FormatForm({ busy, error, onSubmit }) {
   )
 }
 
-function SampleValidation({ busy, error, onContinue, onReplaceFormat, onValidate, result }) {
-  const [file, setFile] = useState(null)
+function SampleValidation({ busy, error, initialFile, onContinue, onRegisterStores, onReplaceFormat, onValidate, result }) {
+  const [file, setFile] = useState(initialFile || null)
   const [fileError, setFileError] = useState('')
 
   function selectFile(event) {
@@ -234,6 +333,7 @@ function SampleValidation({ busy, error, onContinue, onReplaceFormat, onValidate
           <header><ScanIcon name={result.valid ? 'check' : 'warning'} /><div><strong>{result.valid ? 'Sample accepted' : 'Sample needs correction'}</strong><span>{result.valid ? 'Production imports are now enabled for this format.' : 'Nothing was imported and production access remains locked.'}</span></div></header>
           <dl><div><dt>Rows checked</dt><dd>{result.rowsChecked.toLocaleString()}</dd></div><div><dt>Receipts detected</dt><dd>{result.receiptsDetected.toLocaleString()}</dd></div><div><dt>Product lines</dt><dd>{result.productLines.toLocaleString()}</dd></div></dl>
           {result.errors.length ? <ul>{result.errors.slice(0, 8).map((item) => <li key={item}>{item}</li>)}</ul> : null}
+          {!result.valid ? <MissingStores busy={busy} errors={result.errors} key={result.errors.join('|')} onRegister={onRegisterStores} /> : null}
         </div>
       ) : null}
     </section>
@@ -309,6 +409,7 @@ export default function Onboarding() {
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [sampleResult, setSampleResult] = useState(null)
+  const [sampleFile, setSampleFile] = useState(null)
   const [issued, setIssued] = useState(null)
   const [access, setAccess] = useState([])
   const [rotated, setRotated] = useState(null)
@@ -366,6 +467,7 @@ export default function Onboarding() {
     setSelectedId(created.id)
     setCreating(false)
     setCreatingFormat(false)
+    setSampleFile(null)
   }
 
   async function addStore(request) {
@@ -376,18 +478,65 @@ export default function Onboarding() {
 
   async function createProfile(request) {
     const saved = await perform(() => createOnboardingProfile({ ...credentials, retailerId: selected.id, request }))
-    if (saved) {
-      await refresh(selected.id)
-      setCreatingFormat(false)
-      setSampleResult(null)
+    if (!saved) return
+    await refresh(selected.id)
+    setCreatingFormat(false)
+    setSampleResult(null)
+    // A sample was already chosen (either before switching to manual entry, or during a failed
+    // auto-detect attempt) — reuse it instead of asking the operator to pick a file twice.
+    if (sampleFile) {
+      const result = await perform(() => validateOnboardingSample({ ...credentials, retailerId: selected.id, profileId: saved.id, file: sampleFile }))
+      if (result) {
+        setSampleResult(result)
+        if (result.valid) await refresh(selected.id)
+      }
     }
   }
 
+  async function attemptAutoDetect(file) {
+    setSampleFile(file)
+    const created = await perform(() => createOnboardingProfile({ ...credentials, retailerId: selected.id, request: CLOUDSALE_AUTO_FORMAT }))
+    if (!created) return
+    await refresh(selected.id)
+    const result = await perform(() => validateOnboardingSample({ ...credentials, retailerId: selected.id, profileId: created.id, file }))
+    if (!result) return
+    setSampleResult(result)
+    if (result.valid) {
+      await refresh(selected.id)
+      return
+    }
+    // Unregistered-store failures mean the format WAS recognized — stay here and offer to fix
+    // the real problem instead of bouncing to a manual mapping form that can't help.
+    if (!result.errors.some(unregisteredStoreId)) {
+      setCreatingFormat(true)
+    }
+  }
+
+  function describeManually(file) {
+    if (file) setSampleFile(file)
+    setCreatingFormat(true)
+  }
+
   async function validateSample(file) {
+    setSampleFile(file)
     const result = await perform(() => validateOnboardingSample({ ...credentials, retailerId: selected.id, profileId: profile.id, file }))
     if (!result) return
     setSampleResult(result)
     if (result.valid) await refresh(selected.id)
+  }
+
+  async function registerMissingStoresAndRetry(entries) {
+    for (const entry of entries) {
+      const saved = await addStore(entry)
+      if (!saved) return
+    }
+    if (sampleFile && profile) {
+      const result = await perform(() => validateOnboardingSample({ ...credentials, retailerId: selected.id, profileId: profile.id, file: sampleFile }))
+      if (result) {
+        setSampleResult(result)
+        if (result.valid) await refresh(selected.id)
+      }
+    }
   }
 
   async function issueCredentials() {
@@ -423,6 +572,7 @@ export default function Onboarding() {
     setCreatingFormat(false)
     setError('')
     setSampleResult(null)
+    setSampleFile(null)
     setIssued(null)
     setRotated(null)
     const retailer = retailers.find((item) => item.id === id)
@@ -437,6 +587,7 @@ export default function Onboarding() {
     setCreating(false)
     setCreatingFormat(false)
     setSampleResult(null)
+    setSampleFile(null)
     setIssued(null)
     setAccess([])
     setRotated(null)
@@ -449,10 +600,12 @@ export default function Onboarding() {
     content = <RetailerForm busy={busy} error={error} onSubmit={createRetailer} />
   } else if (!selected) {
     content = <EmptyState title="No retailer selected">Create a retailer to begin onboarding.</EmptyState>
+  } else if (!profile && !creatingFormat) {
+    content = <SampleUpload busy={busy} error={error} onDescribeManually={describeManually} onUpload={attemptAutoDetect} />
   } else if (!profile || creatingFormat) {
     content = <FormatForm busy={busy} error={error} onSubmit={createProfile} />
   } else if (profile.validationStatus !== 'VALIDATED' || sampleResult?.valid) {
-    content = <SampleValidation busy={busy} error={error} onContinue={() => setSampleResult(null)} onReplaceFormat={() => { setCreatingFormat(true); setSampleResult(null); setError('') }} onValidate={validateSample} result={sampleResult} />
+    content = <SampleValidation busy={busy} error={error} initialFile={sampleFile} onContinue={() => setSampleResult(null)} onRegisterStores={registerMissingStoresAndRetry} onReplaceFormat={() => { setCreatingFormat(true); setSampleResult(null); setError('') }} onValidate={validateSample} result={sampleResult} />
   } else if (!selected.credentialsIssued || issued) {
     content = <CredentialIssue busy={busy} error={error} issued={issued} onIssue={issueCredentials} />
   } else {
