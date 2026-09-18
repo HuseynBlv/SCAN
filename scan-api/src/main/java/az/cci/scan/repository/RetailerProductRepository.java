@@ -15,6 +15,9 @@ public interface RetailerProductRepository extends JpaRepository<RetailerProduct
     Optional<RetailerProduct> findByRetailerAndProductKey(Retailer retailer, String productKey);
 
     @EntityGraph(attributePaths = "canonicalProduct")
+    Optional<RetailerProduct> findByIdAndRetailer(UUID id, Retailer retailer);
+
+    @EntityGraph(attributePaths = "canonicalProduct")
     List<RetailerProduct> findAllByRetailerAndProductKeyIn(
         Retailer retailer,
         Collection<String> productKeys

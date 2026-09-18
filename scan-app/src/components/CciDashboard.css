@@ -115,6 +115,18 @@
   background: var(--scan-subtle);
 }
 
+.cci-login-context {
+  margin: -2px 0 2px;
+  color: var(--scan-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.cci-login-context strong {
+  color: var(--scan-ink);
+  font-weight: 650;
+}
+
 .cci-login-form::before {
   content: "Secure sign in";
   margin-bottom: 6px;

@@ -5,8 +5,10 @@ import az.cci.scan.domain.Store;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 public interface StoreRepository extends JpaRepository<Store, UUID> {
     Optional<Store> findByRetailerAndExternalStoreId(Retailer retailer, String externalStoreId);
+    List<Store> findAllByRetailerOrderByCreatedAtAsc(Retailer retailer);
 }

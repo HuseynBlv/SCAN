@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { configuredRetailerCode, ScanApiError, fetchOverview } from './scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview } from './scanApi'
 
 function response({ ok, status, body }) {
   return {
@@ -37,10 +37,31 @@ describe('fetchOverview', () => {
     window.history.replaceState({}, '', '/')
   })
 
-  it('prefills a retailer code from the HQ dashboard URL', () => {
-    window.history.replaceState({}, '', '/?retailerCode=caspos_pilot')
+  it('loads retailer access from the signed-in CCI account', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      ok: true,
+      status: 200,
+      body: { retailers: [{ code: 'CASPOS_PILOT', name: 'Pilot Shop', demoData: false }] },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
 
-    expect(configuredRetailerCode()).toBe('CASPOS_PILOT')
+    const context = await fetchAnalyticsContext({ username: 'pilot-cci', password: 'secret' })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/analytics/context')
+    expect(context.retailers).toEqual([
+      { code: 'CASPOS_PILOT', name: 'Pilot Shop', demoData: false },
+    ])
+  })
+
+  it('fails closed when a CCI account has no retailer grants', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      ok: true,
+      status: 200,
+      body: { retailers: [] },
+    })))
+
+    await expect(fetchAnalyticsContext({ username: 'unassigned-cci', password: 'secret' }))
+      .rejects.toEqual(expect.objectContaining({ status: 403 }))
   })
 
   it('sends Basic Auth and normalizes a complete analytics response', async () => {

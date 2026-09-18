@@ -2,6 +2,7 @@ package az.cci.scan.importing;
 
 import az.cci.scan.domain.ImportProfile;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -44,9 +45,10 @@ public class XlsxTransactionFileParser implements TransactionFileParser {
             }
 
             DataFormatter formatter = new DataFormatter(Locale.ROOT);
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
             List<String> orderedHeaders = new ArrayList<>();
             for (int column = 0; column < headerRow.getLastCellNum(); column++) {
-                orderedHeaders.add(formatter.formatCellValue(headerRow.getCell(column)).trim());
+                orderedHeaders.add(formatter.formatCellValue(headerRow.getCell(column), evaluator).trim());
             }
 
             Set<String> headers = new LinkedHashSet<>(orderedHeaders);
@@ -60,7 +62,7 @@ public class XlsxTransactionFileParser implements TransactionFileParser {
                 Map<String, String> values = new LinkedHashMap<>();
                 boolean hasValue = false;
                 for (int column = 0; column < orderedHeaders.size(); column++) {
-                    String value = formatter.formatCellValue(row.getCell(column)).trim();
+                    String value = formatter.formatCellValue(row.getCell(column), evaluator).trim();
                     values.put(orderedHeaders.get(column), value);
                     hasValue = hasValue || !value.isBlank();
                 }

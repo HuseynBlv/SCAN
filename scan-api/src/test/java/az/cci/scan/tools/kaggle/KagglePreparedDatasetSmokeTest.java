@@ -13,6 +13,7 @@ import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
+import az.cci.scan.repository.ScanAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -61,8 +62,12 @@ class KagglePreparedDatasetSmokeTest {
     @Autowired
     private RetailerRepository retailerRepository;
 
+    @Autowired
+    private ScanAccountRepository accountRepository;
+
     @BeforeEach
     void setUp() {
+        accountRepository.deleteAll();
         receiptRepository.deleteAll();
         retailerProductRepository.deleteAll();
         importJobRepository.deleteAll();

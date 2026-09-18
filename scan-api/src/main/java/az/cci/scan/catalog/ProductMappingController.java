@@ -1,6 +1,8 @@
 package az.cci.scan.catalog;
 
+import az.cci.scan.config.TenantAccessService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.Authentication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
@@ -10,7 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,18 +31,21 @@ public class ProductMappingController {
 
     private final ProductMappingService productMappingService;
     private final ProductCatalogImportService productCatalogImportService;
+    private final TenantAccessService tenantAccess;
 
     public ProductMappingController(
         ProductMappingService productMappingService,
-        ProductCatalogImportService productCatalogImportService
+        ProductCatalogImportService productCatalogImportService,
+        TenantAccessService tenantAccess
     ) {
         this.productMappingService = productMappingService;
         this.productCatalogImportService = productCatalogImportService;
+        this.tenantAccess = tenantAccess;
     }
 
     @GetMapping("/unresolved")
-    public List<RetailerProductResponse> unresolved(@RequestParam String retailerCode) {
-        return productMappingService.unresolved(retailerCode);
+    public List<RetailerProductResponse> unresolved(Authentication authentication) {
+        return productMappingService.unresolved(tenantAccess.retailer(authentication));
     }
 
     @GetMapping("/catalog")
@@ -59,17 +64,25 @@ public class ProductMappingController {
     @PostMapping(path = "/catalog-imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public CatalogImportResponse importCatalog(
-        @RequestParam String retailerCode,
-        @RequestParam("file") MultipartFile file
+        @RequestPart("file") MultipartFile file,
+        Authentication authentication
     ) {
-        return productCatalogImportService.importCatalog(retailerCode, file);
+        return productCatalogImportService.importCatalog(
+            tenantAccess.retailer(authentication),
+            file
+        );
     }
 
     @PutMapping("/{retailerProductId}")
     public RetailerProductResponse map(
         @PathVariable UUID retailerProductId,
-        @Valid @RequestBody ManualMappingRequest request
+        @Valid @RequestBody ManualMappingRequest request,
+        Authentication authentication
     ) {
-        return productMappingService.map(retailerProductId, request.canonicalProductId());
+        return productMappingService.map(
+            tenantAccess.retailer(authentication),
+            retailerProductId,
+            request.canonicalProductId()
+        );
     }
 }

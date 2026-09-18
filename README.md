@@ -45,6 +45,7 @@ prove that a promotion will increase sales.
 | CCI Explore and Stores | Companion, CCI SKU, time-pattern, and store-level descriptive analytics |
 | Ask SCAN | A constrained question shell that answers only from the current normalized analytics response |
 | Data Connection | Admin-only connection methods, real CSV/XLS/XLSX upload, import results, and product mapping |
+| Retailer Onboarding | Operator-only retailer/store creation, friendly import formats, no-write sample validation, and one-time credential issuance |
 
 Retailer analytics support today, last 7 days, last 30 days, and all-time periods. Custom ranges,
 inventory quantities, complete slow-mover rankings, and period-over-period comparisons are not
@@ -93,12 +94,14 @@ flowchart LR
 - **Explicit product mapping:** exact barcodes, saved retailer mappings, and manual/catalog
   mapping; canonical names have a stable case-insensitive identity, with no fuzzy or AI matching.
 - **Traceability:** import jobs retain status, counts, and validation errors.
-- **Honest connection states:** browser upload is working; the scheduled-folder connector must be
-  installed separately; the CASPOS CloudSale adapter is provisional; 1C and generic POS connectors
-  are not implemented.
-- **Separation of access:** connector credentials can only upload for their server-bound pilot;
-  retailer credentials can only read the server-bound retailer portal; CCI receives aggregate
-  analytics only for retailers with sharing enabled; administrative imports/mappings stay separate.
+- **Honest connection states:** browser upload, editable column mapping, and the observed CloudSale
+  workbook adapter are working; the scheduled-folder connector must be installed separately; 1C
+  and direct generic-POS connectors are not implemented.
+- **Tenant-bound access:** retailer, connector, and data-administrator accounts are stored with one
+  retailer binding. Import accounts also carry one server-side profile binding. Client-supplied
+  tenant/profile values are ignored; CCI receives aggregates only for retailers with sharing enabled.
+- **Immutable Kaggle demo:** `KAGGLE` transaction and catalog imports are disabled. Real shop data
+  must use a separately provisioned retailer tenant.
 
 See the [data contract](docs/pilot-data-contract.md) and
 [metric definitions](docs/analytics-definitions.md) for exact rules and denominators.
@@ -140,7 +143,7 @@ Authenticate the Neon CLI once, create a private local config, and start the API
 ```bash
 neon auth
 cp .env.example .env.neon
-# Edit .env.neon and replace all four SCAN application password placeholders.
+# Edit .env.neon and replace all five SCAN application password placeholders.
 bash scripts/run-neon-api.sh
 ```
 
@@ -151,8 +154,9 @@ it to a verified-TLS JDBC URL, and passes the database credential only to the Sp
 process. It does not write the database password to disk. `.env.neon` and the machine-local
 `.neon` context are ignored by Git.
 
-`SCAN_ADMIN_PASSWORD`, `SCAN_CCI_PASSWORD`, `SCAN_INGEST_PASSWORD`, and
-`SCAN_RETAILER_PASSWORD` belong in `.env.neon`; they protect distinct pilot roles and are
+`SCAN_ADMIN_PASSWORD`, `SCAN_CCI_PASSWORD`, `SCAN_INGEST_PASSWORD`,
+`SCAN_RETAILER_PASSWORD`, and `SCAN_ONBOARDING_PASSWORD` belong in `.env.neon`; they protect
+distinct roles and are
 unrelated to Neon account/database credentials. The root
 [`.env.example`](.env.example) documents the supported local overrides.
 
@@ -174,8 +178,9 @@ export SCAN_ADMIN_PASSWORD='choose-a-local-admin-password'
 export SCAN_CCI_PASSWORD='choose-a-local-cci-password'
 export SCAN_INGEST_PASSWORD='choose-a-local-connector-password'
 export SCAN_RETAILER_PASSWORD='choose-a-local-retailer-password'
-export SCAN_PILOT_RETAILER_CODE='KAGGLE'
-export SCAN_PILOT_PROFILE_CODE='KAGGLE_2019'
+export SCAN_ONBOARDING_PASSWORD='choose-a-local-onboarding-password'
+export SCAN_PILOT_RETAILER_CODE='DEMO'
+export SCAN_PILOT_PROFILE_CODE='CANONICAL'
 mvn spring-boot:run
 ```
 
@@ -184,15 +189,15 @@ where they are set. With either database path, Flyway creates the schema and see
 and `KAGGLE` profiles; it does **not** automatically import transaction files.
 
 See the [backend guide](scan-api/README.md) for database setup and API examples.
+Production environment separation, monitoring, credential operations, backups, and recovery are
+documented in the [production operations runbook](docs/production-operations.md).
 
-### 2. Load data
+### 2. Load local test data
 
-Follow the [Kaggle demo guide](docs/kaggle-demo.md): prepare the ZIP, import its product
-catalog, then import transactions. If that sample is already loaded, skip this step.
-
-Without the download, use the small synthetic fixture in the
-[backend guide](scan-api/README.md#exercise-the-phase-0-api) and sign in with retailer code
-`DEMO` instead. Its results will differ from the Kaggle table above.
+Use the small synthetic `DEMO` fixture in the
+[backend guide](scan-api/README.md#exercise-the-phase-0-api). Its results differ from the hosted
+Kaggle table above. The `KAGGLE` tenant is read-only and cannot receive browser, API, or connector
+imports; this prevents real retailer receipts from contaminating the public demo dataset.
 
 ### 3. Start the dashboard
 
@@ -208,10 +213,13 @@ Open the URL Vite prints, usually `http://localhost:5173`, then sign in:
 
 - Retailer owner portal: `http://localhost:5173/?portal=retailer`, username `scan-retailer`,
   password `SCAN_RETAILER_PASSWORD`.
-- CCI portal: `http://localhost:5173/`, retailer `KAGGLE` (or `DEMO` for the small fixture),
-  username `scan-cci`, password `SCAN_CCI_PASSWORD`.
-- Data connection: `http://localhost:5173/?portal=connection`, retailer/import profile context,
-  username `scan-admin`, password `SCAN_ADMIN_PASSWORD`.
+- CCI portal: `http://localhost:5173/`, username `scan-cci`, password `SCAN_CCI_PASSWORD`.
+  The API selects the retailer granted to that account.
+- Data connection: `http://localhost:5173/?portal=connection`, username `scan-admin`, password
+  `SCAN_ADMIN_PASSWORD`. The retailer and import profile are read from that account after sign-in.
+- Retailer onboarding: `http://localhost:5173/?portal=onboarding`, username `scan-onboarding`,
+  password `SCAN_ONBOARDING_PASSWORD`. This operator can provision tenants and credentials but
+  cannot import transactions or read retailer analytics.
 
 Vite forwards `/api` requests to `localhost:8080` during development. The frontend holds
 credentials in memory only; reloading the page requires signing in again.
@@ -219,8 +227,9 @@ credentials in memory only; reloading the page requires signing in again.
 ### A short demo walkthrough
 
 1. Open **Data Connection** and show which connection methods are implemented, provisional, or planned.
-2. Import a canonical CSV/XLS/XLSX file, or start the connector and run `bash scripts/simulate-retailer-export.sh`.
-3. Review the real import result and resolve any source products under **Product mapping**.
+2. Select a CSV/XLS/XLSX file. Review detected structure and reconciliation totals before importing.
+3. For an unknown layout, save the suggested column mapping, validate again, then import the
+   unchanged file. Resolve any source products under **Product mapping**.
 4. Open the retailer portal **Today** page and show sales, grounded attention items, and top sellers.
 5. Open the CCI portal and explain that it receives only approved aggregate basket intelligence.
 6. Submit the same file again and verify the duplicate-safe import result and unchanged basket totals.
@@ -254,21 +263,29 @@ The optional 10,000-basket tests require locally generated files; they are not p
 - Customer names, phone numbers, loyalty/card identifiers, bank credentials, and cashier
   personal information are not required. Remove them before sharing or importing exports.
 - CCI, retailer, connector, and administrator accounts have separate endpoint permissions.
-  Pilot connector/retailer identities are bound server-side to one configured retailer/profile.
-- Environment-configured Basic Auth accounts are for the single-retailer pilot. Multiple
-  retailers require database-backed accounts, credential rotation, and per-retailer membership.
+  Retailer, connector, and administrator accounts are database-backed and bound server-side to one
+  retailer; import accounts are also bound to one profile. Tenant codes in a request cannot change
+  that scope.
+- Startup configuration creates tenant bootstrap accounts once and, when configured, a separate
+  onboarding operator. Later rotations and revocations are stored in the database and survive
+  restarts. Demo and production deployments must use different databases; the runtime environment
+  claim prevents either service from opening the other's database. Public signup and SSO are not
+  implemented.
 - Positive sales are supported. Returns, voids, taxes, and receipt-level discount semantics
   must be confirmed with a real retailer before their data is considered decision-ready.
 - Monetary analytics refuse to combine receipts from multiple currencies. A retailer export
   must use one confirmed currency per analytical dataset until explicit conversion is designed.
-- Imports are synchronous, limited to 25 MB, and spreadsheet parsing uses the first worksheet.
+- Imports are synchronous and limited to 25 MB. Generic spreadsheet profiles use the first
+  worksheet; installed POS adapters may select a named worksheet such as CloudSale's
+  `Satış çekləri`.
   Analytics use database aggregates plus compact receipt summaries for time/store metrics; larger
   workloads and concurrent analytical traffic are not validated.
 - Receipt identity currently includes retailer, store, receipt ID, and timestamp. Verify this
   against the retailer's actual receipt-number reuse rules.
 - The connector automates delivery after a POS creates a file. It does not make every POS capable
   of scheduled exports; systems without that feature need a source-specific read-only adapter.
-- No promotion-effectiveness calculation or browser mapping workflow is implemented yet.
+- No promotion-effectiveness calculation is implemented yet. Column mapping is available for
+  transaction imports; product mapping remains a separate reviewed workflow.
 
 ## Deployment status
 
@@ -309,7 +326,7 @@ SCAN does not use that role, so rotating it will not affect the `scan_app` conne
 | Symptom | Check |
 |---|---|
 | API startup fails with connection refused on port 5432 | PostgreSQL must be running on the host and port in `SCAN_DB_URL`. Read the final database error; the Maven `sun.misc.Unsafe` warning alone is not the cause. |
-| API returns 401 | Use `scan-admin` for imports or `scan-cci` for analytics, with the corresponding backend password. `curl -u scan-admin` prompts safely for the password. |
+| API returns 401 | Use the username configured for that deployment and its corresponding backend password. |
 | API returns 403 | The account may lack the required role, or CCI sharing is disabled for that retailer. |
 | Dashboard has no baskets | Confirm the retailer code and import transactions; migrations create profiles, not transaction history. |
 | Hosted sign-in fails while local sign-in works | Check the hosted API route. A frontend-only deployment does not include Spring Boot. |
@@ -320,8 +337,8 @@ SCAN does not use that role, so rotating it will not affect the `scan_app` conne
    and reconcile receipt counts and sales totals against the source system.
 2. **Make the analysis decision-specific:** date/store/SKU filters, matching comparison
    periods, visible denominators, and minimum-sample safeguards for recommendations.
-3. **Harden multi-retailer onboarding:** database-backed accounts/connectors, credential
-   rotation, validation reports, unresolved-product review, and import history.
+3. **Harden account operations:** add credential rotation/revocation, audit events, and SSO for
+   onboarding operators while preserving tenant-bound retailer access.
 4. **Run one measurable pilot:** agree on a bundle/display test and its success measure;
    deploy a secured, accessible demo once the hosting and sharing scope are agreed.
 

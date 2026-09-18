@@ -1,5 +1,3 @@
-const DEFAULT_RETAILER_CODE = "KAGGLE";
-
 export class ScanApiError extends Error {
   constructor(message, status = 0) {
     super(message);
@@ -198,11 +196,32 @@ function normalizeOverview(data) {
   return normalized;
 }
 
-export function configuredRetailerCode() {
-  const queryRetailerCode = new URLSearchParams(window.location.search).get("retailerCode");
-  return `${queryRetailerCode || import.meta.env.VITE_SCAN_RETAILER_CODE || DEFAULT_RETAILER_CODE}`
-    .trim()
-    .toUpperCase();
+export async function fetchAnalyticsContext({ username, password, signal }) {
+  let response;
+  try {
+    response = await fetch(apiUrl("/api/v1/analytics/context"), {
+      signal,
+      headers: {
+        Accept: "application/json",
+        Authorization: basicAuthorization(username, password),
+      },
+    });
+  } catch (error) {
+    if (error?.name === "AbortError" || error instanceof ScanApiError) throw error;
+    throw new ScanApiError("Cannot reach the SCAN API. Check your connection and try again.");
+  }
+  if (!response.ok) throw new ScanApiError(await errorMessage(response), response.status);
+
+  const data = await response.json();
+  const retailers = requiredArray(data?.retailers, "retailers", (item, field) => ({
+    code: requiredString(item.code, `${field}.code`),
+    name: requiredString(item.name, `${field}.name`),
+    demoData: typeof item.demoData === "boolean" ? item.demoData : contractError(`${field}.demoData`),
+  }));
+  if (!retailers.length) {
+    throw new ScanApiError("This account has no retailer analytics assigned.", 403);
+  }
+  return { retailers };
 }
 
 export async function fetchOverview({ retailerCode, username, password, signal }) {

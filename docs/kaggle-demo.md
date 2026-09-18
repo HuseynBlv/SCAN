@@ -40,59 +40,26 @@ Generated files:
 
 | File | Purpose |
 |---|---|
-| `target/kaggle-demo/canonical-transactions.csv` | Upload to the SCAN transaction importer |
-| `target/kaggle-demo/product-catalog.csv` | Exact-name canonical products and saved mappings |
+| `target/kaggle-demo/canonical-transactions.csv` | Offline verification artifact; `KAGGLE` API imports are locked |
+| `target/kaggle-demo/product-catalog.csv` | Offline exact-name mapping artifact |
 | `target/kaggle-demo/rejected-rows.csv` | Malformed source rows and reasons |
 | `target/kaggle-demo/validation-report.json` | Assumptions, hashes, counts, and quarantine totals |
 
 The generated files remain under Maven's ignored `target/` directory and must not be
 committed.
 
-## 2. Start SCAN
+## 2. Current import boundary
 
-Configure PostgreSQL and the required passwords, then start the API:
+Flyway creates retailer `KAGGLE` and import profile `KAGGLE_2019`, but migration 7 marks that
+tenant read-only. The public demo was loaded before the lock was introduced. Browser uploads,
+the import API, catalog imports, and connectors cannot add data to it now. This is intentional:
+real retailer exports must never be mixed with Kaggle data.
 
-```bash
-export SCAN_DB_URL=jdbc:postgresql://localhost:5432/scan
-export SCAN_DB_USERNAME=scan
-export SCAN_DB_PASSWORD=replace-me
-export SCAN_ADMIN_PASSWORD=replace-admin-password
-export SCAN_CCI_PASSWORD=replace-cci-password
-mvn spring-boot:run
-```
+The preparation command remains useful for deterministic offline verification and tests. A fresh
+environment should use the synthetic `DEMO` tenant or provision a separate scratch retailer; do not
+temporarily unlock `KAGGLE` to test an upload.
 
-Flyway creates retailer `KAGGLE` and import profile `KAGGLE_2019`.
-
-## 3. Import the exact-name catalog
-
-Do this before importing transactions so every sample product is mapped deterministically.
-Keep the API running and use a second terminal in `scan-api/` for the following curl commands.
-Curl prompts for the backend's admin or CCI password; no password variables are needed in
-that second terminal:
-
-```bash
-curl -u scan-admin \
-  -F retailerCode=KAGGLE \
-  -F file=@target/kaggle-demo/product-catalog.csv \
-  http://localhost:8080/api/v1/product-mappings/catalog-imports
-```
-
-Catalog import is idempotent. Repeating the same catalog reuses the existing canonical
-products and saved mappings. If a barcode or normalized name already exists with different
-CCI, category, brand, package, or other canonical metadata, the entire catalog import is
-rejected instead of silently changing analytics truth.
-
-## 4. Import transactions
-
-```bash
-curl -u scan-admin \
-  -F retailerCode=KAGGLE \
-  -F profileCode=KAGGLE_2019 \
-  -F file=@target/kaggle-demo/canonical-transactions.csv \
-  http://localhost:8080/api/v1/imports
-```
-
-## 5. Read analytics
+## 3. Read the existing hosted analytics
 
 ```bash
 curl -u scan-cci \
@@ -101,10 +68,7 @@ curl -u scan-cci \
 
 To view the same results in the browser, follow the
 [frontend setup guide](../scan-app/README.md) and sign in with retailer `KAGGLE`.
-Re-uploading the exact transaction file should return `duplicateFile: true` without changing
-the basket count. Failed uploads remain in history and the same bytes can be retried as a new
-numbered attempt. If this retailer already contains other imports, its aggregate totals can
-exceed the sample-only values below.
+The data-connection portal shows `KAGGLE` as locked and does not render an upload control.
 
 ## Verified 10,000-receipt sample
 

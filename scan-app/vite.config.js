@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import process from 'node:process'
+
+const apiTarget = process.env.SCAN_DEV_API_TARGET || 'http://localhost:8080'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -12,7 +15,7 @@ export default defineConfig({
     allowedHosts: ['tiresome-hypereutectoid-bonny.ngrok-free.dev'],
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

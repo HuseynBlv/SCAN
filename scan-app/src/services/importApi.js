@@ -26,6 +26,16 @@ function count(value, field) {
   return value
 }
 
+function number(value, field) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) invalid(field)
+  return value
+}
+
+function bool(value, field) {
+  if (typeof value !== 'boolean') invalid(field)
+  return value
+}
+
 function timestamp(value, field, nullable = false) {
   if (nullable && value == null) return null
   const result = string(value, field)
@@ -46,6 +56,7 @@ function object(value, field) {
 export function normalizeImportJob(value) {
   const data = object(value, 'response')
   if (!IMPORT_STATUSES.has(data.status)) invalid('status')
+  const createdAt = timestamp(data.createdAt, 'createdAt')
   return {
     id: string(data.id, 'id'),
     retailerCode: string(data.retailerCode, 'retailerCode'),
@@ -60,8 +71,82 @@ export function normalizeImportJob(value) {
     duplicateReceipts: count(data.duplicateReceipts, 'duplicateReceipts'),
     unresolvedProducts: count(data.unresolvedProducts, 'unresolvedProducts'),
     errors: array(data.errors, 'errors', (item, field) => string(item, field)),
-    createdAt: timestamp(data.createdAt, 'createdAt'),
+    submittedBy: data.submittedBy == null ? 'system' : string(data.submittedBy, 'submittedBy'),
+    createdAt,
+    startedAt: timestamp(data.startedAt, 'startedAt', true),
+    updatedAt: data.updatedAt == null ? createdAt : timestamp(data.updatedAt, 'updatedAt'),
     completedAt: timestamp(data.completedAt, 'completedAt', true),
+  }
+}
+
+export function normalizeImportContext(value) {
+  const data = object(value, 'response')
+  const mapping = object(data.mapping, 'mapping')
+  return {
+    retailerCode: string(data.retailerCode, 'retailerCode'),
+    retailerName: string(data.retailerName, 'retailerName'),
+    profileCode: string(data.profileCode, 'profileCode'),
+    profileName: string(data.profileName, 'profileName'),
+    sourceSystem: string(data.sourceSystem, 'sourceSystem'),
+    importEnabled: bool(data.importEnabled, 'importEnabled'),
+    sampleValidated: bool(data.sampleValidated, 'sampleValidated'),
+    demoData: bool(data.demoData, 'demoData'),
+    delimiter: string(data.delimiter, 'delimiter'),
+    dateTimePattern: string(data.dateTimePattern, 'dateTimePattern'),
+    currency: string(data.currency, 'currency'),
+    mapping: {
+      storeId: string(mapping.storeId, 'mapping.storeId'),
+      receiptId: string(mapping.receiptId, 'mapping.receiptId'),
+      timestamp: string(mapping.timestamp, 'mapping.timestamp'),
+      productCode: nullableString(mapping.productCode, 'mapping.productCode'),
+      barcode: nullableString(mapping.barcode, 'mapping.barcode'),
+      productName: string(mapping.productName, 'mapping.productName'),
+      quantity: string(mapping.quantity, 'mapping.quantity'),
+      unitPrice: string(mapping.unitPrice, 'mapping.unitPrice'),
+      discountAmount: string(mapping.discountAmount, 'mapping.discountAmount'),
+      lineTotal: string(mapping.lineTotal, 'mapping.lineTotal'),
+    },
+  }
+}
+
+function normalizePreviewField(value, field) {
+  const data = object(value, field)
+  return {
+    field: string(data.field, `${field}.field`),
+    label: string(data.label, `${field}.label`),
+    required: bool(data.required, `${field}.required`),
+    sourceColumn: nullableString(data.sourceColumn, `${field}.sourceColumn`),
+    suggestedSourceColumn: nullableString(data.suggestedSourceColumn, `${field}.suggestedSourceColumn`),
+  }
+}
+
+export function normalizeImportPreview(value) {
+  const data = object(value, 'preview')
+  return {
+    previewId: nullableString(data.previewId, 'previewId'),
+    readyForImport: bool(data.readyForImport, 'readyForImport'),
+    mappingRequired: bool(data.mappingRequired, 'mappingRequired'),
+    filename: string(data.filename, 'filename'),
+    adapterCode: string(data.adapterCode, 'adapterCode'),
+    adapterName: string(data.adapterName, 'adapterName'),
+    rowsChecked: count(data.rowsChecked, 'rowsChecked'),
+    receiptsDetected: count(data.receiptsDetected, 'receiptsDetected'),
+    productLines: count(data.productLines, 'productLines'),
+    distinctProducts: count(data.distinctProducts, 'distinctProducts'),
+    detectedColumns: array(data.detectedColumns, 'detectedColumns', string),
+    detectedStoreIds: array(data.detectedStoreIds, 'detectedStoreIds', string),
+    quantity: number(data.quantity, 'quantity'),
+    grossSales: number(data.grossSales, 'grossSales'),
+    discounts: number(data.discounts, 'discounts'),
+    reportedNetSales: number(data.reportedNetSales, 'reportedNetSales'),
+    calculatedNetSales: number(data.calculatedNetSales, 'calculatedNetSales'),
+    difference: number(data.difference, 'difference'),
+    currency: string(data.currency, 'currency'),
+    firstTransactionAt: timestamp(data.firstTransactionAt, 'firstTransactionAt', true),
+    lastTransactionAt: timestamp(data.lastTransactionAt, 'lastTransactionAt', true),
+    expiresAt: timestamp(data.expiresAt, 'expiresAt', true),
+    fields: array(data.fields, 'fields', normalizePreviewField),
+    errors: array(data.errors, 'errors', string),
   }
 }
 
@@ -121,11 +206,37 @@ async function fetchJson(path, { username, password, signal, ...options } = {}) 
   return response
 }
 
-export async function uploadImport({ retailerCode, profileCode, file, username, password, signal }) {
+export async function fetchImportContext({ username, password, signal }) {
+  const response = await fetchJson('/api/v1/imports/context', { username, password, signal })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  return normalizeImportContext(await response.json())
+}
+
+export async function previewImport({ file, username, password, signal }) {
   const form = new FormData()
   form.append('file', file)
-  const query = new URLSearchParams({ retailerCode, profileCode })
-  const response = await fetchJson(`/api/v1/imports?${query}`, {
+  const response = await fetchJson('/api/v1/imports/preview', {
+    method: 'POST', body: form, username, password, signal,
+  })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  return normalizeImportPreview(await response.json())
+}
+
+export async function updateImportMapping({ request, username, password, signal }) {
+  const response = await fetchJson('/api/v1/imports/profile', {
+    method: 'PUT', username, password, signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  return normalizeImportContext(await response.json())
+}
+
+export async function uploadImport({ file, previewId, username, password, signal }) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('previewId', previewId)
+  const response = await fetchJson('/api/v1/imports', {
     method: 'POST', body: form, username, password, signal,
   })
   if (response.status === 422) return normalizeImportJob(await response.json())
@@ -141,11 +252,47 @@ export async function fetchImportJob({ jobId, username, password, signal }) {
   return normalizeImportJob(await response.json())
 }
 
-export async function fetchUnresolvedProducts({ retailerCode, username, password, signal }) {
-  const response = await fetchJson(
-    `/api/v1/product-mappings/unresolved?retailerCode=${encodeURIComponent(retailerCode)}`,
-    { username, password, signal },
-  )
+export async function fetchImportHistory({ username, password, signal }) {
+  const response = await fetchJson('/api/v1/imports/history?limit=50', { username, password, signal })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  return array(await response.json(), 'history', normalizeImportJob)
+}
+
+export async function fetchImportAudit({ username, password, signal }) {
+  const response = await fetchJson('/api/v1/imports/audit?limit=50', { username, password, signal })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  return array(await response.json(), 'audit', (value, field) => {
+    const data = object(value, field)
+    return {
+      id: string(data.id, `${field}.id`),
+      actorUsername: string(data.actorUsername, `${field}.actorUsername`),
+      eventType: string(data.eventType, `${field}.eventType`),
+      subjectType: string(data.subjectType, `${field}.subjectType`),
+      subjectId: nullableString(data.subjectId, `${field}.subjectId`),
+      detail: nullableString(data.detail, `${field}.detail`),
+      occurredAt: timestamp(data.occurredAt, `${field}.occurredAt`),
+    }
+  })
+}
+
+export async function fetchImportOperations({ username, password, signal }) {
+  const response = await fetchJson('/api/v1/imports/operations', { username, password, signal })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  const data = object(await response.json(), 'operations')
+  return {
+    queued: count(data.queued, 'queued'),
+    validating: count(data.validating, 'validating'),
+    importing: count(data.importing, 'importing'),
+    failed: count(data.failed, 'failed'),
+    oldestQueuedAt: timestamp(data.oldestQueuedAt, 'oldestQueuedAt', true),
+    lastCompletedAt: timestamp(data.lastCompletedAt, 'lastCompletedAt', true),
+  }
+}
+
+export async function fetchUnresolvedProducts({ username, password, signal }) {
+  const response = await fetchJson('/api/v1/product-mappings/unresolved', {
+    username, password, signal,
+  })
   if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
   const data = await response.json()
   return array(data, 'unresolvedProducts', normalizeRetailerProduct)

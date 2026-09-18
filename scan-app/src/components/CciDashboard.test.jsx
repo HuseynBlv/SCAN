@@ -2,12 +2,13 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CciDashboard from './CciDashboard'
-import { ScanApiError, fetchOverview } from '../services/scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
 
 vi.mock('../services/scanApi', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
+    fetchAnalyticsContext: vi.fn(),
     fetchOverview: vi.fn(),
   }
 })
@@ -51,6 +52,9 @@ const overviewWithCompanions = {
 
 describe('CciDashboard', () => {
   beforeEach(() => {
+    fetchAnalyticsContext.mockReset().mockResolvedValue({
+      retailers: [{ code: 'KAGGLE', name: 'Kaggle Demo Retailer', demoData: true }],
+    })
     fetchOverview.mockReset()
   })
 
@@ -64,13 +68,14 @@ describe('CciDashboard', () => {
       .mockResolvedValue(overview)
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
 
     expect(screen.getByRole('heading', { name: 'Reading retailer evidence…' })).toBeInTheDocument()
     expect(fetchOverview).toHaveBeenCalledWith(expect.objectContaining({
       retailerCode: 'KAGGLE',
-      username: 'scan-cci',
+      username: 'scan-demo-cci',
       password: 'demo-secret',
     }))
 
@@ -108,6 +113,7 @@ describe('CciDashboard', () => {
     )
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'wrong')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
 
@@ -127,6 +133,7 @@ describe('CciDashboard', () => {
       }))
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
     await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
@@ -147,6 +154,7 @@ describe('CciDashboard', () => {
       .mockRejectedValueOnce(new ScanApiError('Retailer access denied.', 403))
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
     await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
@@ -161,6 +169,7 @@ describe('CciDashboard', () => {
     fetchOverview.mockResolvedValue(overviewWithCompanions)
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
     await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
@@ -197,6 +206,7 @@ describe('CciDashboard', () => {
     })
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
 
@@ -219,6 +229,7 @@ describe('CciDashboard', () => {
     })
     render(<CciDashboard />)
 
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open analytics' }))
 
