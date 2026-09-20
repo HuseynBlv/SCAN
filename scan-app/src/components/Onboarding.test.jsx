@@ -82,8 +82,88 @@ describe('Onboarding', () => {
         stores: [{ name: 'Central store', externalStoreId: 'SHOP-01' }],
       }),
     }))
-    expect(await screen.findByRole('heading', { name: 'Describe the sales export' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Upload a sample export' })).toBeInTheDocument()
     expect(screen.getByText('FRESH_MARKET_A1B2C3 · Asia/Baku')).toBeInTheDocument()
+  })
+
+  it('recognizes a known export format automatically, without a manual mapping form', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers
+      .mockResolvedValueOnce([{ ...retailer, importProfiles: [] }])
+      .mockResolvedValue([{ ...retailer, importProfiles: [{ ...draftProfile, validationStatus: 'VALIDATED' }] }])
+    createOnboardingProfile.mockResolvedValue(draftProfile)
+    validateOnboardingSample.mockResolvedValue({
+      valid: true, filename: 'cloudsale.xlsx', rowsChecked: 38, receiptsDetected: 20,
+      productLines: 38, detectedColumns: ['Obyekt_kodu'], detectedStoreIds: ['BK-0147'],
+      errors: [], validatedAt: '2026-09-17T12:00:00Z',
+    })
+    render(<Onboarding />)
+    await signIn(user)
+
+    expect(await screen.findByRole('heading', { name: 'Upload a sample export' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Describe the sales export' })).not.toBeInTheDocument()
+    const file = new File(['headers\nvalues'], 'cloudsale.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    await user.upload(document.querySelector('input[type="file"]'), file)
+    await user.click(screen.getByRole('button', { name: 'Upload and detect format' }))
+
+    expect(createOnboardingProfile).toHaveBeenCalledWith(expect.objectContaining({
+      request: expect.objectContaining({ sourceSystem: 'CloudSale' }),
+    }))
+    expect(await screen.findByText('Sample accepted')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Describe the sales export' })).not.toBeInTheDocument()
+  })
+
+  it('falls back to the manual format form when auto-detection does not recognize the file', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers.mockResolvedValue([{ ...retailer, importProfiles: [] }])
+    createOnboardingProfile.mockResolvedValue(draftProfile)
+    validateOnboardingSample.mockResolvedValue({
+      valid: false, filename: 'other.csv', rowsChecked: 0, receiptsDetected: 0,
+      productLines: 0, detectedColumns: ['Receipt No.'], detectedStoreIds: [],
+      errors: ['file: missing CloudSale columns: Obyekt_kodu'], validatedAt: null,
+    })
+    render(<Onboarding />)
+    await signIn(user)
+
+    const file = new File(['Receipt No.\n1'], 'other.csv', { type: 'text/csv' })
+    await user.upload(document.querySelector('input[type="file"]'), file)
+    await user.click(screen.getByRole('button', { name: 'Upload and detect format' }))
+
+    expect(await screen.findByRole('heading', { name: 'Describe the sales export' })).toBeInTheDocument()
+  })
+
+  it('offers to register an unrecognized store code instead of sending the operator to remap columns', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers.mockResolvedValue([retailer])
+    validateOnboardingSample
+      .mockResolvedValueOnce({
+        valid: false, filename: 'sample.csv', rowsChecked: 6, receiptsDetected: 0,
+        productLines: 6, detectedColumns: ['store_id'], detectedStoreIds: ['BK-0147'],
+        errors: ['store_id: BK-0147 is not registered for this retailer'], validatedAt: null,
+      })
+      .mockResolvedValueOnce({
+        valid: true, filename: 'sample.csv', rowsChecked: 6, receiptsDetected: 2,
+        productLines: 6, detectedColumns: ['store_id'], detectedStoreIds: ['BK-0147'],
+        errors: [], validatedAt: '2026-09-17T12:05:00Z',
+      })
+    addOnboardingStore.mockResolvedValue({ id: 'store-2', externalStoreId: 'BK-0147', name: 'BK-0147' })
+    render(<Onboarding />)
+    await signIn(user)
+
+    const file = new File(['store_id\nBK-0147'], 'sample.csv', { type: 'text/csv' })
+    await user.upload(document.querySelector('input[type="file"]'), file)
+    await user.click(screen.getByRole('button', { name: 'Validate sample' }))
+
+    expect(await screen.findByText(/SCAN found 1 store code/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Describe the format manually' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Register and re-validate' }))
+
+    expect(addOnboardingStore).toHaveBeenCalledWith(expect.objectContaining({
+      retailerId: retailer.id,
+      request: { externalStoreId: 'BK-0147', name: 'BK-0147' },
+    }))
+    expect(validateOnboardingSample).toHaveBeenCalledTimes(2)
+    expect(await screen.findByText('Sample accepted')).toBeInTheDocument()
   })
 
   it('validates a sample before issuing one-time retailer credentials', async () => {
