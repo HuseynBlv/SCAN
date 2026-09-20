@@ -12,6 +12,7 @@ import {
   issueOnboardingCredentials,
   revokeOnboardingCredential,
   rotateOnboardingCredential,
+  updateOnboardingCciSharing,
   validateOnboardingSample,
 } from '../services/onboardingApi'
 
@@ -25,6 +26,7 @@ vi.mock('../services/onboardingApi', () => ({
   issueOnboardingCredentials: vi.fn(),
   revokeOnboardingCredential: vi.fn(),
   rotateOnboardingCredential: vi.fn(),
+  updateOnboardingCciSharing: vi.fn(),
   validateOnboardingSample: vi.fn(),
 }))
 
@@ -35,7 +37,7 @@ const draftProfile = {
 }
 const retailer = {
   id: 'retailer-1', code: 'FRESH_MARKET_A1B2C3', name: 'Fresh Market', zoneId: 'Asia/Baku',
-  importEnabled: false, credentialsIssued: false, stores: [store], importProfiles: [draftProfile],
+  importEnabled: false, credentialsIssued: false, cciSharingEnabled: false, stores: [store], importProfiles: [draftProfile],
 }
 const validatedRetailer = {
   ...retailer, importEnabled: true,
@@ -60,6 +62,7 @@ describe('Onboarding', () => {
     fetchOnboardingCredentials.mockReset().mockResolvedValue([])
     revokeOnboardingCredential.mockReset()
     rotateOnboardingCredential.mockReset()
+    updateOnboardingCciSharing.mockReset()
   })
 
   it('creates an isolated retailer without asking for an internal tenant code', async () => {
@@ -223,5 +226,22 @@ describe('Onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Change import format' }))
     expect(await screen.findByRole('heading', { name: 'Describe the sales export' })).toBeInTheDocument()
     expect(screen.getByLabelText('Store ID')).toHaveValue('store_id')
+  })
+
+  it('lets the operator turn on CCI sharing for a retailer', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers.mockResolvedValue([retailer])
+    updateOnboardingCciSharing.mockResolvedValue({ ...retailer, cciSharingEnabled: true })
+    render(<Onboarding />)
+    await signIn(user)
+
+    expect(await screen.findByText('Private — CCI HQ cannot see this retailer’s data.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Off' }))
+
+    expect(updateOnboardingCciSharing).toHaveBeenCalledWith(expect.objectContaining({
+      retailerId: retailer.id,
+      enabled: true,
+    }))
+    expect(await screen.findByText('CCI HQ can read this retailer’s aggregate analytics.')).toBeInTheDocument()
   })
 })

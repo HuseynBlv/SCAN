@@ -9,6 +9,7 @@ import {
   issueOnboardingCredentials,
   revokeOnboardingCredential,
   rotateOnboardingCredential,
+  updateOnboardingCciSharing,
   validateOnboardingSample,
 } from '../services/onboardingApi'
 import ScanBrand from './ScanBrand'
@@ -174,6 +175,21 @@ function AddStoreForm({ busy, error, onSubmit }) {
       {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
       <div><button className="scan-button scan-button-dark" disabled={busy} type="submit">Save store</button><button className="scan-button scan-button-secondary" onClick={() => setOpen(false)} type="button">Cancel</button></div>
     </form>
+  )
+}
+
+function CciSharingToggle({ busy, enabled, error, onToggle }) {
+  return (
+    <div className="onboarding-cci-toggle">
+      <div className="onboarding-cci-toggle-copy">
+        <strong>Share with CCI Intelligence</strong>
+        <small>{enabled ? 'CCI HQ can read this retailer’s aggregate analytics.' : 'Private — CCI HQ cannot see this retailer’s data.'}</small>
+      </div>
+      <button aria-pressed={enabled} className={`onboarding-toggle-switch${enabled ? ' is-on' : ''}`} disabled={busy} onClick={() => onToggle(!enabled)} type="button">
+        <span>{enabled ? 'On' : 'Off'}</span>
+      </button>
+      {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
+    </div>
   )
 }
 
@@ -470,6 +486,11 @@ export default function Onboarding() {
     setSampleFile(null)
   }
 
+  async function updateCciSharing(enabled) {
+    const saved = await perform(() => updateOnboardingCciSharing({ ...credentials, retailerId: selected.id, enabled }))
+    if (saved) setRetailers((items) => items.map((item) => (item.id === saved.id ? saved : item)))
+  }
+
   async function addStore(request) {
     const saved = await perform(() => addOnboardingStore({ ...credentials, retailerId: selected.id, request }))
     if (saved) await refresh(selected.id)
@@ -630,6 +651,7 @@ export default function Onboarding() {
             <>
               <section className="onboarding-retailer-heading"><div><span className="scan-eyebrow">Retailer tenant</span><h2>{selected.name}</h2><p>{selected.code} · {selected.zoneId}</p></div><AddStoreForm busy={busy} error={error} onSubmit={addStore} /></section>
               <div className="onboarding-store-strip">{selected.stores.map((store) => <span key={store.id}><strong>{store.name}</strong><small>{store.externalStoreId}</small></span>)}</div>
+              <CciSharingToggle busy={busy} enabled={selected.cciSharingEnabled} error={error} onToggle={updateCciSharing} />
             </>
           ) : null}
           <StepRail retailer={creating ? null : selected} />

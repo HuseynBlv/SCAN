@@ -242,6 +242,34 @@ public class OnboardingService {
         return issueCredentials(retailerId, profileId, null);
     }
 
+    @Transactional
+    public RetailerOnboardingResponse updateCciSharing(
+        UUID retailerId,
+        boolean enabled,
+        Authentication authentication
+    ) {
+        Retailer retailer = retailer(retailerId);
+        if (retailer.isCciSharingEnabled() != enabled) {
+            retailer.setCciSharingEnabled(enabled);
+            retailerRepository.save(retailer);
+            if (enabled) {
+                // CCI HQ accounts aren't bound to a retailer at creation time (they can read
+                // every retailer that has opted in), so newly-enabled sharing has to grant
+                // every existing CCI account access, not just the one from bootstrap.
+                for (ScanAccount cciAccount : accountRepository.findAllByRole(ScanAccount.Role.CCI)) {
+                    cciAccount.grantRetailerAccess(retailer);
+                    accountRepository.save(cciAccount);
+                }
+            }
+            auditService.record(
+                retailer, authentication, enabled ? "CCI_SHARING_ENABLED" : "CCI_SHARING_DISABLED",
+                "RETAILER", retailer.getId().toString(),
+                enabled ? "CCI HQ can now read this retailer's aggregate analytics" : "CCI HQ access revoked"
+            );
+        }
+        return response(retailer);
+    }
+
     @Transactional(readOnly = true)
     public List<CredentialResponse> credentials(UUID retailerId) {
         Retailer retailer = retailer(retailerId);

@@ -11,7 +11,7 @@ describe('onboardingApi', () => {
   it('creates a retailer without accepting a client-selected retailer code', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({
       id: 'retailer-1', code: 'FRESH_MARKET_A1B2C3', name: 'Fresh Market', zoneId: 'Asia/Baku',
-      importEnabled: false, credentialsIssued: false,
+      importEnabled: false, credentialsIssued: false, cciSharingEnabled: false,
       stores: [{ id: 'store-1', externalStoreId: 'SHOP-01', name: 'Central store' }],
       importProfiles: [],
     }, 201))

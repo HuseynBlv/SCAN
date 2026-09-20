@@ -26,4 +26,7 @@ public interface ScanAccountRepository extends JpaRepository<ScanAccount, UUID> 
 
     @EntityGraph(attributePaths = {"retailer", "importProfile"})
     Optional<ScanAccount> findByIdAndRetailer(UUID id, Retailer retailer);
+
+    @EntityGraph(attributePaths = {"retailerAccess"})
+    List<ScanAccount> findAllByRole(ScanAccount.Role role);
 }
