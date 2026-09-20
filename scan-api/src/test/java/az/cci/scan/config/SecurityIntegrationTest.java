@@ -521,6 +521,32 @@ class SecurityIntegrationTest {
             .andExpect(jsonPath("$.error").value(
                 org.hamcrest.Matchers.containsString("already been issued")
             ));
+
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                .param("retailerCode", retailerCode)
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/onboarding/retailers/{retailerId}/cci-sharing", retailerId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"enabled\": true}")
+                .with(httpBasic("test-onboarding", "test-onboarding-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.cciSharingEnabled").value(true));
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                .param("retailerCode", retailerCode)
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.retailerCode").value(retailerCode));
+        mockMvc.perform(put("/api/v1/onboarding/retailers/{retailerId}/cci-sharing", retailerId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"enabled\": false}")
+                .with(httpBasic("test-onboarding", "test-onboarding-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.cciSharingEnabled").value(false));
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                .param("retailerCode", retailerCode)
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
     }
 
     @Test

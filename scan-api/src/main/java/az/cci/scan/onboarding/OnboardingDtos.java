@@ -93,6 +93,7 @@ public final class OnboardingDtos {
         String zoneId,
         boolean importEnabled,
         boolean credentialsIssued,
+        boolean cciSharingEnabled,
         List<StoreResponse> stores,
         List<ImportProfileResponse> importProfiles
     ) {
@@ -109,10 +110,14 @@ public final class OnboardingDtos {
                 retailer.getZoneId(),
                 retailer.isTransactionImportEnabled(),
                 credentialsIssued,
+                retailer.isCciSharingEnabled(),
                 stores.stream().map(StoreResponse::from).toList(),
                 profiles.stream().map(ImportProfileResponse::from).toList()
             );
         }
+    }
+
+    public record UpdateCciSharingRequest(boolean enabled) {
     }
 
     public record SampleValidationResponse(

@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -31,6 +32,7 @@ import static az.cci.scan.onboarding.OnboardingDtos.SampleValidationResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.StoreResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.CredentialResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.RotatedCredentialResponse;
+import static az.cci.scan.onboarding.OnboardingDtos.UpdateCciSharingRequest;
 
 @RestController
 @RequestMapping("/api/v1/onboarding")
@@ -76,6 +78,15 @@ public class OnboardingController {
         @Valid @RequestBody CreateImportProfileRequest request
     ) {
         return onboardingService.createProfile(retailerId, request);
+    }
+
+    @PutMapping("/retailers/{retailerId}/cci-sharing")
+    public RetailerOnboardingResponse updateCciSharing(
+        @PathVariable UUID retailerId,
+        @Valid @RequestBody UpdateCciSharingRequest request,
+        Authentication authentication
+    ) {
+        return onboardingService.updateCciSharing(retailerId, request.enabled(), authentication);
     }
 
     @PostMapping(

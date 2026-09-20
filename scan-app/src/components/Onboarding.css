@@ -81,6 +81,17 @@
 .onboarding-store-strip strong { font-size: .73rem; }
 .onboarding-store-strip small { color: var(--scan-muted); font-size: .65rem; }
 
+.onboarding-cci-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border: 1px solid var(--scan-border); border-radius: 8px; background: #fff; }
+.onboarding-cci-toggle-copy { display: grid; gap: 2px; }
+.onboarding-cci-toggle-copy strong { font-size: .78rem; }
+.onboarding-cci-toggle-copy small { color: var(--scan-muted); font-size: .68rem; }
+.onboarding-cci-toggle .cci-form-error { flex-basis: 100%; }
+.onboarding-toggle-switch { flex-shrink: 0; display: flex; align-items: center; width: 52px; height: 28px; padding: 3px; border: none; border-radius: 999px; background: #cfd2d6; cursor: pointer; transition: background .15s var(--scan-enter); }
+.onboarding-toggle-switch:disabled { cursor: not-allowed; opacity: .6; }
+.onboarding-toggle-switch.is-on { background: var(--scan-success); }
+.onboarding-toggle-switch span { width: 22px; height: 22px; border-radius: 50%; background: #fff; font-size: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s var(--scan-enter); }
+.onboarding-toggle-switch.is-on span { transform: translateX(24px); }
+
 .onboarding-step-rail {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

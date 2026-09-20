@@ -67,6 +67,7 @@ function normalizeRetailer(value, field = 'retailer') {
     zoneId: string(data.zoneId, `${field}.zoneId`),
     importEnabled: bool(data.importEnabled, `${field}.importEnabled`),
     credentialsIssued: bool(data.credentialsIssued, `${field}.credentialsIssued`),
+    cciSharingEnabled: bool(data.cciSharingEnabled, `${field}.cciSharingEnabled`),
     stores: array(data.stores, `${field}.stores`, normalizeStore),
     importProfiles: array(data.importProfiles, `${field}.importProfiles`, normalizeProfile),
   }
@@ -122,6 +123,15 @@ export async function createOnboardingRetailer({ request: body, ...credentials }
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  }))
+}
+
+export async function updateOnboardingCciSharing({ retailerId, enabled, ...credentials }) {
+  return normalizeRetailer(await request(`/api/v1/onboarding/retailers/${encodeURIComponent(retailerId)}/cci-sharing`, {
+    ...credentials,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
   }))
 }
 
