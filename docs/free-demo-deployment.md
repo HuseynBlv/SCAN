@@ -194,8 +194,10 @@ Limits checked against provider documentation on **2026-08-26**; review them aga
 - Render sleeps after 15 minutes without inbound traffic; waking normally takes about a
   minute. Its 750 monthly free instance hours are shared across the workspace. Bandwidth
   and build allowances also apply, and high outbound database traffic can trigger suspension.
-  No keep-awake pings are configured. Render's free PostgreSQL expires after 30 days, so this
-  setup uses Neon instead. [Free-service limitations](https://render.com/docs/free).
+  No always-on keep-awake ping is configured, because one service awake all month uses about
+  744 of the 750 shared hours and a second awake service would exhaust the quota; see
+  [Before a presentation](#before-a-presentation). Render's free PostgreSQL expires after 30
+  days, so this setup uses Neon instead. [Free-service limitations](https://render.com/docs/free).
 - Neon Free currently includes 0.5 GB storage per project, 100 CU-hours per project/month,
   and 5 GB public network transfer, with idle scale-to-zero. Check usage after imports and
   avoid additional copies/branches of the dataset. Keep a recoverable source copy; the free
@@ -205,6 +207,34 @@ Limits checked against provider documentation on **2026-08-26**; review them aga
 - Imports are synchronous. Analytics calculate product/category/SKU aggregates in PostgreSQL
   and retain compact receipt summaries for time/store metrics. Do not import the full Kaggle
   source or assume concurrent retailer-scale traffic fits this free service.
+
+## Before a presentation
+
+A sleeping service makes the first page load stall for 30-60 seconds, and a suspended Neon
+database adds a second delay to the first sign-in. Prepare in this order:
+
+1. **The day before:** in the Render dashboard, confirm the workspace still has free instance
+   hours left for the month.
+2. **About an hour before:** run the **Keep demo warm** GitHub Actions workflow manually
+   (Actions tab, *Run workflow*). Pick `demo` or `pilot` and a duration long enough to cover the
+   session, up to 360 minutes. It pings `/health` every 4 minutes and shows as failed if the
+   service stops answering. It is not scheduled: GitHub throttles cron runs to one every few
+   hours, which cannot keep a 15-minute idle timer alive. It has no credentials, so it keeps
+   only Render awake.
+3. **10-15 minutes before:** run `scripts/warm-demo.sh` to wake Neon and confirm sign-in works.
+   It reads passwords from your shell and only issues GET requests:
+
+   ```bash
+   SCAN_RETAILER_PASSWORD='...' SCAN_CCI_PASSWORD='...' scripts/warm-demo.sh
+   # pilot service: prefix with SCAN_BASE_URL=https://scan-caspos-pilot.onrender.com
+   ```
+
+   It prints the first and repeated response time for each role. Present only once it prints
+   `Ready`. Usernames default to `scan-retailer` and `scan-cci`; override them with
+   `SCAN_RETAILER_USERNAME` and `SCAN_CCI_USERNAME`, and pick a specific shared retailer with
+   `SCAN_CCI_RETAILER_CODE`.
+4. **Always keep a fallback:** the local container run (below) or a short screen recording of the
+   full flow, in case venue network access fails.
 
 ## Local container verification
 
