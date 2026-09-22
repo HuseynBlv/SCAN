@@ -65,6 +65,13 @@ describe('Onboarding', () => {
     updateOnboardingCciSharing.mockReset()
   })
 
+  it('links the sign-in screen to every other portal', () => {
+    render(<Onboarding />)
+    expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: /Retailer workspace/ })).toHaveAttribute('href', '/?portal=retailer')
+    expect(screen.getByRole('link', { name: /Data connection/ })).toHaveAttribute('href', '/?portal=connection')
+  })
+
   it('creates an isolated retailer without asking for an internal tenant code', async () => {
     const user = userEvent.setup()
     fetchOnboardingRetailers.mockResolvedValue([])

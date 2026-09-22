@@ -69,6 +69,13 @@ describe('RetailerDashboard', () => {
     fetchRetailerOverview.mockReset()
   })
 
+  it('links the sign-in screen to every other portal', () => {
+    render(<RetailerDashboard />)
+    expect(screen.getByRole('link', { name: /CCI intelligence workspace/ })).toHaveAttribute('href', '/?portal=cci')
+    expect(screen.getByRole('link', { name: /Data connection/ })).toHaveAttribute('href', '/?portal=connection')
+    expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
+  })
+
   it('signs in and exposes retailer value, navigation, period filters, and sync evidence', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)

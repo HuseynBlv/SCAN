@@ -92,8 +92,9 @@ function Login({ error, loading, onSubmit }) {
           <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Checking access…' : 'Open retailer onboarding'}</button>
         </form>
         <div className="portal-switch-links">
-          <a className="portal-switch-link" href="/?portal=connection">Data connection <span aria-hidden="true">→</span></a>
           <a className="portal-switch-link" href="/">CCI intelligence <span aria-hidden="true">→</span></a>
+          <a className="portal-switch-link" href="/?portal=retailer">Retailer workspace <span aria-hidden="true">→</span></a>
+          <a className="portal-switch-link" href="/?portal=connection">Data connection <span aria-hidden="true">→</span></a>
         </div>
       </section>
     </main>
