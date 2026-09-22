@@ -95,6 +95,13 @@ describe('DataConnection', () => {
     uploadImport.mockReset()
   })
 
+  it('links the sign-in screen to every other portal', () => {
+    render(<DataConnection />)
+    expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: /Retailer workspace/ })).toHaveAttribute('href', '/?portal=retailer')
+    expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
+  })
+
   it('separates working, pilot, and future connection methods', async () => {
     const user = userEvent.setup()
     render(<DataConnection />)

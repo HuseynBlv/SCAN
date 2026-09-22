@@ -58,6 +58,13 @@ describe('CciDashboard', () => {
     fetchOverview.mockReset()
   })
 
+  it('links the sign-in screen to every other portal', () => {
+    render(<CciDashboard />)
+    expect(screen.getByRole('link', { name: /Retailer owner portal/ })).toHaveAttribute('href', '/?portal=retailer')
+    expect(screen.getByRole('link', { name: /Data connection/ })).toHaveAttribute('href', '/?portal=connection')
+    expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
+  })
+
   it('signs in, shows loading, navigates all five sections, refreshes, and signs out', async () => {
     const user = userEvent.setup()
     let resolveFirstRequest

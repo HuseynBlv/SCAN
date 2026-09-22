@@ -143,6 +143,7 @@ function Login({ error, loading, onSubmit }) {
         <div className="portal-switch-links">
           <a className="portal-switch-link" href="/?portal=retailer">Retailer owner portal <span aria-hidden="true">→</span></a>
           <a className="portal-switch-link" href="/?portal=connection">Data connection <span aria-hidden="true">→</span></a>
+          <a className="portal-switch-link" href="/?portal=onboarding">Retailer onboarding <span aria-hidden="true">→</span></a>
         </div>
       </section>
     </main>
