@@ -86,6 +86,17 @@ public class RetailerProduct {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * Records a barcode discovered on a later import for a product that was first seen without one.
+     * Never overwrites an already-known barcode, so it cannot silently change a product's identity.
+     */
+    public void recordBarcode(String barcode) {
+        if (this.barcode == null && barcode != null && !barcode.isBlank()) {
+            this.barcode = barcode;
+            this.updatedAt = Instant.now();
+        }
+    }
+
     public UUID getId() {
         return id;
     }

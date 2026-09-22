@@ -301,6 +301,7 @@ public class ImportPersistenceService {
             }
         }
         if (existing != null) {
+            resolveWithNewlySuppliedBarcode(existing, source, canonicalByBarcode);
             return existing;
         }
 
@@ -320,6 +321,31 @@ public class ImportPersistenceService {
         retailerProductRepository.save(product);
         retailerProducts.put(product.getProductKey(), product);
         return product;
+    }
+
+    /**
+     * A product first seen without a barcode (or without one the catalog recognized yet) can become
+     * resolvable on a later import: the retailer corrects their export, or SCAN's catalog gains that
+     * barcode. Reusing the same row means every past and future receipt referencing it benefits
+     * immediately, with no re-import - but only ever upgrades an unresolved product; an already-mapped
+     * product's canonical link and recorded barcode are never overwritten.
+     */
+    private void resolveWithNewlySuppliedBarcode(
+        RetailerProduct existing,
+        ParsedTransactionLine source,
+        Map<String, CanonicalProduct> canonicalByBarcode
+    ) {
+        if (source.barcode() == null || source.barcode().isBlank()) {
+            return;
+        }
+        existing.recordBarcode(source.barcode());
+        if (!existing.isResolved()) {
+            CanonicalProduct canonical = canonicalByBarcode.get(source.barcode());
+            if (canonical != null) {
+                existing.mapTo(canonical, RetailerProduct.MatchMethod.EXACT_BARCODE);
+            }
+        }
+        retailerProductRepository.save(existing);
     }
 
     private String basketFingerprint(
