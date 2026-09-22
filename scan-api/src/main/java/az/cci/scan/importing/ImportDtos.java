@@ -182,6 +182,14 @@ public final class ImportDtos {
         }
     }
 
+    public record ImportJobDeletionResponse(
+        UUID id,
+        String filename,
+        int deletedReceipts,
+        int deletedLines
+    ) {
+    }
+
     public record ImportOperationsResponse(
         long queued,
         long validating,

@@ -258,6 +258,24 @@ export async function fetchImportHistory({ username, password, signal }) {
   return array(await response.json(), 'history', normalizeImportJob)
 }
 
+export function normalizeImportJobDeletion(value) {
+  const data = object(value, 'response')
+  return {
+    id: string(data.id, 'id'),
+    filename: string(data.filename, 'filename'),
+    deletedReceipts: count(data.deletedReceipts, 'deletedReceipts'),
+    deletedLines: count(data.deletedLines, 'deletedLines'),
+  }
+}
+
+export async function deleteImportJob({ jobId, username, password, signal }) {
+  const response = await fetchJson(`/api/v1/imports/${encodeURIComponent(jobId)}`, {
+    method: 'DELETE', username, password, signal,
+  })
+  if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
+  return normalizeImportJobDeletion(await response.json())
+}
+
 export async function fetchImportAudit({ username, password, signal }) {
   const response = await fetchJson('/api/v1/imports/audit?limit=50', { username, password, signal })
   if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataConnection from './DataConnection'
 import {
+  deleteImportJob,
   fetchImportContext,
   fetchImportAudit,
   fetchImportHistory,
@@ -17,6 +18,7 @@ import {
 } from '../services/importApi'
 
 vi.mock('../services/importApi', () => ({
+  deleteImportJob: vi.fn(),
   fetchImportContext: vi.fn(),
   fetchImportAudit: vi.fn(),
   fetchImportHistory: vi.fn(),
@@ -93,6 +95,7 @@ describe('DataConnection', () => {
     previewImport.mockReset().mockResolvedValue(readyPreview)
     updateImportMapping.mockReset().mockResolvedValue(importContext)
     uploadImport.mockReset()
+    deleteImportJob.mockReset()
   })
 
   it('links the sign-in screen to every other portal', () => {
@@ -100,6 +103,36 @@ describe('DataConnection', () => {
     expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/')
     expect(screen.getByRole('link', { name: /Retailer workspace/ })).toHaveAttribute('href', '/?portal=retailer')
     expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
+  })
+
+  it('removes a finished import after a confirm step, but never offers to remove one still in progress', async () => {
+    const user = userEvent.setup()
+    const runningJob = { ...completedJob, id: 'job-2', filename: 'still-running.xlsx', status: 'RECEIVED' }
+    fetchImportHistory.mockResolvedValueOnce([completedJob, runningJob])
+    deleteImportJob.mockResolvedValue({
+      id: completedJob.id, filename: completedJob.filename, deletedReceipts: 3842, deletedLines: 8913,
+    })
+    render(<DataConnection />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Import history' })[0])
+    expect(await screen.findByRole('heading', { name: 'Import history' })).toBeInTheDocument()
+    expect(screen.getByText('still-running.xlsx')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(screen.getByRole('button', { name: 'Confirm remove' })).toBeInTheDocument()
+    expect(deleteImportJob).not.toHaveBeenCalled()
+
+    fetchImportHistory.mockResolvedValueOnce([runningJob])
+    await user.click(screen.getByRole('button', { name: 'Confirm remove' }))
+
+    await waitFor(() => expect(deleteImportJob).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: completedJob.id }),
+    ))
+    await waitFor(() => expect(fetchImportHistory).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('still-running.xlsx')).toBeInTheDocument()
+    expect(screen.queryByText(completedJob.filename)).not.toBeInTheDocument()
   })
 
   it('separates working, pilot, and future connection methods', async () => {
