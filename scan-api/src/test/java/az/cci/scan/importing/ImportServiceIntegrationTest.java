@@ -13,6 +13,7 @@ import az.cci.scan.repository.CanonicalProductRepository;
 import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.ImportPreviewRepository;
+import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.RetailerRepository;
@@ -40,6 +41,9 @@ class ImportServiceIntegrationTest {
 
     @Autowired
     private ImportService importService;
+
+    @Autowired
+    private ImportOperationsService importOperationsService;
 
     @Autowired
     private AnalyticsService analyticsService;
@@ -77,8 +81,12 @@ class ImportServiceIntegrationTest {
     @Autowired
     private ScanAccountRepository accountRepository;
 
+    @Autowired
+    private OperationalAuditEventRepository auditEventRepository;
+
     @BeforeEach
     void setUp() {
+        auditEventRepository.deleteAll();
         accountRepository.deleteAll();
         receiptRepository.deleteAll();
         retailerProductRepository.deleteAll();
@@ -127,6 +135,43 @@ class ImportServiceIntegrationTest {
         assertThat(duplicate.attemptNumber()).isEqualTo(1);
         assertThat(importJobRepository.count()).isEqualTo(1);
         assertThat(receiptRepository.count()).isEqualTo(6);
+    }
+
+    @Test
+    void deletingACompletedImportJobRemovesItsReceiptsButKeepsProductMappings() throws IOException {
+        var completed = importService.importFile("DEMO", "CANONICAL", canonicalFixture());
+        long mappedProductsBeforeDeletion = retailerProductRepository.count();
+        Retailer retailer = retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow();
+
+        var deletion = importOperationsService.deleteJob(retailer, completed.id(), null);
+
+        assertThat(deletion.deletedReceipts()).isEqualTo(6);
+        assertThat(deletion.deletedLines()).isEqualTo(11);
+        assertThat(receiptRepository.count()).isZero();
+        assertThat(importJobRepository.count()).isZero();
+        assertThat(retailerProductRepository.count()).isEqualTo(mappedProductsBeforeDeletion);
+        assertThat(analyticsService.overview("DEMO", false).totalBaskets()).isZero();
+        assertThat(importOperationsService.audit(retailer, 10))
+            .anyMatch(event -> event.eventType().equals("IMPORT_JOB_DELETED"));
+
+        assertThatThrownBy(() -> importOperationsService.deleteJob(retailer, completed.id(), null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Unknown import job");
+    }
+
+    @Test
+    void rejectsDeletingAnImportJobThatHasNotFinishedYet() {
+        Retailer retailer = retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow();
+        ImportProfile profile = importProfileRepository.findByRetailerAndCodeIgnoreCase(retailer, "CANONICAL")
+            .orElseThrow();
+        ImportJob queued = importJobRepository.save(
+            new ImportJob(retailer, profile, "still-running.csv", "deadbeef", 1, "test-admin")
+        );
+
+        assertThatThrownBy(() -> importOperationsService.deleteJob(retailer, queued.getId(), null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("still RECEIVED");
+        assertThat(importJobRepository.count()).isEqualTo(1);
     }
 
     @Test

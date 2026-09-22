@@ -6,6 +6,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +24,7 @@ import java.util.List;
 import jakarta.validation.Valid;
 
 import static az.cci.scan.importing.ImportDtos.ImportJobResponse;
+import static az.cci.scan.importing.ImportDtos.ImportJobDeletionResponse;
 import static az.cci.scan.importing.ImportDtos.ImportContextResponse;
 import static az.cci.scan.importing.ImportDtos.ImportPreviewResponse;
 import static az.cci.scan.importing.ImportDtos.UpdateImportMappingRequest;
@@ -102,6 +104,11 @@ public class ImportController {
     @GetMapping("/{jobId}")
     public ImportJobResponse get(@PathVariable UUID jobId, Authentication authentication) {
         return importService.getJob(tenantAccess.retailer(authentication), jobId);
+    }
+
+    @DeleteMapping("/{jobId}")
+    public ImportJobDeletionResponse delete(@PathVariable UUID jobId, Authentication authentication) {
+        return operationsService.deleteJob(tenantAccess.retailer(authentication), jobId, authentication);
     }
 
     @GetMapping("/history")

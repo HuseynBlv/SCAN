@@ -1,5 +1,6 @@
 package az.cci.scan.repository;
 
+import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.Receipt;
 import az.cci.scan.domain.Retailer;
 import az.cci.scan.domain.Store;
@@ -31,4 +32,7 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
 
     @EntityGraph(attributePaths = {"store", "lines", "lines.retailerProduct", "lines.retailerProduct.canonicalProduct"})
     List<Receipt> findDistinctByRetailerOrderByTransactionTimestampAsc(Retailer retailer);
+
+    @EntityGraph(attributePaths = "lines")
+    List<Receipt> findAllBySourceImportJob(ImportJob sourceImportJob);
 }

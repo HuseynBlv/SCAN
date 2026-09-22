@@ -295,6 +295,34 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void onlyAdminsCanDeleteImportJobsAndNotBeforeTheyFinish() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/imports/{jobId}", java.util.UUID.randomUUID()
+            ).with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+
+        String previewId = previewId("test-admin", "test-admin-password");
+        String jobJson = mockMvc.perform(multipart("/api/v1/imports")
+                .file(transactionFile())
+                .param("previewId", previewId)
+                .with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.status").value("RECEIVED"))
+            .andReturn().getResponse().getContentAsString();
+        String jobId = JsonPath.read(jobJson, "$.id");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/imports/{jobId}", jobId
+            ).with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/imports/{jobId}", jobId
+            ).with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error", org.hamcrest.Matchers.containsString("still RECEIVED")));
+    }
+
+    @Test
     void returnsImportContextFromTheAccountAndNeverFromQueryParameters() throws Exception {
         mockMvc.perform(get("/api/v1/imports/context")
                 .param("retailerCode", "PRIVATE")

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  deleteImportJob,
   fetchImportContext,
   fetchImportAudit,
   fetchImportHistory,
@@ -520,7 +521,16 @@ function ImportData({ context, onContextChange, onImportComplete, onNavigate }) 
   )
 }
 
-function ImportHistory({ audit, error, history, loading, operations, onRefresh }) {
+const DELETABLE_IMPORT_STATUSES = new Set(['COMPLETED', 'FAILED'])
+
+function ImportHistory({ audit, deletingId, error, history, loading, operations, onDelete, onRefresh }) {
+  const [confirmingId, setConfirmingId] = useState(null)
+
+  async function handleDelete(item) {
+    if (confirmingId !== item.id) { setConfirmingId(item.id); return }
+    try { await onDelete(item.id) } finally { setConfirmingId(null) }
+  }
+
   if (loading) return <LoadingState title="Loading import operations…" description="SCAN is reading this retailer’s job and audit records." />
   return (
     <div className="scan-page-stack connection-history-page">
@@ -533,9 +543,9 @@ function ImportHistory({ audit, error, history, loading, operations, onRefresh }
         <div><span>Failed · 24h</span><strong>{operations.failed}</strong></div>
       </section> : null}
       <section className="scan-panel connection-history-panel">
-        <header className="scan-panel-header"><div><h3>Files</h3><p>Newest attempts first. File contents and passwords are never shown here.</p></div></header>
+        <header className="scan-panel-header"><div><h3>Files</h3><p>Newest attempts first. File contents and passwords are never shown here. Removing a file deletes its receipts and lines; saved product mappings are kept.</p></div></header>
         {!history.length ? <EmptyState compact title="No imports yet">Validated uploads will appear here.</EmptyState> : <div className="connection-history-list">
-          {history.map((item) => <article key={`${item.id}-${item.attemptNumber}`}><div><strong>{item.filename}</strong><small>{formatDateTime(item.createdAt)} · {item.submittedBy}</small></div><StatusBadge tone={item.status === 'COMPLETED' ? 'success' : item.status === 'FAILED' ? 'critical' : 'warning'}>{item.status.toLowerCase()}</StatusBadge><dl><div><dt>Receipts</dt><dd>{integer.format(item.importedReceipts)}</dd></div><div><dt>Lines</dt><dd>{integer.format(item.importedLines)}</dd></div><div><dt>Attempt</dt><dd>{item.attemptNumber}</dd></div></dl></article>)}
+          {history.map((item) => <article key={`${item.id}-${item.attemptNumber}`}><div><strong>{item.filename}</strong><small>{formatDateTime(item.createdAt)} · {item.submittedBy}</small></div><div className="connection-history-status"><StatusBadge tone={item.status === 'COMPLETED' ? 'success' : item.status === 'FAILED' ? 'critical' : 'warning'}>{item.status.toLowerCase()}</StatusBadge>{DELETABLE_IMPORT_STATUSES.has(item.status) ? <button className="scan-button scan-button-secondary" disabled={deletingId === item.id} onClick={() => handleDelete(item)} type="button">{deletingId === item.id ? 'Removing…' : confirmingId === item.id ? 'Confirm remove' : 'Remove'}</button> : null}</div><dl><div><dt>Receipts</dt><dd>{integer.format(item.importedReceipts)}</dd></div><div><dt>Lines</dt><dd>{integer.format(item.importedLines)}</dd></div><div><dt>Attempt</dt><dd>{item.attemptNumber}</dd></div></dl></article>)}
         </div>}
       </section>
       <section className="scan-panel connection-history-panel">
@@ -587,10 +597,10 @@ function ProductMapping({ catalog, error, loading, mappingItems, onMap }) {
   )
 }
 
-function Page({ activePage, audit, catalog, context, history, historyError, historyLoading, mappingError, mappingItems, mappingLoading, onContextChange, onHistoryRefresh, onImportComplete, onMap, onNavigate, operations }) {
+function Page({ activePage, audit, catalog, context, deletingJobId, history, historyError, historyLoading, mappingError, mappingItems, mappingLoading, onContextChange, onDeleteJob, onHistoryRefresh, onImportComplete, onMap, onNavigate, operations }) {
   if (activePage === 'import') return <ImportData context={context} onContextChange={onContextChange} onImportComplete={onImportComplete} onNavigate={onNavigate} />
   if (activePage === 'mapping') return <ProductMapping catalog={catalog} error={mappingError} loading={mappingLoading} mappingItems={mappingItems} onMap={onMap} />
-  if (activePage === 'history') return <ImportHistory audit={audit} error={historyError} history={history} loading={historyLoading} onRefresh={onHistoryRefresh} operations={operations} />
+  if (activePage === 'history') return <ImportHistory audit={audit} deletingId={deletingJobId} error={historyError} history={history} loading={historyLoading} onDelete={onDeleteJob} onRefresh={onHistoryRefresh} operations={operations} />
   return <Connections context={context} onNavigate={onNavigate} unresolvedCount={mappingItems.length} />
 }
 
@@ -608,6 +618,7 @@ export default function DataConnection() {
   const [operations, setOperations] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState('')
+  const [deletingJobId, setDeletingJobId] = useState(null)
   const layoutRef = useRef(null)
 
   usePretextLayout(layoutRef, `${activePage}:${mappingItems.length}:${context?.retailerCode || 'login'}`)
@@ -662,6 +673,19 @@ export default function DataConnection() {
     } finally { setHistoryLoading(false) }
   }
 
+  async function deleteJob(jobId) {
+    setDeletingJobId(jobId)
+    setHistoryError('')
+    try {
+      await deleteImportJob({ ...context, jobId })
+      await loadHistory()
+    } catch (error) {
+      setHistoryError(error?.message || 'The import could not be removed.')
+    } finally {
+      setDeletingJobId(null)
+    }
+  }
+
   function navigate(page) {
     setActivePage(page)
     if (page === 'mapping') loadMapping()
@@ -701,7 +725,7 @@ export default function DataConnection() {
   return (
     <div ref={layoutRef}>
       <WorkspaceShell activePage={activePage} accountLabel={context.retailerCode} accountMeta={context.profileName} brandSubtitle="Data Connection" header={header} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="connection" privacyLabel="Admin-only import and mapping access">
-        <Page activePage={activePage} audit={audit} catalog={catalog} context={context} history={history} historyError={historyError} historyLoading={historyLoading} mappingError={mappingError} mappingItems={mappingItems} mappingLoading={mappingLoading} onContextChange={setContext} onHistoryRefresh={loadHistory} onImportComplete={importComplete} onMap={mapProduct} onNavigate={navigate} operations={operations} />
+        <Page activePage={activePage} audit={audit} catalog={catalog} context={context} deletingJobId={deletingJobId} history={history} historyError={historyError} historyLoading={historyLoading} mappingError={mappingError} mappingItems={mappingItems} mappingLoading={mappingLoading} onContextChange={setContext} onDeleteJob={deleteJob} onHistoryRefresh={loadHistory} onImportComplete={importComplete} onMap={mapProduct} onNavigate={navigate} operations={operations} />
       </WorkspaceShell>
     </div>
   )

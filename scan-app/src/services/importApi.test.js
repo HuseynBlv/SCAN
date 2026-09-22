@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  deleteImportJob,
   fetchImportContext,
   fetchImportJob,
   fetchUnresolvedProducts,
@@ -178,6 +179,33 @@ describe('importApi', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/v1/imports/${active.id}`)
     expect(result.status).toBe('IMPORTING')
+  })
+
+  it('deletes a finished import job by id', async () => {
+    const deletion = {
+      id: '34ad6f4a-f1c5-4c10-8cff-b48a501021b4', filename: 'sales.csv',
+      deletedReceipts: 6, deletedLines: 11,
+    }
+    const fetchMock = vi.fn().mockResolvedValue(response({ body: deletion }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await deleteImportJob({
+      jobId: deletion.id, username: 'scan-admin', password: 'secret',
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/v1/imports/${deletion.id}`)
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'DELETE' }))
+    expect(result).toEqual(deletion)
+  })
+
+  it('reports why a job could not be deleted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      ok: false, status: 400, body: { error: 'Import job is still RECEIVED; wait for it to finish before deleting it' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteImportJob({ jobId: 'job-1', username: 'scan-admin', password: 'secret' }))
+      .rejects.toThrow('still RECEIVED')
   })
 
   it('loads unresolved products and saves an explicit catalog match', async () => {
