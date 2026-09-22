@@ -175,6 +175,40 @@ class ImportServiceIntegrationTest {
     }
 
     @Test
+    void resolvesAnEarlierUnmappedProductOnceALaterImportSuppliesItsBarcode() {
+        String withoutBarcode = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-09,R-9001,2026-08-24T10:00:00,COKE-LOCAL,,Coca-Cola 500ml,1,1.5000,0.0000,1.5000
+            """;
+        var first = importService.importFile("DEMO", "CANONICAL", csv("no-barcode.csv", withoutBarcode));
+        assertThat(first.status()).isEqualTo(ImportJob.Status.COMPLETED);
+        assertThat(first.unresolvedProducts()).isEqualTo(1);
+        assertThat(analyticsService.overview("DEMO", false).cciBaskets()).isZero();
+
+        String withBarcode = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-09,R-9002,2026-08-24T11:00:00,COKE-LOCAL,5449000000996,Coca-Cola 500ml,1,1.5000,0.0000,1.5000
+            """;
+        var second = importService.importFile("DEMO", "CANONICAL", csv("with-barcode.csv", withBarcode));
+
+        assertThat(second.status()).isEqualTo(ImportJob.Status.COMPLETED);
+        assertThat(second.unresolvedProducts())
+            .as("supplying the barcode should resolve the product, not leave it unresolved again")
+            .isZero();
+        assertThat(retailerProductRepository.count())
+            .as("the same retailer product row should be reused and upgraded, not duplicated")
+            .isEqualTo(1);
+        RetailerProduct product = retailerProductRepository
+            .findByRetailerAndProductKey(retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow(), "CODE:COKE-LOCAL")
+            .orElseThrow();
+        assertThat(product.isResolved()).isTrue();
+        assertThat(product.getBarcode()).isEqualTo("5449000000996");
+        assertThat(analyticsService.overview("DEMO", false).cciBaskets())
+            .as("the first import's basket should retroactively count too, since it shares this same product row")
+            .isEqualTo(2);
+    }
+
+    @Test
     void retriesAFailedFileAsANewAuditableAttempt() {
         String invalid = """
             store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
