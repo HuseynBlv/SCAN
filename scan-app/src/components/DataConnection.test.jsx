@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataConnection from './DataConnection'
 import {
+  createCanonicalProduct,
   deleteImportJob,
   fetchImportContext,
   fetchImportAudit,
@@ -18,6 +19,7 @@ import {
 } from '../services/importApi'
 
 vi.mock('../services/importApi', () => ({
+  createCanonicalProduct: vi.fn(),
   deleteImportJob: vi.fn(),
   fetchImportContext: vi.fn(),
   fetchImportAudit: vi.fn(),
@@ -96,6 +98,7 @@ describe('DataConnection', () => {
     updateImportMapping.mockReset().mockResolvedValue(importContext)
     uploadImport.mockReset()
     deleteImportJob.mockReset()
+    createCanonicalProduct.mockReset()
   })
 
   it('links the sign-in screen to every other portal', () => {
@@ -291,5 +294,55 @@ describe('DataConnection', () => {
       canonicalProductId: canonicalProduct.id,
     })))
     expect(await screen.findByRole('heading', { name: 'Product mapping is complete' })).toBeInTheDocument()
+  })
+
+  it('adds a new SCAN catalog product inline when nothing existing matches, and maps to it', async () => {
+    const user = userEvent.setup()
+    fetchUnresolvedProducts.mockResolvedValue([sourceProduct])
+    fetchProductCatalog.mockResolvedValue([])
+    const newProduct = {
+      ...canonicalProduct, id: 'canonical-new', normalizedName: 'Coca-Cola 500ml PET', barcode: '42105220',
+    }
+    createCanonicalProduct.mockResolvedValue(newProduct)
+    render(<DataConnection />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Product mapping' })[0])
+    expect(await screen.findByRole('heading', { name: 'Match source products to SCAN' })).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('SCAN product for Coke bottle'), '__new__')
+    const nameInput = screen.getByLabelText('Product name')
+    expect(nameInput).toHaveValue('Coke bottle')
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Coca-Cola 500ml PET')
+    await user.type(screen.getByLabelText('Barcode'), '42105220')
+    await user.click(screen.getByLabelText('This is a CCI product'))
+    await user.click(screen.getByRole('button', { name: 'Add & map' }))
+
+    await waitFor(() => expect(createCanonicalProduct).toHaveBeenCalledWith(expect.objectContaining({
+      normalizedName: 'Coca-Cola 500ml PET', barcode: '42105220', brand: null, category: null, cci: true,
+    })))
+    await waitFor(() => expect(saveProductMapping).toHaveBeenCalledWith(expect.objectContaining({
+      retailerProductId: sourceProduct.id, canonicalProductId: 'canonical-new',
+    })))
+    expect(await screen.findByRole('heading', { name: 'Product mapping is complete' })).toBeInTheDocument()
+  })
+
+  it('reports why a new SCAN catalog product could not be added', async () => {
+    const user = userEvent.setup()
+    fetchUnresolvedProducts.mockResolvedValue([sourceProduct])
+    fetchProductCatalog.mockResolvedValue([])
+    createCanonicalProduct.mockRejectedValue(new Error('That barcode is already used by another SCAN product.'))
+    render(<DataConnection />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Product mapping' })[0])
+    await screen.findByRole('heading', { name: 'Match source products to SCAN' })
+    await user.selectOptions(screen.getByLabelText('SCAN product for Coke bottle'), '__new__')
+    await user.type(screen.getByLabelText('Barcode'), '5449000000996')
+    await user.click(screen.getByRole('button', { name: 'Add & map' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('That barcode is already used by another SCAN product.')
+    expect(saveProductMapping).not.toHaveBeenCalled()
   })
 })

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  createCanonicalProduct,
   deleteImportJob,
   fetchImportContext,
   fetchImportAudit,
@@ -558,37 +559,94 @@ function ImportHistory({ audit, deletingId, error, history, loading, operations,
   )
 }
 
-function ProductMapping({ catalog, error, loading, mappingItems, onMap }) {
+const NEW_CATALOG_PRODUCT = '__new__'
+
+function emptyDraft(item) {
+  return { normalizedName: item.originalProductName, barcode: item.barcode || '', brand: '', category: '', cci: false }
+}
+
+function ProductMapping({ catalog, error, loading, mappingItems, onCreateAndMap, onMap }) {
   const [search, setSearch] = useState('')
   const [selections, setSelections] = useState({})
+  const [drafts, setDrafts] = useState({})
   const [savingId, setSavingId] = useState(null)
+  const [creatingId, setCreatingId] = useState(null)
   const visible = mappingItems.filter((item) => `${item.originalProductName} ${item.productCode || ''} ${item.barcode || ''}`.toLowerCase().includes(search.toLowerCase().trim()))
 
   async function map(item) {
     const canonicalProductId = selections[item.id]
-    if (!canonicalProductId) return
+    if (!canonicalProductId || canonicalProductId === NEW_CATALOG_PRODUCT) return
     setSavingId(item.id)
     try { await onMap(item.id, canonicalProductId) } finally { setSavingId(null) }
+  }
+
+  function updateDraft(item, field, value) {
+    setDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] || emptyDraft(item)), [field]: value } }))
+  }
+
+  function cancelNewProduct(itemId) {
+    setSelections((current) => { const next = { ...current }; delete next[itemId]; return next })
+    setDrafts((current) => { const next = { ...current }; delete next[itemId]; return next })
+  }
+
+  async function createAndMap(item) {
+    const draft = drafts[item.id] || emptyDraft(item)
+    if (!draft.normalizedName.trim()) return
+    setCreatingId(item.id)
+    try {
+      await onCreateAndMap(item.id, {
+        normalizedName: draft.normalizedName.trim(),
+        barcode: draft.barcode.trim() || null,
+        brand: draft.brand.trim() || null,
+        category: draft.category.trim() || null,
+        cci: draft.cci,
+      })
+      cancelNewProduct(item.id)
+    } finally {
+      setCreatingId(null)
+    }
   }
 
   if (loading) return <LoadingState title="Loading product mapping…" description="SCAN is reading unresolved source products and the canonical catalog." />
   return (
     <div className="scan-page-stack">
-      <PageIntro eyebrow="Product mapping" title="Match source products to SCAN" description="Unresolved means SCAN found no exact barcode or saved match. Choose a reviewed product from the SCAN catalog." aside={<StatusBadge tone={mappingItems.length ? 'warning' : 'success'}>{mappingItems.length ? `${integer.format(mappingItems.length)} unresolved` : 'Complete'}</StatusBadge>} />
+      <PageIntro eyebrow="Product mapping" title="Match source products to SCAN" description="Unresolved means SCAN found no exact barcode or saved match. Choose a reviewed product from the SCAN catalog, or add it as a new one." aside={<StatusBadge tone={mappingItems.length ? 'warning' : 'success'}>{mappingItems.length ? `${integer.format(mappingItems.length)} unresolved` : 'Complete'}</StatusBadge>} />
       {error ? <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div> : null}
       {!mappingItems.length ? <EmptyState title="Product mapping is complete">No unresolved source products remain for this retailer.</EmptyState> : (
         <section className="connection-mapping-panel">
           <header><div><h2>Review unresolved products</h2><p>Saving a match updates normalized analytics for this retailer.</p></div><label><span className="sr-only">Search unresolved products</span><ScanIcon name="explore" size={18} /><input type="search" placeholder="Search source products" value={search} onChange={(event) => setSearch(event.target.value)} /></label></header>
           {!visible.length ? <EmptyState compact title="No matching source products">Try a different product name, code, or barcode.</EmptyState> : <div className="connection-mapping-list">
             <div className="connection-mapping-head" aria-hidden="true"><span>Source product</span><i /><span>SCAN product</span><span /></div>
-            {visible.map((item) => (
+            {visible.map((item) => {
+              const creatingNew = selections[item.id] === NEW_CATALOG_PRODUCT
+              const draft = drafts[item.id] || emptyDraft(item)
+              return (
               <article key={item.id}>
                 <div className="connection-source-product"><StatusBadge tone="warning">Unresolved</StatusBadge><strong>{item.originalProductName}</strong><small>{item.productCode ? `Code ${item.productCode}` : 'No product code'} · {item.barcode ? `Barcode ${item.barcode}` : 'No barcode'}</small></div>
                 <ScanIcon name="chevron" size={18} />
-                <label><span className="sr-only">SCAN product for {item.originalProductName}</span><select value={selections[item.id] || ''} onChange={(event) => setSelections((current) => ({ ...current, [item.id]: event.target.value }))}><option value="">Choose catalog product</option>{catalog.map((product) => <option key={product.id} value={product.id}>{product.normalizedName}{product.category ? ` · ${product.category}` : ''}</option>)}</select></label>
-                <button className="scan-button scan-button-dark" disabled={!selections[item.id] || savingId === item.id} onClick={() => map(item)} type="button">{savingId === item.id ? 'Saving…' : 'Save match'}</button>
+                <label><span className="sr-only">SCAN product for {item.originalProductName}</span><select value={selections[item.id] || ''} onChange={(event) => setSelections((current) => ({ ...current, [item.id]: event.target.value }))}><option value="">Choose catalog product</option><option value={NEW_CATALOG_PRODUCT}>+ Add as new SCAN product</option>{catalog.map((product) => <option key={product.id} value={product.id}>{product.normalizedName}{product.category ? ` · ${product.category}` : ''}</option>)}</select></label>
+                {creatingNew ? null : <button className="scan-button scan-button-dark" disabled={!selections[item.id] || savingId === item.id} onClick={() => map(item)} type="button">{savingId === item.id ? 'Saving…' : 'Save match'}</button>}
+                {creatingNew ? (
+                  <div className="connection-new-product-form">
+                    <p>The SCAN catalog has no matching product yet. Add one, and this source product maps to it immediately.</p>
+                    <div className="connection-new-product-fields">
+                      <label><span>Product name</span><input required value={draft.normalizedName} onChange={(event) => updateDraft(item, 'normalizedName', event.target.value)} /></label>
+                      <label><span>Barcode</span><input value={draft.barcode} onChange={(event) => updateDraft(item, 'barcode', event.target.value)} placeholder="Optional" /></label>
+                      <label><span>Brand</span><input value={draft.brand} onChange={(event) => updateDraft(item, 'brand', event.target.value)} placeholder="Optional" /></label>
+                      <label><span>Category</span><input value={draft.category} onChange={(event) => updateDraft(item, 'category', event.target.value)} placeholder="Optional" /></label>
+                    </div>
+                    <div className="connection-new-product-actions">
+                      <label className="connection-new-product-cci"><input checked={draft.cci} onChange={(event) => updateDraft(item, 'cci', event.target.checked)} type="checkbox" /><span>This is a CCI product</span></label>
+                      <div>
+                        <button className="scan-button scan-button-secondary" onClick={() => cancelNewProduct(item.id)} type="button">Cancel</button>
+                        <button className="scan-button scan-button-dark" disabled={!draft.normalizedName.trim() || creatingId === item.id} onClick={() => createAndMap(item)} type="button">{creatingId === item.id ? 'Adding…' : 'Add & map'}</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </article>
-            ))}
+              )
+            })}
           </div>}
           {!catalog.length ? <div className="scan-inline-notice"><strong>No SCAN catalog products are available.</strong> A SCAN administrator must add a reviewed catalog before mappings can be saved.</div> : null}
         </section>
@@ -597,9 +655,9 @@ function ProductMapping({ catalog, error, loading, mappingItems, onMap }) {
   )
 }
 
-function Page({ activePage, audit, catalog, context, deletingJobId, history, historyError, historyLoading, mappingError, mappingItems, mappingLoading, onContextChange, onDeleteJob, onHistoryRefresh, onImportComplete, onMap, onNavigate, operations }) {
+function Page({ activePage, audit, catalog, context, deletingJobId, history, historyError, historyLoading, mappingError, mappingItems, mappingLoading, onContextChange, onCreateAndMap, onDeleteJob, onHistoryRefresh, onImportComplete, onMap, onNavigate, operations }) {
   if (activePage === 'import') return <ImportData context={context} onContextChange={onContextChange} onImportComplete={onImportComplete} onNavigate={onNavigate} />
-  if (activePage === 'mapping') return <ProductMapping catalog={catalog} error={mappingError} loading={mappingLoading} mappingItems={mappingItems} onMap={onMap} />
+  if (activePage === 'mapping') return <ProductMapping catalog={catalog} error={mappingError} loading={mappingLoading} mappingItems={mappingItems} onCreateAndMap={onCreateAndMap} onMap={onMap} />
   if (activePage === 'history') return <ImportHistory audit={audit} deletingId={deletingJobId} error={historyError} history={history} loading={historyLoading} onDelete={onDeleteJob} onRefresh={onHistoryRefresh} operations={operations} />
   return <Connections context={context} onNavigate={onNavigate} unresolvedCount={mappingItems.length} />
 }
@@ -710,6 +768,21 @@ export default function DataConnection() {
     }
   }
 
+  async function createAndMapProduct(retailerProductId, draft) {
+    setMappingError('')
+    setHistory([])
+    setAudit([])
+    setOperations(null)
+    try {
+      const canonicalProduct = await createCanonicalProduct({ ...context, ...draft })
+      setCatalog((items) => [...items, canonicalProduct])
+      await saveProductMapping({ ...context, retailerProductId, canonicalProductId: canonicalProduct.id })
+      setMappingItems((items) => items.filter((item) => item.id !== retailerProductId))
+    } catch (error) {
+      setMappingError(error?.message || 'The product could not be added to the SCAN catalog.')
+    }
+  }
+
   function signOut() {
     setContext(null)
     setActivePage('connections')
@@ -725,7 +798,7 @@ export default function DataConnection() {
   return (
     <div ref={layoutRef}>
       <WorkspaceShell activePage={activePage} accountLabel={context.retailerCode} accountMeta={context.profileName} brandSubtitle="Data Connection" header={header} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="connection" privacyLabel="Admin-only import and mapping access">
-        <Page activePage={activePage} audit={audit} catalog={catalog} context={context} deletingJobId={deletingJobId} history={history} historyError={historyError} historyLoading={historyLoading} mappingError={mappingError} mappingItems={mappingItems} mappingLoading={mappingLoading} onContextChange={setContext} onDeleteJob={deleteJob} onHistoryRefresh={loadHistory} onImportComplete={importComplete} onMap={mapProduct} onNavigate={navigate} operations={operations} />
+        <Page activePage={activePage} audit={audit} catalog={catalog} context={context} deletingJobId={deletingJobId} history={history} historyError={historyError} historyLoading={historyLoading} mappingError={mappingError} mappingItems={mappingItems} mappingLoading={mappingLoading} onContextChange={setContext} onCreateAndMap={createAndMapProduct} onDeleteJob={deleteJob} onHistoryRefresh={loadHistory} onImportComplete={importComplete} onMap={mapProduct} onNavigate={navigate} operations={operations} />
       </WorkspaceShell>
     </div>
   )

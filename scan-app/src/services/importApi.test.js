@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  createCanonicalProduct,
   deleteImportJob,
   fetchImportContext,
   fetchImportJob,
@@ -206,6 +207,38 @@ describe('importApi', () => {
 
     await expect(deleteImportJob({ jobId: 'job-1', username: 'scan-admin', password: 'secret' }))
       .rejects.toThrow('still RECEIVED')
+  })
+
+  it('adds a new catalog product and returns it', async () => {
+    const created = canonicalProduct()
+    const fetchMock = vi.fn().mockResolvedValue(response({ body: created, status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createCanonicalProduct({
+      normalizedName: 'Coca-Cola 500ml', barcode: '5449000000996', brand: 'Coca-Cola',
+      manufacturer: 'CCI', category: 'Beverages', subcategory: null, packageSize: null,
+      packageType: null, cci: true, username: 'scan-admin', password: 'secret',
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/product-mappings/catalog')
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        normalizedName: 'Coca-Cola 500ml', barcode: '5449000000996', brand: 'Coca-Cola',
+        manufacturer: 'CCI', category: 'Beverages', subcategory: null, packageSize: null,
+        packageType: null, cci: true,
+      }),
+    }))
+    expect(result.normalizedName).toBe('Coca-Cola 500ml')
+  })
+
+  it('explains a duplicate-barcode conflict when adding a catalog product', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: false, status: 409, body: {} }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createCanonicalProduct({
+      normalizedName: 'Coca-Cola 500ml', barcode: '5449000000996', username: 'scan-admin', password: 'secret',
+    })).rejects.toThrow('already used by another SCAN product')
   })
 
   it('loads unresolved products and saves an explicit catalog match', async () => {
