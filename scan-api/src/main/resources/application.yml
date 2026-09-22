@@ -34,6 +34,9 @@ scan:
   runtime:
     environment: ${SCAN_RUNTIME_ENVIRONMENT:development}
     database-id: ${SCAN_DATABASE_ID:local}
+  product-lookup:
+    enabled: ${SCAN_PRODUCT_LOOKUP_ENABLED:true}
+    timeout: ${SCAN_PRODUCT_LOOKUP_TIMEOUT:3s}
   import-worker:
     poll-delay-ms: ${SCAN_IMPORT_POLL_DELAY_MS:1000}
     initial-delay-ms: ${SCAN_IMPORT_INITIAL_DELAY_MS:1000}

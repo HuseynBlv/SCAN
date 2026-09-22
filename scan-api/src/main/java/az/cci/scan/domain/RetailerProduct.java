@@ -27,6 +27,7 @@ public class RetailerProduct {
         EXACT_BARCODE,
         SAVED_MAPPING,
         MANUAL,
+        EXTERNAL_LOOKUP,
         UNRESOLVED
     }
 

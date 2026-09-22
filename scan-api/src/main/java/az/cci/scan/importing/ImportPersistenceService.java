@@ -1,5 +1,7 @@
 package az.cci.scan.importing;
 
+import az.cci.scan.catalog.lookup.ExternalProductMatch;
+import az.cci.scan.catalog.lookup.ProductLookupClient;
 import az.cci.scan.domain.CanonicalProduct;
 import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.ImportProfile;
@@ -14,6 +16,8 @@ import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +35,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -38,6 +43,7 @@ import java.util.stream.Collectors;
 @Service
 public class ImportPersistenceService {
 
+    private static final Logger log = LoggerFactory.getLogger(ImportPersistenceService.class);
     private static final int LOOKUP_BATCH_SIZE = 500;
 
     private final StoreRepository storeRepository;
@@ -46,6 +52,7 @@ public class ImportPersistenceService {
     private final ReceiptRepository receiptRepository;
     private final RetailerProductRepository retailerProductRepository;
     private final CanonicalProductRepository canonicalProductRepository;
+    private final ProductLookupClient productLookupClient;
 
     public ImportPersistenceService(
         StoreRepository storeRepository,
@@ -53,7 +60,8 @@ public class ImportPersistenceService {
         ImportJobRepository importJobRepository,
         ReceiptRepository receiptRepository,
         RetailerProductRepository retailerProductRepository,
-        CanonicalProductRepository canonicalProductRepository
+        CanonicalProductRepository canonicalProductRepository,
+        ProductLookupClient productLookupClient
     ) {
         this.storeRepository = storeRepository;
         this.retailerRepository = retailerRepository;
@@ -61,6 +69,7 @@ public class ImportPersistenceService {
         this.receiptRepository = receiptRepository;
         this.retailerProductRepository = retailerProductRepository;
         this.canonicalProductRepository = canonicalProductRepository;
+        this.productLookupClient = productLookupClient;
     }
 
     @Transactional
@@ -86,6 +95,9 @@ public class ImportPersistenceService {
         );
         Map<String, RetailerProduct> retailerProducts = loadRetailerProducts(lockedRetailer, lines);
         Map<String, CanonicalProduct> canonicalByBarcode = loadCanonicalProducts(lines);
+        // Barcodes this batch already asked the external lookup about and got nothing back for -
+        // avoids repeating the same failed HTTP call once per line that shares the barcode.
+        Set<String> externalLookupMisses = new HashSet<>();
 
         int duplicateReceipts = 0;
         for (PreparedReceipt candidate : prepared) {
@@ -134,7 +146,8 @@ public class ImportPersistenceService {
                     lockedRetailer,
                     source,
                     retailerProducts,
-                    canonicalByBarcode
+                    canonicalByBarcode,
+                    externalLookupMisses
                 );
                 if (!retailerProduct.isResolved()) {
                     unresolvedProducts.add(retailerProduct.getId());
@@ -290,7 +303,8 @@ public class ImportPersistenceService {
         Retailer retailer,
         ParsedTransactionLine source,
         Map<String, RetailerProduct> retailerProducts,
-        Map<String, CanonicalProduct> canonicalByBarcode
+        Map<String, CanonicalProduct> canonicalByBarcode,
+        Set<String> externalLookupMisses
     ) {
         RetailerProduct existing = retailerProducts.get(source.productKey());
         if (existing == null && source.productCode() != null && !source.productCode().isBlank()) {
@@ -301,7 +315,7 @@ public class ImportPersistenceService {
             }
         }
         if (existing != null) {
-            resolveWithNewlySuppliedBarcode(existing, source, canonicalByBarcode);
+            resolveWithNewlySuppliedBarcode(existing, source, canonicalByBarcode, externalLookupMisses);
             return existing;
         }
 
@@ -313,9 +327,9 @@ public class ImportPersistenceService {
             source.productName()
         );
         if (source.barcode() != null) {
-            CanonicalProduct canonical = canonicalByBarcode.get(source.barcode());
-            if (canonical != null) {
-                product.mapTo(canonical, RetailerProduct.MatchMethod.EXACT_BARCODE);
+            CanonicalMatch match = resolveCanonical(source.barcode(), canonicalByBarcode, externalLookupMisses);
+            if (match != null) {
+                product.mapTo(match.canonical(), match.method());
             }
         }
         retailerProductRepository.save(product);
@@ -325,27 +339,80 @@ public class ImportPersistenceService {
 
     /**
      * A product first seen without a barcode (or without one the catalog recognized yet) can become
-     * resolvable on a later import: the retailer corrects their export, or SCAN's catalog gains that
-     * barcode. Reusing the same row means every past and future receipt referencing it benefits
-     * immediately, with no re-import - but only ever upgrades an unresolved product; an already-mapped
-     * product's canonical link and recorded barcode are never overwritten.
+     * resolvable on a later import: the retailer corrects their export, SCAN's catalog gains that
+     * barcode, or an external lookup now recognizes it. Reusing the same row means every past and
+     * future receipt referencing it benefits immediately, with no re-import - but only ever upgrades
+     * an unresolved product; an already-mapped product's canonical link and recorded barcode are
+     * never overwritten.
      */
     private void resolveWithNewlySuppliedBarcode(
         RetailerProduct existing,
         ParsedTransactionLine source,
-        Map<String, CanonicalProduct> canonicalByBarcode
+        Map<String, CanonicalProduct> canonicalByBarcode,
+        Set<String> externalLookupMisses
     ) {
         if (source.barcode() == null || source.barcode().isBlank()) {
             return;
         }
         existing.recordBarcode(source.barcode());
         if (!existing.isResolved()) {
-            CanonicalProduct canonical = canonicalByBarcode.get(source.barcode());
-            if (canonical != null) {
-                existing.mapTo(canonical, RetailerProduct.MatchMethod.EXACT_BARCODE);
+            CanonicalMatch match = resolveCanonical(source.barcode(), canonicalByBarcode, externalLookupMisses);
+            if (match != null) {
+                existing.mapTo(match.canonical(), match.method());
             }
         }
         retailerProductRepository.save(existing);
+    }
+
+    /**
+     * SCAN's own catalog is checked first and always wins. Only a barcode with nothing local yet
+     * falls through to the external lookup, which - unlike a local match - also creates the
+     * canonical product on the spot so this and every future retailer selling the same barcode
+     * resolves automatically from here on, no operator involved.
+     */
+    private CanonicalMatch resolveCanonical(
+        String barcode,
+        Map<String, CanonicalProduct> canonicalByBarcode,
+        Set<String> externalLookupMisses
+    ) {
+        CanonicalProduct local = canonicalByBarcode.get(barcode);
+        if (local != null) {
+            return new CanonicalMatch(local, RetailerProduct.MatchMethod.EXACT_BARCODE);
+        }
+        if (externalLookupMisses.contains(barcode)) {
+            return null;
+        }
+        Optional<ExternalProductMatch> found = productLookupClient.lookup(barcode);
+        if (found.isEmpty()) {
+            externalLookupMisses.add(barcode);
+            return null;
+        }
+        ExternalProductMatch match = found.get();
+        // normalized_name has its own unique constraint, separate from barcode. Check first rather
+        // than insert-and-catch: a caught constraint violation can leave the transaction's
+        // persistence context unable to continue for the rest of this (potentially large) import.
+        String key = CanonicalProduct.normalizedKey(match.normalizedName());
+        if (!canonicalProductRepository.findAllByNormalizedKeyIn(List.of(key)).isEmpty()) {
+            log.info("External match for barcode {} collides with an existing catalog name; left unresolved", barcode);
+            externalLookupMisses.add(barcode);
+            return null;
+        }
+        CanonicalProduct created = canonicalProductRepository.save(new CanonicalProduct(
+            match.normalizedName(),
+            barcode,
+            match.brand(),
+            null,
+            match.category(),
+            null,
+            null,
+            null,
+            match.cci()
+        ));
+        canonicalByBarcode.put(barcode, created);
+        return new CanonicalMatch(created, RetailerProduct.MatchMethod.EXTERNAL_LOOKUP);
+    }
+
+    private record CanonicalMatch(CanonicalProduct canonical, RetailerProduct.MatchMethod method) {
     }
 
     private String basketFingerprint(

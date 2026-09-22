@@ -45,6 +45,10 @@ class AnalyticsQueryRepository {
         where r.retailer_id = ?
         """;
 
+    // A companion doesn't need to be mapped to appear: an unmapped one still shows under its raw
+    // source name (same fallback the retailer's own dashboard already uses), rather than a basket
+    // silently contributing nothing to Basket DNA just because its non-CCI items aren't cataloged
+    // yet. Only the CCI side of the basket has to be mapped - that's what makes it CCI-relevant.
     private static final String COMPANION_PRODUCTS_SQL = """
         with cci_receipts as (
             select distinct tl.receipt_id
@@ -56,14 +60,14 @@ class AnalyticsQueryRepository {
               and cp.is_cci = true
         )
         select
-            cp.normalized_name as label,
+            coalesce(cp.normalized_name, rp.original_product_name) as label,
             count(distinct companion_line.receipt_id) as basket_count
         from cci_receipts cci
         join transaction_line companion_line on companion_line.receipt_id = cci.receipt_id
         join retailer_product rp on rp.id = companion_line.retailer_product_id
-        join canonical_product cp on cp.id = rp.canonical_product_id
-        where cp.is_cci = false
-        group by cp.normalized_name
+        left join canonical_product cp on cp.id = rp.canonical_product_id
+        where coalesce(cp.is_cci, false) = false
+        group by coalesce(cp.normalized_name, rp.original_product_name)
         order by basket_count desc, label asc
         limit 10
         """;
@@ -79,16 +83,14 @@ class AnalyticsQueryRepository {
               and cp.is_cci = true
         )
         select
-            cp.category as label,
+            coalesce(nullif(trim(cp.category), ''), 'Unmapped') as label,
             count(distinct companion_line.receipt_id) as basket_count
         from cci_receipts cci
         join transaction_line companion_line on companion_line.receipt_id = cci.receipt_id
         join retailer_product rp on rp.id = companion_line.retailer_product_id
-        join canonical_product cp on cp.id = rp.canonical_product_id
-        where cp.is_cci = false
-          and cp.category is not null
-          and trim(cp.category) <> ''
-        group by cp.category
+        left join canonical_product cp on cp.id = rp.canonical_product_id
+        where coalesce(cp.is_cci, false) = false
+        group by coalesce(nullif(trim(cp.category), ''), 'Unmapped')
         order by basket_count desc, label asc
         limit 10
         """;

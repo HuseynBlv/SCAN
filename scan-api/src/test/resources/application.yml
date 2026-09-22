@@ -22,6 +22,10 @@ scan:
   runtime:
     environment: test
     database-id: scan-test
+  # Off by default so the suite never makes a real network call; tests of the lookup feature
+  # itself replace the ProductLookupClient bean with a mock instead of relying on this flag.
+  product-lookup:
+    enabled: false
   import-worker:
     initial-delay-ms: 3600000
   security:
