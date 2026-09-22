@@ -147,6 +147,47 @@ describe('CciDashboard', () => {
     expect(screen.queryByRole('heading', { name: 'SCAN intelligence workspace' })).not.toBeInTheDocument()
   })
 
+  it('switches between retailers shared with the CCI account', async () => {
+    const user = userEvent.setup()
+    const cornerMarketOverview = { ...overview, retailerCode: 'SHOP_01', retailerName: 'Corner Market' }
+    fetchAnalyticsContext.mockResolvedValue({
+      retailers: [
+        { code: 'KAGGLE', name: 'Kaggle Demo Retailer', demoData: true },
+        { code: 'SHOP_01', name: 'Corner Market', demoData: false },
+      ],
+    })
+    fetchOverview
+      .mockResolvedValueOnce(overview)
+      .mockResolvedValueOnce(cornerMarketOverview)
+    const { container } = render(<CciDashboard />)
+
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open analytics' }))
+    await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
+    expect(fetchOverview).toHaveBeenNthCalledWith(1, expect.objectContaining({ retailerCode: 'KAGGLE' }))
+
+    act(() => { container.querySelector('.cci-retailer-menu').open = true })
+    await user.click(screen.getByRole('button', { name: 'Corner Market SHOP_01' }))
+
+    await waitFor(() => expect(fetchOverview).toHaveBeenCalledTimes(2))
+    expect(fetchOverview).toHaveBeenNthCalledWith(2, expect.objectContaining({ retailerCode: 'SHOP_01' }))
+    expect(await screen.findByText('Corner Market · SHOP_01')).toBeInTheDocument()
+  })
+
+  it('hides the retailer switcher for an account shared with only one retailer', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    render(<CciDashboard />)
+
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open analytics' }))
+    await screen.findByRole('heading', { name: 'SCAN intelligence workspace' })
+
+    expect(screen.queryByText('Switch retailer')).not.toBeInTheDocument()
+  })
+
   it('clears displayed analytics when retailer permission is revoked', async () => {
     const user = userEvent.setup()
     fetchOverview

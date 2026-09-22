@@ -285,8 +285,14 @@
 .cci-dataset-menu strong,
 .cci-user-menu strong { display: block; font-size: .78rem; }
 .cci-dataset-menu p { margin: 7px 0 0; color: var(--scan-muted); font-size: .73rem; line-height: 1.5; }
-.cci-user-menu small { display: block; margin: 5px 0 13px; color: var(--scan-muted); font-size: .69rem; }
+.cci-user-menu small,
+.cci-retailer-menu small { display: block; margin: 5px 0 13px; color: var(--scan-muted); font-size: .69rem; }
 .cci-user-menu button { width: 100%; min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border: 0; border-top: 1px solid var(--scan-border); background: transparent; color: var(--scan-ink); font-size: .73rem; text-align: left; }
+.cci-retailer-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
+.cci-retailer-option { width: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--scan-ink); font-size: .73rem; font-weight: 650; text-align: left; cursor: pointer; }
+.cci-retailer-option:hover { background: #faf9f6; }
+.cci-retailer-option small { margin: 0; color: var(--scan-muted); font-size: .68rem; font-weight: 500; }
+.cci-retailer-option.is-selected { box-shadow: inset 3px 0 var(--scan-red); background: #faf9f6; color: var(--scan-red-dark); }
 
 .cci-home { gap: 26px; }
 .cci-discovery-hero {

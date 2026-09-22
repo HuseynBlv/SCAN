@@ -551,6 +551,7 @@ function DashboardPage({ activePage, askQuestion, data, onAsk, onNavigate }) {
 
 export default function CciDashboard() {
   const [credentials, setCredentials] = useState(null)
+  const [retailerOptions, setRetailerOptions] = useState([])
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -558,6 +559,7 @@ export default function CciDashboard() {
   const [askQuestion, setAskQuestion] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const layoutRef = useRef(null)
+  const retailerMenuRef = useRef(null)
 
   usePretextLayout(layoutRef, `${activePage}:${data?.generatedAt || 'login'}`)
 
@@ -583,6 +585,7 @@ export default function CciDashboard() {
     setLoading(true)
     try {
       const access = await fetchAnalyticsContext(accountCredentials)
+      setRetailerOptions(access.retailers)
       setCredentials({ ...accountCredentials, retailerCode: access.retailers[0].code })
       setRefreshKey((value) => value + 1)
     } catch (requestError) {
@@ -590,7 +593,14 @@ export default function CciDashboard() {
       setLoading(false)
     }
   }
-  function signOut() { setCredentials(null); setData(null); setError(''); setLoading(false); setActivePage('home'); setAskQuestion('') }
+  function switchRetailer(retailerCode) {
+    if (retailerMenuRef.current) retailerMenuRef.current.open = false
+    if (!credentials || retailerCode === credentials.retailerCode) return
+    setError('')
+    setLoading(true)
+    setCredentials((current) => ({ ...current, retailerCode }))
+  }
+  function signOut() { setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false); setActivePage('home'); setAskQuestion('') }
   function openAsk(question) { setAskQuestion(question.trim()); setActivePage('ask') }
 
   if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={signIn} />
@@ -601,6 +611,25 @@ export default function CciDashboard() {
       <WorkspaceHeader
         actions={(
           <>
+            {retailerOptions.length > 1 ? (
+              <details className="cci-dataset-menu cci-retailer-menu" ref={retailerMenuRef}>
+                <summary>{data.retailerName}</summary>
+                <div>
+                  <strong>Switch retailer</strong>
+                  <small>Retailers sharing aggregate analytics with CCI HQ.</small>
+                  <ul className="cci-retailer-list">
+                    {retailerOptions.map((option) => (
+                      <li key={option.code}>
+                        <button aria-current={option.code === credentials.retailerCode ? 'true' : undefined} aria-label={`${option.name} ${option.code}`} className={`cci-retailer-option${option.code === credentials.retailerCode ? ' is-selected' : ''}`} onClick={() => switchRetailer(option.code)} type="button">
+                          <span>{option.name}</span>
+                          <small>{option.code}</small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </details>
+            ) : null}
             {credentials.retailerCode === 'KAGGLE' ? (
               <details className="cci-dataset-menu">
                 <summary>Demo data</summary>
