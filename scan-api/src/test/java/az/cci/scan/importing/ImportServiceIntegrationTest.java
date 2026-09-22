@@ -4,6 +4,8 @@ import az.cci.scan.analytics.AnalyticsDataException;
 import az.cci.scan.analytics.AnalyticsService;
 import az.cci.scan.catalog.ProductMappingService;
 import az.cci.scan.catalog.ProductCatalogImportService;
+import az.cci.scan.catalog.lookup.ExternalProductMatch;
+import az.cci.scan.catalog.lookup.ProductLookupClient;
 import az.cci.scan.domain.CanonicalProduct;
 import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.ImportProfile;
@@ -25,16 +27,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 class ImportServiceIntegrationTest {
@@ -44,6 +53,9 @@ class ImportServiceIntegrationTest {
 
     @Autowired
     private ImportOperationsService importOperationsService;
+
+    @MockitoBean
+    private ProductLookupClient productLookupClient;
 
     @Autowired
     private AnalyticsService analyticsService;
@@ -206,6 +218,99 @@ class ImportServiceIntegrationTest {
         assertThat(analyticsService.overview("DEMO", false).cciBaskets())
             .as("the first import's basket should retroactively count too, since it shares this same product row")
             .isEqualTo(2);
+    }
+
+    @Test
+    void resolvesAndMapsAProductAutomaticallyWhenAnExternalLookupFindsAKnownCciBrand() {
+        when(productLookupClient.lookup("5060281464921")).thenReturn(Optional.of(
+            new ExternalProductMatch("Sprite 330ml", "Sprite", "Beverages", true)
+        ));
+        String csv = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-11,R-1101,2026-08-24T10:00:00,SPR-330,5060281464921,Sprite 330ml,1,1.2000,0.0000,1.2000
+            """;
+
+        var result = importService.importFile("DEMO", "CANONICAL", csv("external-cci.csv", csv));
+
+        assertThat(result.status()).isEqualTo(ImportJob.Status.COMPLETED);
+        assertThat(result.unresolvedProducts())
+            .as("an unseen barcode a lookup recognizes should resolve without any manual mapping")
+            .isZero();
+        RetailerProduct product = retailerProductRepository
+            .findByRetailerAndProductKey(retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow(), "BARCODE:5060281464921")
+            .orElseThrow();
+        assertThat(product.getMatchMethod()).isEqualTo(RetailerProduct.MatchMethod.EXTERNAL_LOOKUP);
+        assertThat(product.getCanonicalProduct().isCci()).isTrue();
+        assertThat(product.getCanonicalProduct().getNormalizedName()).isEqualTo("Sprite 330ml");
+        assertThat(analyticsService.overview("DEMO", false).cciBaskets()).isEqualTo(1);
+    }
+
+    @Test
+    void resolvesAProductToANonCciCatalogEntryWhenTheLookupBrandIsNotCci() {
+        when(productLookupClient.lookup("7622300000000")).thenReturn(Optional.of(
+            new ExternalProductMatch("Lay's Classic 40g", "Lay's", "Snacks", false)
+        ));
+        String csv = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-11,R-1102,2026-08-24T10:05:00,LAYS-40,7622300000000,Lay's Classic 40g,1,1.0000,0.0000,1.0000
+            """;
+
+        var result = importService.importFile("DEMO", "CANONICAL", csv("external-non-cci.csv", csv));
+
+        assertThat(result.unresolvedProducts()).isZero();
+        RetailerProduct product = retailerProductRepository
+            .findByRetailerAndProductKey(retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow(), "BARCODE:7622300000000")
+            .orElseThrow();
+        assertThat(product.getCanonicalProduct().isCci())
+            .as("the lookup found the product but it is not a Coca-Cola System brand")
+            .isFalse();
+    }
+
+    @Test
+    void leavesAProductUnresolvedWhenNothingIsFoundLocallyOrExternally() {
+        when(productLookupClient.lookup("0000000000000")).thenReturn(Optional.empty());
+        String csv = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-11,R-1103,2026-08-24T10:10:00,MYST-01,0000000000000,Mystery Item,1,1.0000,0.0000,1.0000
+            """;
+
+        var result = importService.importFile("DEMO", "CANONICAL", csv("external-miss.csv", csv));
+
+        assertThat(result.status()).isEqualTo(ImportJob.Status.COMPLETED);
+        assertThat(result.unresolvedProducts()).isEqualTo(1);
+    }
+
+    @Test
+    void looksUpAnUnseenBarcodeOnlyOnceEvenWhenItAppearsOnSeveralLinesInOneImport() {
+        when(productLookupClient.lookup("4006381333931")).thenReturn(Optional.of(
+            new ExternalProductMatch("Haribo Goldbears 100g", "Haribo", "Snacks", false)
+        ));
+        String csv = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-11,R-1104,2026-08-24T10:15:00,HAR-100,4006381333931,Haribo Goldbears 100g,1,1.0000,0.0000,1.0000
+            STORE-11,R-1105,2026-08-24T10:16:00,HAR-100,4006381333931,Haribo Goldbears 100g,2,1.0000,0.0000,2.0000
+            """;
+
+        importService.importFile("DEMO", "CANONICAL", csv("external-repeat.csv", csv));
+
+        verify(productLookupClient, times(1)).lookup("4006381333931");
+        assertThat(canonicalProductRepository.findAllByNormalizedKeyIn(
+            List.of(CanonicalProduct.normalizedKey("Haribo Goldbears 100g"))
+        )).hasSize(1);
+    }
+
+    @Test
+    void neverConsultsTheExternalLookupWhenTheBarcodeAlreadyExistsInTheLocalCatalog() throws IOException {
+        // Every barcode in this fixture is already seeded locally by setUp() and resolves with
+        // 0 unresolved products on its own (see importsCanonicalCsvAndDoesNotDuplicateTheSameFile).
+        // A stubbed lookup that returns something different would reveal it being consulted anyway.
+        when(productLookupClient.lookup(anyString())).thenReturn(Optional.of(
+            new ExternalProductMatch("Should never be used", "Should never be used", null, false)
+        ));
+
+        importService.importFile("DEMO", "CANONICAL", canonicalFixture());
+
+        verifyNoInteractions(productLookupClient);
     }
 
     @Test
@@ -489,6 +594,31 @@ class ImportServiceIntegrationTest {
             assertThat(sku.quantity()).isEqualByComparingTo("3.0000");
             assertThat(sku.revenue()).isEqualByComparingTo("4.5000");
         });
+    }
+
+    @Test
+    void showsAnUnmappedCompanionByItsRawNameInsteadOfDroppingTheBasket() {
+        String basket = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-01,R-9200,2026-08-24T18:00:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,1.50
+            STORE-01,R-9200,2026-08-24T18:00:00,LOCAL-BREAD,,Village Bakery Bread,1,1.10,0.00,1.10
+            """;
+
+        importService.importFile("DEMO", "CANONICAL", csv("unmapped-companion.csv", basket));
+        var overview = analyticsService.overview("DEMO", true);
+
+        assertThat(overview.cciBaskets())
+            .as("the basket still counts as CCI-relevant purely from its mapped Coca-Cola line")
+            .isEqualTo(1);
+        assertThat(overview.topCompanionProducts()).singleElement().satisfies(companion -> {
+            assertThat(companion.name())
+                .as("an unmapped companion shows under its raw source name rather than being dropped")
+                .isEqualTo("Village Bakery Bread");
+            assertThat(companion.basketCount()).isEqualTo(1);
+        });
+        assertThat(overview.topCompanionCategories()).singleElement().satisfies(category ->
+            assertThat(category.category()).isEqualTo("Unmapped")
+        );
     }
 
     @Test
