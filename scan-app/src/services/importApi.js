@@ -337,3 +337,26 @@ export async function saveProductMapping({ retailerProductId, canonicalProductId
   if (!response.ok) throw new ScanApiError(await connectionError(response), response.status)
   return normalizeRetailerProduct(await response.json())
 }
+
+export async function createCanonicalProduct({
+  normalizedName, barcode, brand, manufacturer, category, subcategory, packageSize, packageType, cci,
+  username, password, signal,
+}) {
+  const response = await fetchJson('/api/v1/product-mappings/catalog', {
+    method: 'POST',
+    username,
+    password,
+    signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      normalizedName, barcode: barcode || null, brand: brand || null, manufacturer: manufacturer || null,
+      category: category || null, subcategory: subcategory || null, packageSize: packageSize || null,
+      packageType: packageType || null, cci,
+    }),
+  })
+  if (!response.ok) {
+    if (response.status === 409) throw new ScanApiError('That barcode is already used by another SCAN product.', 409)
+    throw new ScanApiError(await connectionError(response), response.status)
+  }
+  return normalizeCanonicalProduct(await response.json())
+}
