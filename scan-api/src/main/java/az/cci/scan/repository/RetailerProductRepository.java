@@ -33,4 +33,6 @@ public interface RetailerProductRepository extends JpaRepository<RetailerProduct
     List<RetailerProduct> findAllByRetailerAndCanonicalProductIsNullOrderByOriginalProductNameAsc(
         Retailer retailer
     );
+
+    List<RetailerProduct> findAllByRetailer(Retailer retailer);
 }

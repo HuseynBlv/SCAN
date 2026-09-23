@@ -135,6 +135,31 @@ export async function updateOnboardingCciSharing({ retailerId, enabled, ...crede
   }))
 }
 
+function normalizeDeletion(value, field = 'deletion') {
+  const data = object(value, field)
+  return {
+    retailerCode: string(data.retailerCode, `${field}.retailerCode`),
+    retailerName: string(data.retailerName, `${field}.retailerName`),
+    deletedStores: count(data.deletedStores, `${field}.deletedStores`),
+    deletedImportProfiles: count(data.deletedImportProfiles, `${field}.deletedImportProfiles`),
+    deletedImportJobs: count(data.deletedImportJobs, `${field}.deletedImportJobs`),
+    deletedReceipts: count(data.deletedReceipts, `${field}.deletedReceipts`),
+    deletedTransactionLines: count(data.deletedTransactionLines, `${field}.deletedTransactionLines`),
+    deletedRetailerProducts: count(data.deletedRetailerProducts, `${field}.deletedRetailerProducts`),
+    deletedAccounts: count(data.deletedAccounts, `${field}.deletedAccounts`),
+    deletedAt: string(data.deletedAt, `${field}.deletedAt`),
+  }
+}
+
+export async function deleteOnboardingRetailer({ retailerId, confirmRetailerCode, ...credentials }) {
+  return normalizeDeletion(await request(`/api/v1/onboarding/retailers/${encodeURIComponent(retailerId)}`, {
+    ...credentials,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmRetailerCode }),
+  }))
+}
+
 export async function addOnboardingStore({ retailerId, request: body, ...credentials }) {
   return normalizeStore(await request(`/api/v1/onboarding/retailers/${encodeURIComponent(retailerId)}/stores`, {
     ...credentials,

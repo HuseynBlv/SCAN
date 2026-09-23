@@ -323,6 +323,57 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void onlyOnboardingOperatorsCanDeleteARetailerAndOnlyWithTheMatchingConfirmationCode() throws Exception {
+        String retailerJson = mockMvc.perform(post("/api/v1/onboarding/retailers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name": "Disposable Shop",
+                      "zoneId": "Asia/Baku",
+                      "stores": [{"externalStoreId": "DISP-01", "name": "Only store"}]
+                    }
+                    """)
+                .with(httpBasic("test-onboarding", "test-onboarding-password")))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        String retailerId = JsonPath.read(retailerJson, "$.id");
+        String retailerCode = JsonPath.read(retailerJson, "$.code");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/onboarding/retailers/{retailerId}", retailerId
+            )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"confirmRetailerCode\": \"" + retailerCode + "\"}")
+                .with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/onboarding/retailers/{retailerId}", retailerId
+            )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"confirmRetailerCode\": \"not-the-code\"}")
+                .with(httpBasic("test-onboarding", "test-onboarding-password")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error", org.hamcrest.Matchers.containsString("did not match")));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                "/api/v1/onboarding/retailers/{retailerId}", retailerId
+            )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"confirmRetailerCode\": \"" + retailerCode + "\"}")
+                .with(httpBasic("test-onboarding", "test-onboarding-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.retailerCode").value(retailerCode))
+            .andExpect(jsonPath("$.deletedStores").value(1));
+
+        mockMvc.perform(post("/api/v1/onboarding/retailers/{retailerId}/stores", retailerId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"externalStoreId\": \"NEW-01\", \"name\": \"New store\"}")
+                .with(httpBasic("test-onboarding", "test-onboarding-password")))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void returnsImportContextFromTheAccountAndNeverFromQueryParameters() throws Exception {
         mockMvc.perform(get("/api/v1/imports/context")
                 .param("retailerCode", "PRIVATE")

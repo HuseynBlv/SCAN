@@ -13,4 +13,6 @@ public interface OperationalAuditEventRepository extends JpaRepository<Operation
 
     @EntityGraph(attributePaths = "retailer")
     List<OperationalAuditEvent> findAllByRetailerOrderByOccurredAtDesc(Retailer retailer, Pageable pageable);
+
+    List<OperationalAuditEvent> findAllByRetailer(Retailer retailer);
 }
