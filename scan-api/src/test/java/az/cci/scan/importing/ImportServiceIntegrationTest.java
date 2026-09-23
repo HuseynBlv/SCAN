@@ -4,6 +4,7 @@ import az.cci.scan.analytics.AnalyticsDataException;
 import az.cci.scan.analytics.AnalyticsService;
 import az.cci.scan.catalog.ProductMappingService;
 import az.cci.scan.catalog.ProductCatalogImportService;
+import az.cci.scan.catalog.ProductMappingDtos.EditCanonicalProductRequest;
 import az.cci.scan.catalog.lookup.ExternalProductMatch;
 import az.cci.scan.catalog.lookup.ProductLookupClient;
 import az.cci.scan.domain.CanonicalProduct;
@@ -570,6 +571,54 @@ class ImportServiceIntegrationTest {
         });
         assertThat(mapped.matchMethod()).isEqualTo("MANUAL");
         assertThat(productMappingService.unresolved("DEMO")).isEmpty();
+    }
+
+    @Test
+    void correctsACatalogProductsNameAndCategoryAfterTheFact() {
+        // Simulates exactly what a crowd-sourced external lookup can produce: a real product,
+        // wrongly named, that nothing in the app could previously fix.
+        saveCanonical("מילקה אוריאו סנדוויץ'", "7622210826053", "Milk chocolates", false);
+        CanonicalProduct wrongName = canonicalProductRepository.findByBarcode("7622210826053").orElseThrow();
+
+        var edited = productMappingService.editCanonical(
+            wrongName.getId(),
+            new EditCanonicalProductRequest(
+                "Milka Oreo südlü sendviç şokolad 92 q", "Milka", "Mondelez", "Şirniyyat",
+                null, "92 q", "Paket", false
+            ),
+            null
+        );
+
+        assertThat(edited.normalizedName()).isEqualTo("Milka Oreo südlü sendviç şokolad 92 q");
+        assertThat(edited.category()).isEqualTo("Şirniyyat");
+        CanonicalProduct reloaded = canonicalProductRepository.findById(wrongName.getId()).orElseThrow();
+        assertThat(reloaded.getNormalizedName()).isEqualTo("Milka Oreo südlü sendviç şokolad 92 q");
+        assertThat(reloaded.getNormalizedKey()).isEqualTo("MILKA OREO SÜDLÜ SENDVIÇ ŞOKOLAD 92 Q");
+        assertThat(reloaded.getBarcode())
+            .as("editing never touches the identity barcode")
+            .isEqualTo("7622210826053");
+
+        var tombstone = auditEventRepository.findAll().stream()
+            .filter(event -> "CANONICAL_PRODUCT_EDITED".equals(event.getEventType()))
+            .findFirst().orElseThrow();
+        assertThat(tombstone.getDetail()).contains("מילקה אוריאו סנדוויץ'").contains("Milka Oreo");
+    }
+
+    @Test
+    void refusesToRenameACatalogProductToANameAnotherProductAlreadyHas() {
+        // "Coca-Cola 500ml" and "Fanta 500ml" are already seeded by setUp().
+        CanonicalProduct fanta = canonicalProductRepository.findByBarcode("5449000126241").orElseThrow();
+
+        assertThatThrownBy(() -> productMappingService.editCanonical(
+            fanta.getId(),
+            new EditCanonicalProductRequest(
+                "Coca-Cola 500ml", "Coca-Cola", "CCI", "Beverages", null, null, null, true
+            ),
+            null
+        )).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already");
+
+        assertThat(canonicalProductRepository.findById(fanta.getId()).orElseThrow().getNormalizedName())
+            .isEqualTo("Fanta 500ml");
     }
 
     @Test

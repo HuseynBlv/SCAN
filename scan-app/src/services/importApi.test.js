@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createCanonicalProduct,
   deleteImportJob,
+  editCanonicalProduct,
   fetchImportContext,
   fetchImportJob,
   fetchUnresolvedProducts,
@@ -230,6 +231,35 @@ describe('importApi', () => {
       }),
     }))
     expect(result.normalizedName).toBe('Coca-Cola 500ml')
+  })
+
+  it('corrects a catalog product and returns the updated record', async () => {
+    const updated = canonicalProduct()
+    updated.normalizedName = 'Milka Oreo südlü sendviç şokolad 92 q'
+    updated.category = 'Şirniyyat'
+    const fetchMock = vi.fn().mockResolvedValue(response({ body: updated, status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await editCanonicalProduct({
+      canonicalProductId: '55d96dd4-e5ee-47bb-bb44-58914cb9df1f',
+      normalizedName: 'Milka Oreo südlü sendviç şokolad 92 q', brand: 'Milka',
+      manufacturer: 'Mondelez', category: 'Şirniyyat', subcategory: null, packageSize: '92 g',
+      packageType: null, cci: false, username: 'scan-admin', password: 'secret',
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/v1/product-mappings/catalog/55d96dd4-e5ee-47bb-bb44-58914cb9df1f',
+    )
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        normalizedName: 'Milka Oreo südlü sendviç şokolad 92 q', brand: 'Milka',
+        manufacturer: 'Mondelez', category: 'Şirniyyat', subcategory: null, packageSize: '92 g',
+        packageType: null, cci: false,
+      }),
+    }))
+    expect(result.normalizedName).toBe('Milka Oreo südlü sendviç şokolad 92 q')
+    expect(result.category).toBe('Şirniyyat')
   })
 
   it('explains a duplicate-barcode conflict when adding a catalog product', async () => {

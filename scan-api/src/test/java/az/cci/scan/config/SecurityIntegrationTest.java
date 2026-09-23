@@ -431,6 +431,63 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void onlyAdminsCanEditACatalogProductAndCannotRenameItToACollidingName() throws Exception {
+        mockMvc.perform(post("/api/v1/product-mappings/catalog")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"normalizedName": "Wrong Language Snack", "barcode": "9990000000123", "cci": false}
+                    """)
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+
+        String createdJson = mockMvc.perform(post("/api/v1/product-mappings/catalog")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"normalizedName": "Wrong Language Snack", "barcode": "9990000000123", "cci": false}
+                    """)
+                .with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        String productId = JsonPath.read(createdJson, "$.id");
+
+        mockMvc.perform(put("/api/v1/product-mappings/catalog/{id}", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"normalizedName": "Corrected Snack Name", "category": "Snacks", "cci": false}
+                    """)
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/v1/product-mappings/catalog/{id}", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"normalizedName": "Corrected Snack Name", "category": "Snacks", "cci": false}
+                    """)
+                .with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.normalizedName").value("Corrected Snack Name"))
+            .andExpect(jsonPath("$.category").value("Snacks"))
+            .andExpect(jsonPath("$.barcode").value("9990000000123"));
+
+        mockMvc.perform(post("/api/v1/product-mappings/catalog")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"normalizedName": "Existing Other Snack", "barcode": "9990000000456", "cci": false}
+                    """)
+                .with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/api/v1/product-mappings/catalog/{id}", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"normalizedName": "Existing Other Snack", "cci": false}
+                    """)
+                .with(httpBasic("test-admin", "test-admin-password")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error", org.hamcrest.Matchers.containsString("already")));
+    }
+
+    @Test
     void refusesToImportAFileThatChangedAfterReconciliation() throws Exception {
         String previewId = previewId("test-admin", "test-admin-password");
 

@@ -25,6 +25,20 @@ public final class ProductMappingDtos {
     ) {
     }
 
+    // Barcode is deliberately not editable here - it is the product's identity key. Correcting a
+    // wrong barcode is a re-mapping decision, not a description edit.
+    public record EditCanonicalProductRequest(
+        @NotBlank String normalizedName,
+        String brand,
+        String manufacturer,
+        String category,
+        String subcategory,
+        String packageSize,
+        String packageType,
+        boolean cci
+    ) {
+    }
+
     public record ManualMappingRequest(@NotNull UUID canonicalProductId) {
     }
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   createCanonicalProduct,
   deleteImportJob,
+  editCanonicalProduct,
   fetchImportContext,
   fetchImportAudit,
   fetchImportHistory,
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { id: 'connections', label: 'Connections', icon: 'connection' },
   { id: 'import', label: 'Import data', icon: 'upload' },
   { id: 'mapping', label: 'Product mapping', icon: 'mapping' },
+  { id: 'catalog', label: 'SCAN catalog', icon: 'products' },
   { id: 'history', label: 'Import history', icon: 'sync' },
 ]
 
@@ -655,9 +657,89 @@ function ProductMapping({ catalog, error, loading, mappingItems, onCreateAndMap,
   )
 }
 
-function Page({ activePage, audit, catalog, context, deletingJobId, history, historyError, historyLoading, mappingError, mappingItems, mappingLoading, onContextChange, onCreateAndMap, onDeleteJob, onHistoryRefresh, onImportComplete, onMap, onNavigate, operations }) {
+function catalogDraft(item) {
+  return {
+    normalizedName: item.normalizedName, brand: item.brand || '', manufacturer: item.manufacturer || '',
+    category: item.category || '', subcategory: item.subcategory || '', packageSize: item.packageSize || '',
+    packageType: item.packageType || '', cci: item.cci,
+  }
+}
+
+function Catalog({ catalog, error, loading, onEdit }) {
+  const [search, setSearch] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [draft, setDraft] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const visible = catalog.filter((item) => `${item.normalizedName} ${item.category || ''} ${item.brand || ''}`.toLowerCase().includes(search.toLowerCase().trim()))
+
+  function startEdit(item) {
+    setEditingId(item.id)
+    setDraft(catalogDraft(item))
+    setSaveError('')
+  }
+  function cancelEdit() { setEditingId(null); setDraft(null); setSaveError('') }
+  function updateField(field, value) { setDraft((current) => ({ ...current, [field]: value })) }
+  async function save(item) {
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onEdit(item.id, draft)
+      setEditingId(null)
+      setDraft(null)
+    } catch (saveErrorCaught) {
+      setSaveError(saveErrorCaught?.message || 'The catalog product could not be saved.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <LoadingState title="Loading SCAN catalog…" description="Reading every reviewed product." />
+  return (
+    <div className="scan-page-stack">
+      <PageIntro eyebrow="SCAN catalog" title="Review and correct catalog products" description="Fix a name or category that was picked up wrong - by an external barcode lookup, a bulk catalog import, or a typo." aside={<StatusBadge tone="neutral">{integer.format(catalog.length)} products</StatusBadge>} />
+      {error ? <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div> : null}
+      <section className="connection-mapping-panel">
+        <header><div><h2>Catalog products</h2><p>A correction here updates every retailer's analytics immediately - no re-import needed.</p></div><label><span className="sr-only">Search catalog products</span><ScanIcon name="explore" size={18} /><input type="search" placeholder="Search catalog products" value={search} onChange={(event) => setSearch(event.target.value)} /></label></header>
+        {!visible.length ? <EmptyState compact title="No matching catalog products">Try a different name, brand, or category.</EmptyState> : <div className="connection-catalog-list">
+          {visible.map((item) => (
+            <article key={item.id} className={editingId === item.id ? 'is-editing' : ''}>
+              {editingId === item.id ? (
+                <div className="connection-new-product-form">
+                  <div className="connection-new-product-fields">
+                    <label><span>Product name</span><input required value={draft.normalizedName} onChange={(event) => updateField('normalizedName', event.target.value)} /></label>
+                    <label><span>Brand</span><input value={draft.brand} onChange={(event) => updateField('brand', event.target.value)} placeholder="Optional" /></label>
+                    <label><span>Category</span><input value={draft.category} onChange={(event) => updateField('category', event.target.value)} placeholder="Optional" /></label>
+                    <label><span>Manufacturer</span><input value={draft.manufacturer} onChange={(event) => updateField('manufacturer', event.target.value)} placeholder="Optional" /></label>
+                  </div>
+                  {saveError ? <div className="cci-form-error" role="alert">{saveError}</div> : null}
+                  <div className="connection-new-product-actions">
+                    <label className="connection-new-product-cci"><input checked={draft.cci} onChange={(event) => updateField('cci', event.target.checked)} type="checkbox" /><span>This is a CCI product</span></label>
+                    <div>
+                      <button className="scan-button scan-button-secondary" disabled={saving} onClick={cancelEdit} type="button">Cancel</button>
+                      <button className="scan-button scan-button-dark" disabled={saving || !draft.normalizedName.trim()} onClick={() => save(item)} type="button">{saving ? 'Saving…' : 'Save'}</button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="connection-source-product"><strong>{item.normalizedName}</strong><small>{item.category || 'No category'}{item.brand ? ` · ${item.brand}` : ''}{item.barcode ? ` · ${item.barcode}` : ''}</small></div>
+                  {item.cci ? <StatusBadge tone="success">CCI</StatusBadge> : <span />}
+                  <button className="scan-button scan-button-secondary" onClick={() => startEdit(item)} type="button">Edit</button>
+                </>
+              )}
+            </article>
+          ))}
+        </div>}
+      </section>
+    </div>
+  )
+}
+
+function Page({ activePage, audit, catalog, context, deletingJobId, history, historyError, historyLoading, mappingError, mappingItems, mappingLoading, onContextChange, onCreateAndMap, onDeleteJob, onEditCanonical, onHistoryRefresh, onImportComplete, onMap, onNavigate, operations }) {
   if (activePage === 'import') return <ImportData context={context} onContextChange={onContextChange} onImportComplete={onImportComplete} onNavigate={onNavigate} />
   if (activePage === 'mapping') return <ProductMapping catalog={catalog} error={mappingError} loading={mappingLoading} mappingItems={mappingItems} onCreateAndMap={onCreateAndMap} onMap={onMap} />
+  if (activePage === 'catalog') return <Catalog catalog={catalog} error={mappingError} loading={mappingLoading} onEdit={onEditCanonical} />
   if (activePage === 'history') return <ImportHistory audit={audit} deletingId={deletingJobId} error={historyError} history={history} loading={historyLoading} onDelete={onDeleteJob} onRefresh={onHistoryRefresh} operations={operations} />
   return <Connections context={context} onNavigate={onNavigate} unresolvedCount={mappingItems.length} />
 }
@@ -746,7 +828,7 @@ export default function DataConnection() {
 
   function navigate(page) {
     setActivePage(page)
-    if (page === 'mapping') loadMapping()
+    if (page === 'mapping' || page === 'catalog') loadMapping()
     if (page === 'history') loadHistory()
   }
 
@@ -783,6 +865,12 @@ export default function DataConnection() {
     }
   }
 
+  async function editCanonical(canonicalProductId, draft) {
+    const updated = await editCanonicalProduct({ ...context, canonicalProductId, ...draft })
+    setCatalog((items) => items.map((item) => (item.id === canonicalProductId ? updated : item)))
+    return updated
+  }
+
   function signOut() {
     setContext(null)
     setActivePage('connections')
@@ -798,7 +886,7 @@ export default function DataConnection() {
   return (
     <div ref={layoutRef}>
       <WorkspaceShell activePage={activePage} accountLabel={context.retailerCode} accountMeta={context.profileName} brandSubtitle="Data Connection" header={header} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="connection" privacyLabel="Admin-only import and mapping access">
-        <Page activePage={activePage} audit={audit} catalog={catalog} context={context} deletingJobId={deletingJobId} history={history} historyError={historyError} historyLoading={historyLoading} mappingError={mappingError} mappingItems={mappingItems} mappingLoading={mappingLoading} onContextChange={setContext} onCreateAndMap={createAndMapProduct} onDeleteJob={deleteJob} onHistoryRefresh={loadHistory} onImportComplete={importComplete} onMap={mapProduct} onNavigate={navigate} operations={operations} />
+        <Page activePage={activePage} audit={audit} catalog={catalog} context={context} deletingJobId={deletingJobId} history={history} historyError={historyError} historyLoading={historyLoading} mappingError={mappingError} mappingItems={mappingItems} mappingLoading={mappingLoading} onContextChange={setContext} onCreateAndMap={createAndMapProduct} onDeleteJob={deleteJob} onEditCanonical={editCanonical} onHistoryRefresh={loadHistory} onImportComplete={importComplete} onMap={mapProduct} onNavigate={navigate} operations={operations} />
       </WorkspaceShell>
     </div>
   )
