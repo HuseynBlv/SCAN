@@ -51,7 +51,11 @@ class RetailerAnalyticsQueryRepository {
     private static final String TOP_PRODUCTS_SQL = """
         select
             coalesce(cp.normalized_name, rp.original_product_name) as product_name,
-            coalesce(nullif(trim(cp.category), ''), 'Unmapped') as category,
+            coalesce(
+                nullif(trim(cp.category), ''),
+                nullif(trim(rp.original_category), ''),
+                'Unmapped'
+            ) as category,
             count(distinct r.id) as basket_count,
             sum(tl.quantity) as quantity,
             sum(tl.line_total) as revenue
@@ -62,14 +66,22 @@ class RetailerAnalyticsQueryRepository {
         where r.retailer_id = ?
           and r.transaction_timestamp >= ?
         group by coalesce(cp.normalized_name, rp.original_product_name),
-                 coalesce(nullif(trim(cp.category), ''), 'Unmapped')
+                 coalesce(
+                     nullif(trim(cp.category), ''),
+                     nullif(trim(rp.original_category), ''),
+                     'Unmapped'
+                 )
         order by revenue desc, quantity desc, product_name asc
         limit 10
         """;
 
     private static final String TOP_CATEGORIES_SQL = """
         select
-            coalesce(nullif(trim(cp.category), ''), 'Unmapped') as category,
+            coalesce(
+                nullif(trim(cp.category), ''),
+                nullif(trim(rp.original_category), ''),
+                'Unmapped'
+            ) as category,
             count(distinct r.id) as basket_count,
             sum(tl.quantity) as quantity,
             sum(tl.line_total) as revenue
@@ -79,7 +91,11 @@ class RetailerAnalyticsQueryRepository {
         left join canonical_product cp on cp.id = rp.canonical_product_id
         where r.retailer_id = ?
           and r.transaction_timestamp >= ?
-        group by coalesce(nullif(trim(cp.category), ''), 'Unmapped')
+        group by coalesce(
+            nullif(trim(cp.category), ''),
+            nullif(trim(rp.original_category), ''),
+            'Unmapped'
+        )
         order by revenue desc, quantity desc, category asc
         limit 10
         """;

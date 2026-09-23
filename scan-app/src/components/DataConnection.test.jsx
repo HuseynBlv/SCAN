@@ -5,6 +5,7 @@ import DataConnection from './DataConnection'
 import {
   createCanonicalProduct,
   deleteImportJob,
+  editCanonicalProduct,
   fetchImportContext,
   fetchImportAudit,
   fetchImportHistory,
@@ -21,6 +22,7 @@ import {
 vi.mock('../services/importApi', () => ({
   createCanonicalProduct: vi.fn(),
   deleteImportJob: vi.fn(),
+  editCanonicalProduct: vi.fn(),
   fetchImportContext: vi.fn(),
   fetchImportAudit: vi.fn(),
   fetchImportHistory: vi.fn(),
@@ -99,6 +101,7 @@ describe('DataConnection', () => {
     uploadImport.mockReset()
     deleteImportJob.mockReset()
     createCanonicalProduct.mockReset()
+    editCanonicalProduct.mockReset()
   })
 
   it('links the sign-in screen to every other portal', () => {
@@ -360,5 +363,56 @@ describe('DataConnection', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('That barcode is already used by another SCAN product.')
     expect(saveProductMapping).not.toHaveBeenCalled()
+  })
+
+  it('corrects a catalog product an external lookup resolved with the wrong-language name', async () => {
+    const user = userEvent.setup()
+    const wrongLanguageProduct = {
+      ...canonicalProduct, id: 'canonical-wrong-name', normalizedName: "מילקה אוריאו סנדוויץ'",
+      category: 'Milk chocolates', cci: false,
+    }
+    fetchProductCatalog.mockResolvedValue([wrongLanguageProduct])
+    editCanonicalProduct.mockResolvedValue({
+      ...wrongLanguageProduct, normalizedName: 'Milka Oreo südlü sendviç şokolad 92 q', category: 'Şirniyyat',
+    })
+    render(<DataConnection />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'SCAN catalog' })[0])
+    expect(await screen.findByRole('heading', { name: 'Review and correct catalog products' })).toBeInTheDocument()
+    expect(screen.getByText("מילקה אוריאו סנדוויץ'")).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const nameInput = screen.getByLabelText('Product name')
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Milka Oreo südlü sendviç şokolad 92 q')
+    const categoryInput = screen.getByLabelText('Category')
+    await user.clear(categoryInput)
+    await user.type(categoryInput, 'Şirniyyat')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(editCanonicalProduct).toHaveBeenCalledWith(expect.objectContaining({
+      canonicalProductId: 'canonical-wrong-name',
+      normalizedName: 'Milka Oreo südlü sendviç şokolad 92 q',
+      category: 'Şirniyyat',
+    })))
+    expect(await screen.findByText('Milka Oreo südlü sendviç şokolad 92 q')).toBeInTheDocument()
+    expect(screen.queryByText("מילקה אוריאו סנדוויץ'")).not.toBeInTheDocument()
+  })
+
+  it('reports why a catalog product edit could not be saved and keeps the form open', async () => {
+    const user = userEvent.setup()
+    fetchProductCatalog.mockResolvedValue([canonicalProduct])
+    editCanonicalProduct.mockRejectedValue(new Error('Another SCAN product is already named "Coca-Cola 500ml"'))
+    render(<DataConnection />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'SCAN catalog' })[0])
+    await screen.findByRole('heading', { name: 'Review and correct catalog products' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already named')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   })
 })

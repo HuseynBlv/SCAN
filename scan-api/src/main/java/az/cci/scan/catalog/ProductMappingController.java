@@ -22,6 +22,7 @@ import java.util.UUID;
 import static az.cci.scan.catalog.ProductMappingDtos.CanonicalProductResponse;
 import static az.cci.scan.catalog.ProductMappingDtos.CatalogImportResponse;
 import static az.cci.scan.catalog.ProductMappingDtos.CreateCanonicalProductRequest;
+import static az.cci.scan.catalog.ProductMappingDtos.EditCanonicalProductRequest;
 import static az.cci.scan.catalog.ProductMappingDtos.ManualMappingRequest;
 import static az.cci.scan.catalog.ProductMappingDtos.RetailerProductResponse;
 
@@ -59,6 +60,15 @@ public class ProductMappingController {
         @Valid @RequestBody CreateCanonicalProductRequest request
     ) {
         return productMappingService.createCanonical(request);
+    }
+
+    @PutMapping("/catalog/{canonicalProductId}")
+    public CanonicalProductResponse editCanonical(
+        @PathVariable UUID canonicalProductId,
+        @Valid @RequestBody EditCanonicalProductRequest request,
+        Authentication authentication
+    ) {
+        return productMappingService.editCanonical(canonicalProductId, request, authentication);
     }
 
     @PostMapping(path = "/catalog-imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

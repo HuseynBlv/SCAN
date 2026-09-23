@@ -48,6 +48,9 @@ public class CanonicalProduct {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt = Instant.now();
+
     protected CanonicalProduct() {
     }
 
@@ -72,6 +75,34 @@ public class CanonicalProduct {
         this.packageSize = packageSize;
         this.packageType = packageType;
         this.cci = cci;
+    }
+
+    /**
+     * Corrects a catalog entry after the fact - most importantly, one created by an unattended
+     * external barcode lookup, whose name reflects whatever language the original crowd-sourced
+     * contributor used. The caller is responsible for checking the new name doesn't collide with
+     * another product's normalized_key before calling this (see ProductMappingService.editCanonical).
+     */
+    public void edit(
+        String normalizedName,
+        String brand,
+        String manufacturer,
+        String category,
+        String subcategory,
+        String packageSize,
+        String packageType,
+        boolean cci
+    ) {
+        this.normalizedName = normalizedName.trim();
+        this.normalizedKey = normalizedKey(normalizedName);
+        this.brand = brand;
+        this.manufacturer = manufacturer;
+        this.category = category;
+        this.subcategory = subcategory;
+        this.packageSize = packageSize;
+        this.packageType = packageType;
+        this.cci = cci;
+        this.updatedAt = Instant.now();
     }
 
     public UUID getId() {
@@ -116,6 +147,10 @@ public class CanonicalProduct {
 
     public boolean isCci() {
         return cci;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
     public static String normalizedKey(String normalizedName) {
