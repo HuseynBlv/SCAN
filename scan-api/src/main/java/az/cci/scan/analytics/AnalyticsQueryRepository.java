@@ -83,14 +83,22 @@ class AnalyticsQueryRepository {
               and cp.is_cci = true
         )
         select
-            coalesce(nullif(trim(cp.category), ''), 'Unmapped') as label,
+            coalesce(
+                nullif(trim(cp.category), ''),
+                nullif(trim(rp.original_category), ''),
+                'Unmapped'
+            ) as label,
             count(distinct companion_line.receipt_id) as basket_count
         from cci_receipts cci
         join transaction_line companion_line on companion_line.receipt_id = cci.receipt_id
         join retailer_product rp on rp.id = companion_line.retailer_product_id
         left join canonical_product cp on cp.id = rp.canonical_product_id
         where coalesce(cp.is_cci, false) = false
-        group by coalesce(nullif(trim(cp.category), ''), 'Unmapped')
+        group by coalesce(
+            nullif(trim(cp.category), ''),
+            nullif(trim(rp.original_category), ''),
+            'Unmapped'
+        )
         order by basket_count desc, label asc
         limit 10
         """;

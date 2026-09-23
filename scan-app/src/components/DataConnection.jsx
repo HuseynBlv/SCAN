@@ -562,7 +562,7 @@ function ImportHistory({ audit, deletingId, error, history, loading, operations,
 const NEW_CATALOG_PRODUCT = '__new__'
 
 function emptyDraft(item) {
-  return { normalizedName: item.originalProductName, barcode: item.barcode || '', brand: '', category: '', cci: false }
+  return { normalizedName: item.originalProductName, barcode: item.barcode || '', brand: '', category: item.originalCategory || '', cci: false }
 }
 
 function ProductMapping({ catalog, error, loading, mappingItems, onCreateAndMap, onMap }) {
@@ -622,7 +622,7 @@ function ProductMapping({ catalog, error, loading, mappingItems, onCreateAndMap,
               const draft = drafts[item.id] || emptyDraft(item)
               return (
               <article key={item.id}>
-                <div className="connection-source-product"><StatusBadge tone="warning">Unresolved</StatusBadge><strong>{item.originalProductName}</strong><small>{item.productCode ? `Code ${item.productCode}` : 'No product code'} · {item.barcode ? `Barcode ${item.barcode}` : 'No barcode'}</small></div>
+                <div className="connection-source-product"><StatusBadge tone="warning">Unresolved</StatusBadge><strong>{item.originalProductName}</strong><small>{item.productCode ? `Code ${item.productCode}` : 'No product code'} · {item.barcode ? `Barcode ${item.barcode}` : 'No barcode'}{item.originalCategory ? ` · ${item.originalCategory}` : ''}</small></div>
                 <ScanIcon name="chevron" size={18} />
                 <label><span className="sr-only">SCAN product for {item.originalProductName}</span><select value={selections[item.id] || ''} onChange={(event) => setSelections((current) => ({ ...current, [item.id]: event.target.value }))}><option value="">Choose catalog product</option><option value={NEW_CATALOG_PRODUCT}>+ Add as new SCAN product</option>{catalog.map((product) => <option key={product.id} value={product.id}>{product.normalizedName}{product.category ? ` · ${product.category}` : ''}</option>)}</select></label>
                 {creatingNew ? null : <button className="scan-button scan-button-dark" disabled={!selections[item.id] || savingId === item.id} onClick={() => map(item)} type="button">{savingId === item.id ? 'Saving…' : 'Save match'}</button>}

@@ -50,6 +50,7 @@ public class CloudSaleWorkbookAdapter {
         Map.entry("productCode", "Məhsul_kodu"),
         Map.entry("barcode", "Barkod"),
         Map.entry("productName", "Məhsul_adı"),
+        Map.entry("category", "Kateqoriya"),
         Map.entry("quantity", "Miqdar"),
         Map.entry("unitPrice", "Vahid_qiyməti_AZN"),
         Map.entry("discountAmount", "Sətir_endirimi_AZN"),
@@ -162,6 +163,7 @@ public class CloudSaleWorkbookAdapter {
         String productCode = bounded(optionalText(row, columns, "Məhsul_kodu", formatter, evaluator), 128, "Məhsul_kodu");
         String barcode = bounded(optionalText(row, columns, "Barkod", formatter, evaluator), 64, "Barkod");
         String productName = bounded(text(row, columns, "Məhsul_adı", formatter, evaluator), 512, "Məhsul_adı");
+        String category = bounded(optionalText(row, columns, "Kateqoriya", formatter, evaluator), 128, "Kateqoriya");
         BigDecimal quantity = decimal(row, columns, "Miqdar", evaluator);
         BigDecimal unitPrice = decimal(row, columns, "Vahid_qiyməti_AZN", evaluator);
         BigDecimal discount = decimal(row, columns, "Sətir_endirimi_AZN", evaluator);
@@ -196,6 +198,7 @@ public class CloudSaleWorkbookAdapter {
             blankToNull(productCode),
             blankToNull(barcode),
             productName,
+            blankToNull(category),
             quantity,
             unitPrice,
             discount,

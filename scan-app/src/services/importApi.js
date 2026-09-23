@@ -174,6 +174,7 @@ function normalizeRetailerProduct(value, field = 'retailerProduct') {
     productCode: nullableString(data.productCode, `${field}.productCode`),
     barcode: nullableString(data.barcode, `${field}.barcode`),
     originalProductName: string(data.originalProductName, `${field}.originalProductName`),
+    originalCategory: nullableString(data.originalCategory, `${field}.originalCategory`),
     matchMethod: string(data.matchMethod, `${field}.matchMethod`),
     canonicalProduct: data.canonicalProduct == null
       ? null
