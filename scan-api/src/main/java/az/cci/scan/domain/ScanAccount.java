@@ -115,6 +115,19 @@ public class ScanAccount {
         updatedAt = Instant.now();
     }
 
+    /**
+     * Used when the retailer itself is being deleted: the database's own ON DELETE CASCADE on
+     * scan_account_retailer_access would eventually clean this up too, but a schema built from
+     * migrations (production) and one Hibernate generates from the entity mapping (tests) can
+     * disagree on exactly that clause, so the join row is cleared explicitly here rather than
+     * relying on which schema happens to be under the caller.
+     */
+    public void revokeRetailerAccess(Retailer revokedRetailer) {
+        if (retailerAccess.remove(revokedRetailer)) {
+            updatedAt = Instant.now();
+        }
+    }
+
     public UUID getId() {
         return id;
     }

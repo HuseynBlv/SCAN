@@ -178,4 +178,21 @@ public final class OnboardingDtos {
 
     public record RotatedCredentialResponse(CredentialResponse credential, String password) {
     }
+
+    public record DeleteRetailerRequest(@NotBlank String confirmRetailerCode) {
+    }
+
+    public record RetailerDeletionResponse(
+        String retailerCode,
+        String retailerName,
+        int deletedStores,
+        int deletedImportProfiles,
+        int deletedImportJobs,
+        int deletedReceipts,
+        int deletedTransactionLines,
+        int deletedRetailerProducts,
+        int deletedAccounts,
+        Instant deletedAt
+    ) {
+    }
 }

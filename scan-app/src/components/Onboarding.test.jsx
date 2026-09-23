@@ -6,6 +6,7 @@ import {
   addOnboardingStore,
   createOnboardingProfile,
   createOnboardingRetailer,
+  deleteOnboardingRetailer,
   fetchOnboardingContext,
   fetchOnboardingCredentials,
   fetchOnboardingRetailers,
@@ -20,6 +21,7 @@ vi.mock('../services/onboardingApi', () => ({
   addOnboardingStore: vi.fn(),
   createOnboardingProfile: vi.fn(),
   createOnboardingRetailer: vi.fn(),
+  deleteOnboardingRetailer: vi.fn(),
   fetchOnboardingContext: vi.fn(),
   fetchOnboardingCredentials: vi.fn(),
   fetchOnboardingRetailers: vi.fn(),
@@ -63,6 +65,7 @@ describe('Onboarding', () => {
     revokeOnboardingCredential.mockReset()
     rotateOnboardingCredential.mockReset()
     updateOnboardingCciSharing.mockReset()
+    deleteOnboardingRetailer.mockReset()
   })
 
   it('links the sign-in screen to every other portal', () => {
@@ -250,5 +253,70 @@ describe('Onboarding', () => {
       enabled: true,
     }))
     expect(await screen.findByText('CCI HQ can read this retailer’s aggregate analytics.')).toBeInTheDocument()
+  })
+
+  it('only deletes the retailer once its exact code is typed to confirm', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers.mockResolvedValue([retailer])
+    deleteOnboardingRetailer.mockResolvedValue({
+      retailerCode: retailer.code, retailerName: retailer.name, deletedStores: 1,
+      deletedImportProfiles: 1, deletedImportJobs: 0, deletedReceipts: 0,
+      deletedTransactionLines: 0, deletedRetailerProducts: 0, deletedAccounts: 0,
+      deletedAt: '2026-09-23T10:00:00Z',
+    })
+    render(<Onboarding />)
+    await signIn(user)
+
+    await user.click(screen.getByRole('button', { name: 'Delete retailer…' }))
+    const confirmInput = screen.getByLabelText(`Type ${retailer.code} to confirm`)
+    const deleteButton = screen.getByRole('button', { name: 'Permanently delete' })
+    expect(deleteButton).toBeDisabled()
+
+    await user.type(confirmInput, 'not the code')
+    expect(deleteButton).toBeDisabled()
+    expect(deleteOnboardingRetailer).not.toHaveBeenCalled()
+
+    await user.clear(confirmInput)
+    await user.type(confirmInput, retailer.code)
+    expect(deleteButton).toBeEnabled()
+    await user.click(deleteButton)
+
+    expect(deleteOnboardingRetailer).toHaveBeenCalledWith(expect.objectContaining({
+      retailerId: retailer.id,
+      confirmRetailerCode: retailer.code,
+    }))
+    expect(await screen.findByRole('heading', { name: 'Create the retailer' })).toBeInTheDocument()
+  })
+
+  it('cancels out of the danger zone without deleting anything', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers.mockResolvedValue([retailer])
+    render(<Onboarding />)
+    await signIn(user)
+
+    await user.click(screen.getByRole('button', { name: 'Delete retailer…' }))
+    await user.type(screen.getByLabelText(`Type ${retailer.code} to confirm`), retailer.code)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(deleteOnboardingRetailer).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Delete retailer…' })).toBeInTheDocument()
+  })
+
+  it('shows why a deletion was refused and keeps the retailer selected', async () => {
+    const user = userEvent.setup()
+    fetchOnboardingRetailers.mockResolvedValue([retailer])
+    deleteOnboardingRetailer.mockRejectedValue(
+      new Error('Confirmation code did not match this retailer’s code; nothing was deleted'),
+    )
+    render(<Onboarding />)
+    await signIn(user)
+
+    await user.click(screen.getByRole('button', { name: 'Delete retailer…' }))
+    await user.type(screen.getByLabelText(`Type ${retailer.code} to confirm`), retailer.code)
+    await user.click(screen.getByRole('button', { name: 'Permanently delete' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('nothing was deleted')
+    expect(screen.getByRole('button', { name: 'Permanently delete' })).toBeInTheDocument()
+    expect(screen.getByText(retailer.name, { selector: 'h2' })).toBeInTheDocument()
   })
 })

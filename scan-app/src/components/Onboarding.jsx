@@ -3,6 +3,7 @@ import {
   addOnboardingStore,
   createOnboardingProfile,
   createOnboardingRetailer,
+  deleteOnboardingRetailer,
   fetchOnboardingContext,
   fetchOnboardingCredentials,
   fetchOnboardingRetailers,
@@ -190,6 +191,37 @@ function CciSharingToggle({ busy, enabled, error, onToggle }) {
         <span>{enabled ? 'On' : 'Off'}</span>
       </button>
       {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
+    </div>
+  )
+}
+
+function RetailerDangerZone({ deleting, error, onCancel, onDelete, open, onOpen, retailer }) {
+  const [confirmText, setConfirmText] = useState('')
+  const matches = confirmText.trim().toUpperCase() === retailer.code.toUpperCase()
+
+  if (!open) {
+    return (
+      <div className="onboarding-danger-zone">
+        <div className="onboarding-danger-zone-copy">
+          <strong>Danger zone</strong>
+          <small>Permanently delete {retailer.name} and every receipt, product mapping, store, import job, and account bound to it.</small>
+        </div>
+        <button className="scan-button scan-button-danger" onClick={onOpen} type="button">Delete retailer…</button>
+      </div>
+    )
+  }
+  return (
+    <div className="onboarding-danger-zone is-open">
+      <div className="onboarding-danger-zone-copy">
+        <strong>Delete {retailer.name}?</strong>
+        <p>This permanently deletes every receipt, transaction line, product mapping, store, import job, and account bound to <strong>{retailer.code}</strong>. Data already shared with CCI Intelligence is removed too. This cannot be undone.</p>
+        <label><span>Type <code>{retailer.code}</code> to confirm</span><input autoComplete="off" onChange={(event) => setConfirmText(event.target.value)} placeholder={retailer.code} spellCheck="false" value={confirmText} /></label>
+        {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
+      </div>
+      <div className="onboarding-danger-zone-actions">
+        <button className="scan-button scan-button-secondary" disabled={deleting} onClick={() => { onCancel(); setConfirmText('') }} type="button">Cancel</button>
+        <button className="scan-button scan-button-danger" disabled={!matches || deleting} onClick={() => onDelete(confirmText.trim())} type="button">{deleting ? 'Deleting…' : 'Permanently delete'}</button>
+      </div>
     </div>
   )
 }
@@ -430,6 +462,9 @@ export default function Onboarding() {
   const [issued, setIssued] = useState(null)
   const [access, setAccess] = useState([])
   const [rotated, setRotated] = useState(null)
+  const [dangerZoneOpen, setDangerZoneOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const selected = useMemo(() => retailers.find((item) => item.id === selectedId) || null, [retailers, selectedId])
   const profile = selected?.importProfiles.at(-1) || null
@@ -490,6 +525,29 @@ export default function Onboarding() {
   async function updateCciSharing(enabled) {
     const saved = await perform(() => updateOnboardingCciSharing({ ...credentials, retailerId: selected.id, enabled }))
     if (saved) setRetailers((items) => items.map((item) => (item.id === saved.id ? saved : item)))
+  }
+
+  async function deleteRetailer(confirmRetailerCode) {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteOnboardingRetailer({ ...credentials, retailerId: selected.id, confirmRetailerCode })
+      const remaining = retailers.filter((item) => item.id !== selected.id)
+      setRetailers(remaining)
+      setSelectedId(remaining[0]?.id || null)
+      setCreating(remaining.length === 0)
+      setCreatingFormat(false)
+      setDangerZoneOpen(false)
+      setSampleResult(null)
+      setSampleFile(null)
+      setIssued(null)
+      setAccess([])
+      setRotated(null)
+    } catch (nextError) {
+      setDeleteError(nextError?.message || 'The retailer could not be deleted.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function addStore(request) {
@@ -597,6 +655,8 @@ export default function Onboarding() {
     setSampleFile(null)
     setIssued(null)
     setRotated(null)
+    setDangerZoneOpen(false)
+    setDeleteError('')
     const retailer = retailers.find((item) => item.id === id)
     if (retailer?.credentialsIssued) loadAccess(id)
   }
@@ -613,6 +673,8 @@ export default function Onboarding() {
     setIssued(null)
     setAccess([])
     setRotated(null)
+    setDangerZoneOpen(false)
+    setDeleteError('')
   }
 
   if (!credentials) return <Login error={loginError} loading={loginLoading} onSubmit={signIn} />
@@ -653,6 +715,7 @@ export default function Onboarding() {
               <section className="onboarding-retailer-heading"><div><span className="scan-eyebrow">Retailer tenant</span><h2>{selected.name}</h2><p>{selected.code} · {selected.zoneId}</p></div><AddStoreForm busy={busy} error={error} onSubmit={addStore} /></section>
               <div className="onboarding-store-strip">{selected.stores.map((store) => <span key={store.id}><strong>{store.name}</strong><small>{store.externalStoreId}</small></span>)}</div>
               <CciSharingToggle busy={busy} enabled={selected.cciSharingEnabled} error={error} onToggle={updateCciSharing} />
+              <RetailerDangerZone deleting={deleting} error={deleteError} onCancel={() => { setDangerZoneOpen(false); setDeleteError('') }} onDelete={deleteRetailer} onOpen={() => setDangerZoneOpen(true)} open={dangerZoneOpen} retailer={selected} />
             </>
           ) : null}
           <StepRail retailer={creating ? null : selected} />

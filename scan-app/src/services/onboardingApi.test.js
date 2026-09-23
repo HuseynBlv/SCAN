@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createOnboardingRetailer, validateOnboardingSample } from './onboardingApi'
+import { createOnboardingRetailer, deleteOnboardingRetailer, validateOnboardingSample } from './onboardingApi'
 
 function response(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: vi.fn().mockResolvedValue(body) }
@@ -47,5 +47,38 @@ describe('onboardingApi', () => {
     expect(options.body).toBeInstanceOf(FormData)
     expect(result.valid).toBe(false)
     expect(result.errors[0]).toContain('not registered')
+  })
+
+  it('sends the typed confirmation code and returns what was deleted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      retailerCode: 'FRESH_MARKET_A1B2C3', retailerName: 'Fresh Market',
+      deletedStores: 2, deletedImportProfiles: 1, deletedImportJobs: 3, deletedReceipts: 40,
+      deletedTransactionLines: 90, deletedRetailerProducts: 12, deletedAccounts: 3,
+      deletedAt: '2026-09-23T10:00:00Z',
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await deleteOnboardingRetailer({
+      retailerId: 'retailer-1', confirmRetailerCode: 'FRESH_MARKET_A1B2C3',
+      username: 'operator', password: 'secret',
+    })
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/onboarding/retailers/retailer-1')
+    expect(options.method).toBe('DELETE')
+    expect(JSON.parse(options.body)).toEqual({ confirmRetailerCode: 'FRESH_MARKET_A1B2C3' })
+    expect(result.deletedReceipts).toBe(40)
+    expect(result.deletedAccounts).toBe(3)
+  })
+
+  it('surfaces the server’s rejection when the confirmation code does not match', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(
+      { error: 'Confirmation code did not match this retailer’s code; nothing was deleted' }, 400,
+    )))
+
+    await expect(deleteOnboardingRetailer({
+      retailerId: 'retailer-1', confirmRetailerCode: 'wrong',
+      username: 'operator', password: 'secret',
+    })).rejects.toThrow('nothing was deleted')
   })
 })

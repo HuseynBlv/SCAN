@@ -24,9 +24,11 @@ import java.util.UUID;
 import static az.cci.scan.onboarding.OnboardingDtos.CreateImportProfileRequest;
 import static az.cci.scan.onboarding.OnboardingDtos.CreateRetailerRequest;
 import static az.cci.scan.onboarding.OnboardingDtos.CreateStoreRequest;
+import static az.cci.scan.onboarding.OnboardingDtos.DeleteRetailerRequest;
 import static az.cci.scan.onboarding.OnboardingDtos.ImportProfileResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.IssuedCredentialsResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.OnboardingContextResponse;
+import static az.cci.scan.onboarding.OnboardingDtos.RetailerDeletionResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.RetailerOnboardingResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.SampleValidationResponse;
 import static az.cci.scan.onboarding.OnboardingDtos.StoreResponse;
@@ -39,9 +41,14 @@ import static az.cci.scan.onboarding.OnboardingDtos.UpdateCciSharingRequest;
 public class OnboardingController {
 
     private final OnboardingService onboardingService;
+    private final RetailerDeletionService retailerDeletionService;
 
-    public OnboardingController(OnboardingService onboardingService) {
+    public OnboardingController(
+        OnboardingService onboardingService,
+        RetailerDeletionService retailerDeletionService
+    ) {
         this.onboardingService = onboardingService;
+        this.retailerDeletionService = retailerDeletionService;
     }
 
     @GetMapping("/context")
@@ -135,5 +142,16 @@ public class OnboardingController {
         Authentication authentication
     ) {
         return onboardingService.revokeCredential(retailerId, accountId, authentication);
+    }
+
+    @DeleteMapping("/retailers/{retailerId}")
+    public ResponseEntity<RetailerDeletionResponse> deleteRetailer(
+        @PathVariable UUID retailerId,
+        @Valid @RequestBody DeleteRetailerRequest request,
+        Authentication authentication
+    ) {
+        return ResponseEntity.ok()
+            .cacheControl(CacheControl.noStore())
+            .body(retailerDeletionService.delete(retailerId, request.confirmRetailerCode(), authentication));
     }
 }
