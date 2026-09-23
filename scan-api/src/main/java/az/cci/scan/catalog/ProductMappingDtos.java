@@ -72,6 +72,7 @@ public final class ProductMappingDtos {
         String productCode,
         String barcode,
         String originalProductName,
+        String originalCategory,
         String matchMethod,
         CanonicalProductResponse canonicalProduct
     ) {
@@ -82,6 +83,7 @@ public final class ProductMappingDtos {
                 product.getSourceProductCode(),
                 product.getBarcode(),
                 product.getOriginalProductName(),
+                product.getOriginalCategory(),
                 product.getMatchMethod().name(),
                 product.getCanonicalProduct() == null
                     ? null

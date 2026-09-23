@@ -11,6 +11,7 @@ public record ParsedTransactionLine(
     String productCode,
     String barcode,
     String productName,
+    String category,
     BigDecimal quantity,
     BigDecimal unitPrice,
     BigDecimal discountAmount,

@@ -622,6 +622,33 @@ class ImportServiceIntegrationTest {
     }
 
     @Test
+    void prefersASourceFileCategoryOverTheGenericUnmappedBucketForAnUnresolvedCompanion() {
+        String basket = """
+            store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total
+            STORE-01,R-9201,2026-08-24T18:00:00,COKE-500,5449000000996,Coca-Cola 500ml,1,1.50,0.00,1.50
+            STORE-01,R-9201,2026-08-24T18:00:00,LOCAL-BREAD,,Village Bakery Bread,1,1.10,0.00,1.10
+            """;
+        importService.importFile("DEMO", "CANONICAL", csv("categorized-companion.csv", basket));
+        Retailer retailer = retailerRepository.findByCodeIgnoreCase("DEMO").orElseThrow();
+        RetailerProduct bread = retailerProductRepository
+            .findByRetailerAndProductKey(retailer, "CODE:LOCAL-BREAD")
+            .orElseThrow();
+        // Simulates a format (like CloudSale's Kateqoriya column) that captures a source category
+        // even for a product nobody has mapped to the canonical catalog yet.
+        bread.recordCategory("Çörək");
+        retailerProductRepository.save(bread);
+
+        var overview = analyticsService.overview("DEMO", true);
+
+        assertThat(overview.topCompanionCategories()).singleElement().satisfies(category -> {
+            assertThat(category.category())
+                .as("a captured source category is shown instead of the generic Unmapped bucket")
+                .isEqualTo("Çörək");
+            assertThat(category.basketCount()).isEqualTo(1);
+        });
+    }
+
+    @Test
     void returnsSafeZeroMetricsWhenNoReceiptsExist() {
         var overview = analyticsService.overview("DEMO", true);
 

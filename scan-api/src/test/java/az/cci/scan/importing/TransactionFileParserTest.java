@@ -129,11 +129,43 @@ class TransactionFileParserTest {
         assertThat(analysis.lines()).hasSize(2).allSatisfy(line -> {
             assertThat(line.storeId()).isEqualTo("BK-0147");
             assertThat(line.receiptId()).isEqualTo("KASSA-01:00018402");
+            assertThat(line.category()).isEqualTo("Test category");
         });
         assertThat(analysis.reconciliation().receipts()).isEqualTo(1);
         assertThat(analysis.reconciliation().productLines()).isEqualTo(2);
         assertThat(analysis.reconciliation().reportedNetSales()).isEqualByComparingTo("4.04");
         assertThat(analysis.reconciliation().difference()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void leavesCategoryNullWhenTheSourceRowDoesNotSupplyOne() throws Exception {
+        byte[] workbookBytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("Satış çekləri");
+            List<String> headers = List.of(
+                "Obyekt_kodu", "Kassa_kodu", "Çek_nömrəsi", "Çek_tarixi", "Sətir_nömrəsi",
+                "Barkod", "Məhsul_kodu", "Məhsul_adı", "Kateqoriya", "Miqdar",
+                "Vahid_qiyməti_AZN", "Sətir_endirimi_AZN", "Sətir_məbləği_AZN",
+                "Çek_endirimi_AZN", "ƏDV_faizi", "Ödəniş_növü", "Çek_statusu", "Kassir_kodu"
+            );
+            var header = sheet.createRow(0);
+            for (int index = 0; index < headers.size(); index++) {
+                header.createCell(index).setCellValue(headers.get(index));
+            }
+            addCloudSaleRow(sheet.createRow(1), "00018402", 1, "SKU-1", "Coca-Cola 500ml", 1.15);
+            sheet.getRow(1).getCell(8).setCellValue("");
+            workbook.write(output);
+            workbookBytes = output.toByteArray();
+        }
+
+        IngestionAnalysis analysis = new CloudSaleWorkbookAdapter()
+            .analyze("CloudSale_export.xlsx", workbookBytes, profile)
+            .orElseThrow();
+
+        assertThat(analysis.valid()).isTrue();
+        assertThat(analysis.lines()).singleElement()
+            .extracting(ParsedTransactionLine::category)
+            .isNull();
     }
 
     private void addCloudSaleRow(

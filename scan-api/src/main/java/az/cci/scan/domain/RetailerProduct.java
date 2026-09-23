@@ -51,6 +51,9 @@ public class RetailerProduct {
     @Column(name = "original_product_name", nullable = false, length = 512)
     private String originalProductName;
 
+    @Column(name = "original_category", length = 128)
+    private String originalCategory;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "canonical_product_id")
     private CanonicalProduct canonicalProduct;
@@ -98,6 +101,19 @@ public class RetailerProduct {
         }
     }
 
+    /**
+     * Records a source-file category (e.g. CloudSale's Kateqoriya column) discovered on this or a
+     * later import. Companion-category analysis falls back to this when the product has no
+     * canonical mapping yet. Same never-overwrite rule as recordBarcode - this is raw source
+     * metadata, not a curated classification, so it never overrides one already captured.
+     */
+    public void recordCategory(String category) {
+        if (this.originalCategory == null && category != null && !category.isBlank()) {
+            this.originalCategory = category;
+            this.updatedAt = Instant.now();
+        }
+    }
+
     public UUID getId() {
         return id;
     }
@@ -120,6 +136,10 @@ public class RetailerProduct {
 
     public String getOriginalProductName() {
         return originalProductName;
+    }
+
+    public String getOriginalCategory() {
+        return originalCategory;
     }
 
     public CanonicalProduct getCanonicalProduct() {

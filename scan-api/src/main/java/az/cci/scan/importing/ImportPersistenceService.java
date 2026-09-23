@@ -316,6 +316,7 @@ public class ImportPersistenceService {
         }
         if (existing != null) {
             resolveWithNewlySuppliedBarcode(existing, source, canonicalByBarcode, externalLookupMisses);
+            existing.recordCategory(source.category());
             return existing;
         }
 
@@ -326,6 +327,7 @@ public class ImportPersistenceService {
             source.barcode(),
             source.productName()
         );
+        product.recordCategory(source.category());
         if (source.barcode() != null) {
             CanonicalMatch match = resolveCanonical(source.barcode(), canonicalByBarcode, externalLookupMisses);
             if (match != null) {

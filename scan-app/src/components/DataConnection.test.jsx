@@ -328,6 +328,22 @@ describe('DataConnection', () => {
     expect(await screen.findByRole('heading', { name: 'Product mapping is complete' })).toBeInTheDocument()
   })
 
+  it('shows and pre-fills a source category captured from the import format, e.g. CloudSale’s Kateqoriya column', async () => {
+    const user = userEvent.setup()
+    const categorizedProduct = { ...sourceProduct, originalCategory: 'Çörək' }
+    fetchUnresolvedProducts.mockResolvedValue([categorizedProduct])
+    fetchProductCatalog.mockResolvedValue([])
+    render(<DataConnection />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Product mapping' })[0])
+    await screen.findByRole('heading', { name: 'Match source products to SCAN' })
+    expect(screen.getByText(/Çörək/)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('SCAN product for Coke bottle'), '__new__')
+    expect(screen.getByLabelText('Category')).toHaveValue('Çörək')
+  })
+
   it('reports why a new SCAN catalog product could not be added', async () => {
     const user = userEvent.setup()
     fetchUnresolvedProducts.mockResolvedValue([sourceProduct])

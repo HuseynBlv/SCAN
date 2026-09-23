@@ -90,6 +90,9 @@ public class TransactionRowMapper {
                 productCode,
                 barcode,
                 productName,
+                // The generic CSV/XLSX profile has no category column to map yet - only the
+                // CloudSale adapter captures one today (see CloudSaleWorkbookAdapter).
+                null,
                 quantity,
                 unitPrice,
                 discount,
