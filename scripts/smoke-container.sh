@@ -73,6 +73,29 @@ wait_for_app() {
   return 1
 }
 
+# /health is liveness only (see HealthController) and returns UP as soon as Tomcat is accepting
+# connections - well before AccountBootstrapper's ApplicationRunner has committed the seeded
+# accounts, since Spring Boot runs ApplicationRunner beans after the "Started" log line, not
+# before it. Without this wait, the very first authenticated request in the assertions below can
+# race the account bootstrap and see a valid credential as "unknown" (401) instead of reaching
+# the authorization check it is actually testing (403). Retrying tolerates that race instead of
+# asserting through it once and failing.
+wait_for_accounts() {
+  local attempt actual
+  for attempt in {1..30}; do
+    actual="$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' \
+      --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/product-mappings/catalog")"
+    if [ "$actual" = "403" ]; then return 0; fi
+    if [ "$actual" != "401" ]; then
+      printf 'Unexpected status while waiting for account bootstrap: %s\n' "$actual" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  printf 'Timed out waiting for account bootstrap to complete.\n' >&2
+  return 1
+}
+
 printf 'Starting isolated PostgreSQL and a 512 MB SCAN container...\n'
 docker network create "$SCAN_SMOKE_NETWORK" >/dev/null
 SCAN_SMOKE_NETWORK_CREATED=1
@@ -107,6 +130,7 @@ docker run --detach --rm --name "$SCAN_SMOKE_APP" \
 SCAN_SMOKE_APP_CREATED=1
 resolve_app_url
 wait_for_app
+wait_for_accounts
 
 printf 'Checking health, real frontend assets, and API permissions...\n'
 expect_http 200 "$SCAN_SMOKE_URL/health"
@@ -172,6 +196,7 @@ printf 'Restarting the app to verify that database records survive app restarts.
 docker restart "$SCAN_SMOKE_APP" >/dev/null
 resolve_app_url
 wait_for_app
+wait_for_accounts
 expect_http 200 --user scan-cci:smoke-only-cci-password "$SCAN_SMOKE_URL/api/v1/analytics/overview?retailerCode=DEMO"
 assert_json '.totalBaskets == 6 and .cciBaskets == 5'
 expect_http 200 --user scan-retailer:smoke-only-retailer-password "$SCAN_SMOKE_URL/api/v1/retailer/overview?period=ALL_TIME"
