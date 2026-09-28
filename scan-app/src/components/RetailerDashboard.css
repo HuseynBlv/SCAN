@@ -111,8 +111,19 @@
   background: #fff;
 }
 
-.retailer-kpi-card > span {
+.retailer-kpi-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--scan-muted);
+}
+
+.retailer-kpi-head svg {
+  flex: 0 0 auto;
+  opacity: .7;
+}
+
+.retailer-kpi-head span {
   font-size: .68rem;
   font-weight: 700;
   letter-spacing: .05em;
@@ -155,9 +166,29 @@
 .retailer-hero-top {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
 }
+
+.retailer-hero-identity {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.retailer-hero-mark {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--scan-subtle);
+  color: var(--scan-muted);
+}
+
+.retailer-hero-mark.is-discount { background: #fdecec; color: var(--scan-red-dark); }
+.retailer-hero-mark.is-bonus { background: #e9f3ef; color: var(--scan-success); }
+.retailer-hero-mark.is-weekend { background: #fbf0dc; color: var(--scan-warning); }
+.retailer-hero-mark.is-basket { background: #e8eefb; color: var(--scan-info); }
 
 .retailer-hero-metric {
   flex: 0 0 auto;
@@ -215,6 +246,21 @@
 .retailer-hero-terms strong {
   font-size: 1rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* The commercial payoff line - the one number the whole card exists to justify - gets a little
+   more visual weight than its neighbors, without turning the card into a wall of red. */
+.retailer-hero-terms .is-payoff {
+  background: #fdecec;
+}
+
+.retailer-hero-terms .is-payoff span {
+  color: var(--scan-red-dark);
+}
+
+.retailer-hero-terms .is-payoff strong {
+  color: var(--scan-red-dark);
+  font-size: 1.1rem;
 }
 
 .retailer-hero-offer footer {
@@ -416,6 +462,40 @@
   border-top-color: var(--scan-success);
 }
 
+.retailer-pos-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 25px;
+  padding: 0 9px;
+  border-radius: 9999px;
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.retailer-pos-status-pill.is-healthy {
+  background: #e9f3ef;
+  color: var(--scan-success);
+}
+
+.retailer-pos-status-pill.is-warning {
+  background: #f8f0de;
+  color: var(--scan-warning);
+}
+
+.retailer-pos-status-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.retailer-pos-status-pill.is-healthy i {
+  animation: retailer-pulse 2.4s ease-out infinite;
+}
+
 .retailer-sync-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -528,23 +608,32 @@
   gap: 14px;
 }
 
-.retailer-offer-type {
-  display: block;
-  margin-bottom: 4px;
+.retailer-offer-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 9999px;
   color: var(--scan-muted);
-  font-size: .63rem;
+  background: var(--scan-subtle);
+  font-size: .66rem;
   font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  letter-spacing: .03em;
 }
 
-.retailer-offer-card > header h3 {
+.retailer-offer-type-chip.is-discount { background: #fdecec; color: var(--scan-red-dark); }
+.retailer-offer-type-chip.is-bonus { background: #e9f3ef; color: var(--scan-success); }
+.retailer-offer-type-chip.is-weekend { background: #fbf0dc; color: var(--scan-warning); }
+.retailer-offer-type-chip.is-basket { background: #e8eefb; color: var(--scan-info); }
+
+.retailer-offer-identity h3 {
   margin: 0;
   font-size: 1rem;
   letter-spacing: -.02em;
 }
 
-.retailer-offer-card > header small {
+.retailer-offer-identity small {
   color: var(--scan-muted);
   font-size: .7rem;
 }
@@ -596,6 +685,11 @@
   font-size: .82rem;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
+}
+
+.retailer-offer-terms .is-payoff dt,
+.retailer-offer-terms .is-payoff dd {
+  color: var(--scan-red-dark);
 }
 
 .retailer-offer-why-toggle {
@@ -657,6 +751,18 @@
   border: 1px solid var(--scan-border);
   border-radius: 12px;
   background: #fff;
+  transition: box-shadow 160ms var(--scan-enter), border-color 160ms var(--scan-enter);
+}
+
+.retailer-action-card:hover {
+  border-color: #cfcdc7;
+  box-shadow: 0 4px 14px rgba(20, 20, 20, .06);
+}
+
+/* The lead action - a real basket-affinity pairing when one exists - gets a quiet top accent
+   rather than a badge or a "top pick" label, so it reads as the strongest item without gamifying. */
+.retailer-action-grid > article:first-child {
+  border-top: 2px solid var(--scan-red);
 }
 
 .retailer-action-card > header {
@@ -742,6 +848,11 @@
   font-size: 1.5rem;
   letter-spacing: -.02em;
 }
+
+/* A quiet tier color on the level name only - a commercial-membership cue, not a game badge. */
+.retailer-partner-level strong.is-silver { color: #6b7280; }
+.retailer-partner-level strong.is-gold { color: #a3760a; }
+.retailer-partner-level strong.is-platinum { color: var(--scan-ink); }
 
 .retailer-partner-level span {
   color: var(--scan-muted);

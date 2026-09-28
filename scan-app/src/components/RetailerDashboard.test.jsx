@@ -209,7 +209,7 @@ describe('RetailerDashboard', () => {
     await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
     expect(await screen.findByRole('heading', { name: 'SCAN Partner offers' })).toBeInTheDocument()
     expect(screen.getByText('Order 3 cases')).toBeInTheDocument()
-    expect(screen.getByText('Volume discount')).toBeInTheDocument()
+    expect(screen.getByText('Volume offer')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Activate offer' }))
     expect(screen.getByRole('button', { name: 'Activating…' })).toBeDisabled()

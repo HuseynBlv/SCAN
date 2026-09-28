@@ -82,9 +82,12 @@ public class RetailerActionService {
             .map(product -> product.getNormalizedName())
             .collect(Collectors.toSet());
 
+        // Opportunity leads when it's available: a real basket-affinity pairing ("X + Y appears
+        // in N% of evening baskets") is the clearest demonstration of basket intelligence SCAN
+        // has to offer, so it belongs first rather than wherever insertion order happened to put it.
         List<Action> actions = new ArrayList<>();
-        stockRisk(recent, priorByName, cciNames).ifPresent(actions::add);
         opportunity(retailer, now).ifPresent(actions::add);
+        stockRisk(recent, priorByName, cciNames).ifPresent(actions::add);
         inventory(recent, priorByName, cciNames).ifPresent(actions::add);
         performance(retailer, now).ifPresent(actions::add);
         return actions;
