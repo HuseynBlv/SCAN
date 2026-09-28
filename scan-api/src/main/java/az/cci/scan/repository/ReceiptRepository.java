@@ -35,4 +35,6 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
 
     @EntityGraph(attributePaths = "lines")
     List<Receipt> findAllBySourceImportJob(ImportJob sourceImportJob);
+
+    long countByRetailer(Retailer retailer);
 }

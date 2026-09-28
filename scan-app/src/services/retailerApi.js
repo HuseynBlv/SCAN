@@ -120,6 +120,7 @@ function normalizeOverview(data) {
       interpretation: string(item.interpretation, `${field}.interpretation`),
       recommendedAction: string(item.recommendedAction, `${field}.recommendedAction`),
     })),
+    lifetimeTransactionsProcessed: count(data.lifetimeTransactionsProcessed, 'lifetimeTransactionsProcessed'),
   }
 
   if (normalized.cciBaskets > normalized.totalBaskets) invalid('cciBaskets')
@@ -169,5 +170,151 @@ export async function fetchRetailerOverview({ period, username, password, signal
   } catch (error) {
     if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
     throw new ScanApiError('The SCAN API did not return readable retailer analytics.')
+  }
+}
+
+const OFFER_STATUSES = new Set(['AVAILABLE', 'ACTIVE', 'COMPLETED'])
+const ACTION_TYPES = new Set(['URGENT', 'OPPORTUNITY', 'INVENTORY', 'PERFORMANCE'])
+
+function enumValue(value, allowed, field) {
+  if (!allowed.has(value)) invalid(field)
+  return value
+}
+
+function nullableNumber(value, field) {
+  if (value == null) return null
+  return number(value, field)
+}
+
+function normalizeOffer(item, field) {
+  return {
+    offerKey: string(item.offerKey, `${field}.offerKey`),
+    title: string(item.title, `${field}.title`),
+    productName: string(item.productName, `${field}.productName`),
+    category: nullableString(item.category, `${field}.category`),
+    reason: string(item.reason, `${field}.reason`),
+    whyReasons: stringArray(item.whyReasons, `${field}.whyReasons`),
+    normalCondition: string(item.normalCondition, `${field}.normalCondition`),
+    partnerCondition: string(item.partnerCondition, `${field}.partnerCondition`),
+    estimatedBenefitAzn: nullableNumber(item.estimatedBenefitAzn, `${field}.estimatedBenefitAzn`),
+    benefitSummary: string(item.benefitSummary, `${field}.benefitSummary`),
+    expiresAt: timestamp(item.expiresAt, `${field}.expiresAt`),
+    status: enumValue(item.status, OFFER_STATUSES, `${field}.status`),
+  }
+}
+
+function normalizeOffersResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new ScanApiError('SCAN API returned an unexpected offers response.')
+  }
+  return {
+    generatedAt: timestamp(data.generatedAt, 'generatedAt'),
+    available: array(data.available, 'available', normalizeOffer),
+    active: array(data.active, 'active', normalizeOffer),
+    completed: array(data.completed, 'completed', normalizeOffer),
+  }
+}
+
+function normalizeAction(item, field) {
+  return {
+    id: string(item.id, `${field}.id`),
+    type: enumValue(item.type, ACTION_TYPES, `${field}.type`),
+    title: string(item.title, `${field}.title`),
+    explanation: string(item.explanation, `${field}.explanation`),
+    recommendation: string(item.recommendation, `${field}.recommendation`),
+    metricLabel: string(item.metricLabel, `${field}.metricLabel`),
+    metricValue: string(item.metricValue, `${field}.metricValue`),
+  }
+}
+
+function normalizePartnerStatus(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new ScanApiError('SCAN API returned an unexpected partner status response.')
+  }
+  return {
+    level: string(data.level, 'level'),
+    progressPercentage: count(data.progressPercentage, 'progressPercentage'),
+    nextLevel: nullableString(data.nextLevel, 'nextLevel'),
+    daysUntilNextLevel: data.daysUntilNextLevel == null ? null : count(data.daysUntilNextLevel, 'daysUntilNextLevel'),
+    requirements: array(data.requirements, 'requirements', (item, field) => ({
+      label: string(item.label, `${field}.label`),
+      met: Boolean(item.met),
+    })),
+    benefits: (() => {
+      const benefits = data.benefits
+      if (!benefits || typeof benefits !== 'object') invalid('benefits')
+      return {
+        thisMonth: number(benefits.thisMonth, 'benefits.thisMonth'),
+        lastMonth: number(benefits.lastMonth, 'benefits.lastMonth'),
+        lifetime: number(benefits.lifetime, 'benefits.lifetime'),
+      }
+    })(),
+    benefitHistory: array(data.benefitHistory, 'benefitHistory', (item, field) => ({
+      activatedAt: timestamp(item.activatedAt, `${field}.activatedAt`),
+      title: string(item.title, `${field}.title`),
+      benefitSummary: string(item.benefitSummary, `${field}.benefitSummary`),
+      estimatedBenefitAzn: nullableNumber(item.estimatedBenefitAzn, `${field}.estimatedBenefitAzn`),
+    })),
+  }
+}
+
+async function authorizedRequest(path, { method = 'GET', username, password, signal } = {}) {
+  let response
+  try {
+    response = await fetch(apiUrl(path), {
+      method,
+      signal,
+      headers: {
+        Accept: 'application/json',
+        Authorization: basicAuthorization(username, password),
+      },
+    })
+  } catch (error) {
+    if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
+    throw new ScanApiError('Cannot reach the SCAN API. A sleeping demo may need a minute before you retry.')
+  }
+  if (!response.ok) throw new ScanApiError(await errorMessage(response), response.status)
+  return response.json()
+}
+
+export async function fetchRetailerOffers({ username, password, signal }) {
+  try {
+    return normalizeOffersResponse(await authorizedRequest('/api/v1/retailer/offers', { username, password, signal }))
+  } catch (error) {
+    if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
+    throw new ScanApiError('The SCAN API did not return readable offers.')
+  }
+}
+
+export async function activateRetailerOffer({ offerKey, username, password, signal }) {
+  try {
+    return normalizeOffer(
+      await authorizedRequest(`/api/v1/retailer/offers/${encodeURIComponent(offerKey)}/activate`, {
+        method: 'POST', username, password, signal,
+      }),
+      'offer',
+    )
+  } catch (error) {
+    if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
+    throw new ScanApiError('The SCAN API did not return a readable activated offer.')
+  }
+}
+
+export async function fetchRetailerActions({ username, password, signal }) {
+  try {
+    const data = await authorizedRequest('/api/v1/retailer/actions', { username, password, signal })
+    return array(data, 'actions', normalizeAction)
+  } catch (error) {
+    if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
+    throw new ScanApiError('The SCAN API did not return readable actions.')
+  }
+}
+
+export async function fetchRetailerPartnerStatus({ username, password, signal }) {
+  try {
+    return normalizePartnerStatus(await authorizedRequest('/api/v1/retailer/partner-status', { username, password, signal }))
+  } catch (error) {
+    if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
+    throw new ScanApiError('The SCAN API did not return a readable partner status.')
   }
 }

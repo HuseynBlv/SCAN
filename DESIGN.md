@@ -107,15 +107,20 @@
 ## Product Information Architecture
 
 - **CCI workspace:** Home, Opportunities, Explore, Stores, Ask SCAN.
-- **Retailer workspace:** Today, Sales, Products, Alerts.
+- **Retailer workspace:** Home, Offers, Actions, Insights, Partner. Revised from the original
+  Today/Sales/Products/Alerts analytics-first layout: the retailer home page leads with
+  connection status, SCAN benefits, and a recommended commercial offer, not sales charts.
+  Analytics (the former Sales and Products pages) now live together under the secondary
+  Insights page, supporting offers and actions rather than being the reason to open the app.
 - **Data connection workspace:** Connections, Import data, Product mapping. This is a
   retailer-bound administrator surface and is not part of the CCI or retailer information architecture.
 - **Retailer onboarding workspace:** Retailers with a guarded four-step flow: tenant/stores,
   named import format, no-write sample validation, and one-time credential issuance.
 - Basket, product, and time analysis live inside CCI Explore instead of competing with
   commercial actions in the top-level navigation.
-- Retailer synchronization and deterministic recommendations live together under Alerts so
-  shop owners have one place to check what requires attention.
+- Retailer synchronization issues and mapping-quality attention items surface on Home and
+  Actions rather than a dedicated Alerts page, so shop owners see what requires attention where
+  they already are instead of a fifth place to check.
 - Ask SCAN answers only questions that can be resolved from the current normalized analytics
   response. Unsupported free-form questions receive an explicit unavailable state.
 
@@ -132,11 +137,17 @@
 
 ### Retailer workspace
 
-1. Today and shop context with three core metrics: sales, transactions, and average basket.
-2. Needs-attention items grounded in synchronization or mapping data, or an explicit normal state.
-3. A short ranked list of today’s top sellers.
-4. A simple busy-hours view, shown only after the minimum transaction threshold is met.
-5. Detailed synchronization evidence and the privacy boundary live under Alerts, not on every page.
+1. Greeting and connection status: store name, a live "Connected" indicator, and the shop's
+   commercial standing (benefits this month, available offers, Partner status) as the three
+   headline KPIs - not sales or revenue.
+2. One recommended commercial offer, computed from the store's own recorded CCI product sales,
+   as the single most visually prominent component on the page.
+3. SCAN Benefits: this month, last month, and lifetime estimated commercial value, with a short
+   list of where it came from.
+4. POS connection status (last sync, lifetime transactions processed) and, only when relevant,
+   a Needs-attention item grounded in synchronization or mapping data.
+5. Deeper analytics (sales trend, best sellers, slow movers) live under the secondary Insights
+   page and support the offers and actions above rather than leading the experience.
 
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.

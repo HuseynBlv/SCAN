@@ -100,6 +100,72 @@ class RetailerAnalyticsQueryRepository {
         limit 10
         """;
 
+    private static final String TOP_CCI_PRODUCTS_SQL = """
+        select
+            cp.normalized_name as product_name,
+            coalesce(
+                nullif(trim(cp.category), ''),
+                nullif(trim(rp.original_category), ''),
+                'Unmapped'
+            ) as category,
+            count(distinct r.id) as basket_count,
+            sum(tl.quantity) as quantity,
+            sum(tl.line_total) as revenue
+        from receipt r
+        join transaction_line tl on tl.receipt_id = r.id
+        join retailer_product rp on rp.id = tl.retailer_product_id
+        join canonical_product cp on cp.id = rp.canonical_product_id
+        where r.retailer_id = ?
+          and r.transaction_timestamp >= ?
+          and cp.is_cci = true
+        group by cp.normalized_name,
+                 coalesce(
+                     nullif(trim(cp.category), ''),
+                     nullif(trim(rp.original_category), ''),
+                     'Unmapped'
+                 )
+        order by revenue desc, quantity desc, product_name asc
+        limit ?
+        """;
+
+    private static final String PRODUCT_METRICS_IN_RANGE_SQL = """
+        select
+            coalesce(cp.normalized_name, rp.original_product_name) as product_name,
+            coalesce(
+                nullif(trim(cp.category), ''),
+                nullif(trim(rp.original_category), ''),
+                'Unmapped'
+            ) as category,
+            count(distinct r.id) as basket_count,
+            sum(tl.quantity) as quantity,
+            sum(tl.line_total) as revenue
+        from receipt r
+        join transaction_line tl on tl.receipt_id = r.id
+        join retailer_product rp on rp.id = tl.retailer_product_id
+        left join canonical_product cp on cp.id = rp.canonical_product_id
+        where r.retailer_id = ?
+          and r.transaction_timestamp >= ?
+          and r.transaction_timestamp < ?
+        group by coalesce(cp.normalized_name, rp.original_product_name),
+                 coalesce(
+                     nullif(trim(cp.category), ''),
+                     nullif(trim(rp.original_category), ''),
+                     'Unmapped'
+                 )
+        """;
+
+    private static final String CCI_REVENUE_IN_RANGE_SQL = """
+        select coalesce(sum(tl.line_total), 0) as revenue
+        from receipt r
+        join transaction_line tl on tl.receipt_id = r.id
+        join retailer_product rp on rp.id = tl.retailer_product_id
+        join canonical_product cp on cp.id = rp.canonical_product_id
+        where r.retailer_id = ?
+          and r.transaction_timestamp >= ?
+          and r.transaction_timestamp < ?
+          and cp.is_cci = true
+        """;
+
     private final JdbcTemplate jdbcTemplate;
 
     RetailerAnalyticsQueryRepository(JdbcTemplate jdbcTemplate) {
@@ -143,6 +209,35 @@ class RetailerAnalyticsQueryRepository {
                 resultSet.getBigDecimal("quantity"),
                 resultSet.getBigDecimal("revenue")
             ), retailerId, Timestamp.from(startInclusive));
+    }
+
+    List<RetailerAnalyticsDtos.ProductMetric> topCciProducts(UUID retailerId, Instant startInclusive, int limit) {
+        return jdbcTemplate.query(TOP_CCI_PRODUCTS_SQL, (resultSet, rowNumber) ->
+            new RetailerAnalyticsDtos.ProductMetric(
+                resultSet.getString("product_name"),
+                resultSet.getString("category"),
+                resultSet.getLong("basket_count"),
+                resultSet.getBigDecimal("quantity"),
+                resultSet.getBigDecimal("revenue")
+            ), retailerId, Timestamp.from(startInclusive), limit);
+    }
+
+    List<RetailerAnalyticsDtos.ProductMetric> productMetricsInRange(
+        UUID retailerId, Instant startInclusive, Instant endExclusive
+    ) {
+        return jdbcTemplate.query(PRODUCT_METRICS_IN_RANGE_SQL, (resultSet, rowNumber) ->
+            new RetailerAnalyticsDtos.ProductMetric(
+                resultSet.getString("product_name"),
+                resultSet.getString("category"),
+                resultSet.getLong("basket_count"),
+                resultSet.getBigDecimal("quantity"),
+                resultSet.getBigDecimal("revenue")
+            ), retailerId, Timestamp.from(startInclusive), Timestamp.from(endExclusive));
+    }
+
+    BigDecimal cciRevenueInRange(UUID retailerId, Instant startInclusive, Instant endExclusive) {
+        return jdbcTemplate.queryForObject(CCI_REVENUE_IN_RANGE_SQL, (resultSet, rowNumber) ->
+            resultSet.getBigDecimal("revenue"), retailerId, Timestamp.from(startInclusive), Timestamp.from(endExclusive));
     }
 
     record BasketRow(

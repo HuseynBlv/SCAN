@@ -1,9 +1,9 @@
 package az.cci.scan.retailer;
 
 import az.cci.scan.analytics.AnalyticsDataException;
-import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.Retailer;
 import az.cci.scan.repository.ImportJobRepository;
+import az.cci.scan.repository.ReceiptRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,15 +42,18 @@ public class RetailerAnalyticsService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     private final ImportJobRepository importJobRepository;
+    private final ReceiptRepository receiptRepository;
     private final RetailerAnalyticsQueryRepository queryRepository;
     private final Clock clock;
 
     public RetailerAnalyticsService(
         ImportJobRepository importJobRepository,
+        ReceiptRepository receiptRepository,
         RetailerAnalyticsQueryRepository queryRepository,
         Clock clock
     ) {
         this.importJobRepository = importJobRepository;
+        this.receiptRepository = receiptRepository;
         this.queryRepository = queryRepository;
         this.clock = clock;
     }
@@ -120,7 +123,8 @@ public class RetailerAnalyticsService {
             stores(baskets),
             dailySales(baskets, zoneId),
             insights(totalBaskets, cciBaskets, lineStats, topProducts, dayparts),
-            sync
+            sync,
+            receiptRepository.countByRetailer(retailer)
         );
     }
 
