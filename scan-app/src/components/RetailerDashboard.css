@@ -28,89 +28,290 @@
   text-transform: none;
 }
 
-.retailer-today {
+.scan-button-primary {
+  background: var(--scan-red);
+  color: #fff;
+  transition: background 160ms var(--scan-enter);
+}
+
+.scan-button-primary:hover:not(:disabled) {
+  background: var(--scan-red-dark);
+}
+
+.scan-button-primary:disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
+/* ---- Home: greeting + connected indicator ---- */
+
+.retailer-home {
   gap: 18px;
 }
 
-.retailer-today-hero,
-.retailer-simple-section {
-  border: 1px solid var(--scan-border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.retailer-today-hero {
-  overflow: hidden;
-  border-top: 3px solid var(--scan-red);
-}
-
-.retailer-today-hero > header {
+.retailer-greeting {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  padding: 24px 26px 20px;
 }
 
-.retailer-today-hero h2 {
+.retailer-greeting h1 {
+  max-width: 640px;
   margin: 6px 0 0;
-  font-size: clamp(2.6rem, 6vw, 4.8rem);
-  line-height: .95;
-  letter-spacing: -.065em;
+  font-size: clamp(1.7rem, 3.6vw, 2.5rem);
+  line-height: 1.08;
+  letter-spacing: -.03em;
 }
 
-.retailer-today-hero header > p {
-  margin: 0;
-  color: var(--scan-muted);
-  font-size: .75rem;
-}
-
-.retailer-today-numbers {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(170px, .75fr));
-  border-top: 1px solid var(--scan-border);
-}
-
-.retailer-today-numbers > div {
-  min-width: 0;
-  display: grid;
-  align-content: center;
+.retailer-connected-pill {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  min-height: 130px;
-  padding: 22px 26px;
-  border-left: 1px solid var(--scan-border);
-}
-
-.retailer-today-numbers > div:first-child {
-  border-left: 0;
-}
-
-.retailer-today-numbers span,
-.retailer-product-list dt,
-.retailer-alert-feed article > div span {
-  color: var(--scan-muted);
-  font-size: .66rem;
+  min-height: 34px;
+  padding: 0 13px 0 11px;
+  border: 1px solid #cce2da;
+  border-radius: 9999px;
+  background: #f2f8f5;
+  color: var(--scan-success);
+  font-size: .72rem;
   font-weight: 700;
-  letter-spacing: .055em;
+}
+
+.retailer-connected-pill i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--scan-success);
+  box-shadow: 0 0 0 0 rgba(8, 127, 91, .5);
+  animation: retailer-pulse 2.4s ease-out infinite;
+}
+
+@keyframes retailer-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(8, 127, 91, .45); }
+  70% { box-shadow: 0 0 0 6px rgba(8, 127, 91, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(8, 127, 91, 0); }
+}
+
+/* ---- Home: KPI cards ---- */
+
+.retailer-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.retailer-kpi-card {
+  display: grid;
+  gap: 8px;
+  min-height: 118px;
+  padding: 20px 22px;
+  border: 1px solid var(--scan-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.retailer-kpi-card > span {
+  color: var(--scan-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
   text-transform: uppercase;
 }
 
-.retailer-today-numbers strong {
-  overflow: hidden;
-  font-size: clamp(1.6rem, 3.4vw, 2.65rem);
+.retailer-kpi-card > strong {
+  font-size: clamp(1.6rem, 3vw, 2.15rem);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.05em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  letter-spacing: -.03em;
 }
 
-.retailer-today-numbers .is-primary strong {
-  font-size: clamp(2.25rem, 5.3vw, 4.2rem);
+.retailer-kpi-card.is-level > strong {
+  color: var(--scan-red-dark);
 }
+
+.retailer-kpi-card > small {
+  color: var(--scan-muted);
+  font-size: .72rem;
+}
+
+/* ---- Home: recommended-offer hero ---- */
+
+.retailer-hero-offer {
+  display: grid;
+  gap: 14px;
+  padding: 26px 28px;
+  border: 1px solid var(--scan-border);
+  border-top: 3px solid var(--scan-red);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.retailer-hero-offer h2 {
+  margin: 4px 0 0;
+  font-size: clamp(1.5rem, 3.4vw, 2.1rem);
+  letter-spacing: -.03em;
+}
+
+.retailer-hero-reason {
+  max-width: 640px;
+  margin: 0;
+  color: var(--scan-muted);
+  font-size: .88rem;
+  line-height: 1.55;
+}
+
+.retailer-hero-terms {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  padding-top: 14px;
+  border-top: 1px solid var(--scan-border);
+}
+
+.retailer-hero-terms > div {
+  display: grid;
+  gap: 6px;
+  padding: 13px 15px;
+  background: var(--scan-subtle);
+}
+
+.retailer-hero-terms span {
+  color: var(--scan-muted);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.retailer-hero-terms strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.retailer-hero-offer footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.retailer-hero-offer footer small {
+  color: var(--scan-muted);
+  font-size: .72rem;
+}
+
+/* ---- Home: SCAN Benefits card ---- */
+
+.retailer-benefits-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.retailer-benefits-totals > div {
+  padding: 13px 15px;
+  border: 1px solid var(--scan-border);
+  background: var(--scan-subtle);
+}
+
+.retailer-benefits-totals span {
+  color: var(--scan-muted);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.retailer-benefits-totals strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.retailer-benefit-rows,
+.retailer-benefit-history {
+  margin: 16px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--scan-border);
+  list-style: none;
+}
+
+.retailer-benefit-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.retailer-benefit-rows li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.retailer-benefit-amount {
+  color: var(--scan-success);
+  font-size: .84rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.retailer-benefit-rows small {
+  color: var(--scan-muted);
+  font-size: .74rem;
+  text-align: right;
+}
+
+.retailer-benefit-empty {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--scan-border);
+  color: var(--scan-muted);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.retailer-benefit-history {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  border-top: 1px solid var(--scan-border);
+}
+
+.retailer-benefit-history li {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--scan-border);
+}
+
+.retailer-benefit-history li:last-child {
+  border-bottom: 0;
+}
+
+.retailer-benefit-history time {
+  color: var(--scan-muted);
+  font-size: .7rem;
+}
+
+.retailer-benefit-history strong {
+  font-size: .82rem;
+}
+
+.retailer-benefit-history small {
+  color: var(--scan-muted);
+  font-size: .7rem;
+}
+
+/* ---- Home / general: POS status, needs-attention (shared with old markup) ---- */
 
 .retailer-simple-section {
   min-width: 0;
   padding: 22px 24px;
+  border: 1px solid var(--scan-border);
+  border-radius: 8px;
+  background: #fff;
 }
 
 .retailer-simple-section > header {
@@ -131,46 +332,6 @@
   margin: 5px 0 0;
   color: var(--scan-muted);
   font-size: .72rem;
-}
-
-.retailer-normal-state {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  min-height: 72px;
-  padding: 13px 15px;
-  border: 1px solid #cce2da;
-  border-radius: 6px;
-  background: #f2f8f5;
-}
-
-.retailer-normal-state > span {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 34px;
-  border-radius: 50%;
-  background: var(--scan-success);
-  color: #fff;
-  font-weight: 750;
-}
-
-.retailer-normal-state strong {
-  display: block;
-  font-size: .9rem;
-}
-
-.retailer-normal-state p {
-  margin: 4px 0 0;
-  color: #567067;
-  font-size: .73rem;
-  line-height: 1.45;
-}
-
-.retailer-normal-state.is-large {
-  min-height: 160px;
-  justify-content: center;
 }
 
 .retailer-attention-list {
@@ -218,110 +379,387 @@
   font-weight: 650;
 }
 
-.retailer-today-grid,
-.retailer-product-secondary {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(340px, .9fr);
-  gap: 16px;
-  align-items: start;
+.retailer-sync-card {
+  border-top: 3px solid var(--scan-warning);
 }
 
-.retailer-seller-list,
-.retailer-product-list,
-.retailer-alert-feed {
+.retailer-sync-card.is-healthy {
+  border-top-color: var(--scan-success);
+}
+
+.retailer-sync-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.retailer-sync-grid div {
+  padding: 13px;
+  border: 1px solid var(--scan-border);
+  background: var(--scan-subtle);
+}
+
+.retailer-sync-grid dt {
+  color: var(--scan-muted);
+  font-size: .63rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.retailer-sync-grid dd {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.retailer-pos-copy {
+  margin: 14px 0 0;
+  color: var(--scan-muted);
+  font-size: .74rem;
+  line-height: 1.5;
+}
+
+/* ---- Offers ---- */
+
+.retailer-offer-tabs {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--scan-border);
+  border-radius: 7px;
+  background: #ebeae6;
+}
+
+.retailer-offer-tabs button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--scan-muted);
+  font-size: .76rem;
+  font-weight: 650;
+}
+
+.retailer-offer-tabs button.is-active {
+  background: #fff;
+  color: var(--scan-ink);
+  box-shadow: 0 1px 2px rgba(20, 20, 20, .08);
+}
+
+.retailer-offer-tabs button span {
+  color: inherit;
+  opacity: .6;
+  font-variant-numeric: tabular-nums;
+}
+
+.retailer-offer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.retailer-offer-card {
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  padding: 20px 22px;
+  border: 1px solid var(--scan-border);
+  border-radius: 12px;
+  background: #fff;
+  transition: box-shadow 160ms var(--scan-enter), border-color 160ms var(--scan-enter);
+}
+
+.retailer-offer-card:hover {
+  border-color: #cfcdc7;
+  box-shadow: 0 4px 14px rgba(20, 20, 20, .06);
+}
+
+.retailer-offer-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.retailer-offer-card > header h3 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: -.02em;
+}
+
+.retailer-offer-card > header small {
+  color: var(--scan-muted);
+  font-size: .7rem;
+}
+
+.retailer-offer-reason {
+  margin: 0;
+  color: var(--scan-muted);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.retailer-offer-terms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 13px 0;
+  border-top: 1px solid var(--scan-border);
+  border-bottom: 1px solid var(--scan-border);
+}
+
+.retailer-offer-terms dt {
+  color: var(--scan-muted);
+  font-size: .63rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.retailer-offer-terms dd {
+  margin: 5px 0 0;
+  font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.retailer-offer-why-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--scan-ink);
+  font-size: .72rem;
+  font-weight: 650;
+}
+
+.retailer-offer-why-toggle svg {
+  transition: transform 160ms var(--scan-enter);
+}
+
+.retailer-offer-card.is-expanded .retailer-offer-why-toggle svg {
+  transform: rotate(90deg);
+}
+
+.retailer-offer-why {
+  display: grid;
+  gap: 7px;
+  margin: -4px 0 0;
+  padding: 12px 13px;
+  background: var(--scan-subtle);
+  list-style: none;
+  color: var(--scan-muted);
+  font-size: .76rem;
+  line-height: 1.5;
+}
+
+.retailer-activate-button {
+  width: 100%;
+}
+
+.retailer-activate-button.is-success {
+  background: #e9f3ef;
+  color: var(--scan-success);
+  border-color: #cce2da;
+}
+
+/* ---- Actions ---- */
+
+.retailer-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.retailer-action-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 20px 22px;
+  border: 1px solid var(--scan-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.retailer-action-card > h3 {
+  margin: 2px 0 0;
+  font-size: .96rem;
+  letter-spacing: -.02em;
+}
+
+.retailer-action-card > p {
+  margin: 0;
+  color: var(--scan-muted);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.retailer-action-metric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  background: var(--scan-subtle);
+}
+
+.retailer-action-metric span {
+  color: var(--scan-muted);
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.retailer-action-metric strong {
+  font-size: .86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.retailer-action-recommendation {
+  padding-top: 10px;
+  border-top: 1px solid var(--scan-border);
+}
+
+.retailer-action-recommendation span {
+  color: var(--scan-muted);
+  font-size: .63rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.retailer-action-recommendation p {
+  margin: 5px 0 0;
+  font-size: .82rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* ---- Partner ---- */
+
+.retailer-partner-level {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.retailer-partner-level strong {
+  font-size: 1.5rem;
+  letter-spacing: -.02em;
+}
+
+.retailer-partner-level span {
+  color: var(--scan-muted);
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+.retailer-partner-progress {
+  height: 8px;
+  margin-top: 14px;
+  overflow: hidden;
+  background: #ebeae6;
+  border-radius: 9999px;
+}
+
+.retailer-partner-progress i {
+  display: block;
+  height: 100%;
+  background: var(--scan-red);
+  border-radius: 9999px;
+  transition: width 500ms var(--scan-enter);
+}
+
+.retailer-partner-eta {
+  margin: 10px 0 0;
+  color: var(--scan-muted);
+  font-size: .76rem;
+}
+
+.retailer-partner-requirements {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--scan-border);
+  list-style: none;
+}
+
+.retailer-partner-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--scan-muted);
+  font-size: .82rem;
+}
+
+.retailer-partner-requirements li.is-met {
+  color: var(--scan-ink);
+  font-weight: 600;
+}
+
+.retailer-partner-requirements li.is-met svg {
+  color: var(--scan-success);
+}
+
+.retailer-requirement-dot {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--scan-border);
+  border-radius: 50%;
+}
+
+.retailer-partner-benefits ul,
+.retailer-partner-preview ul {
+  display: grid;
+  gap: 9px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.retailer-seller-list {
-  border-top: 1px solid var(--scan-border);
-}
-
-.retailer-seller-list li {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+.retailer-partner-benefits li {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 13px 0;
-  border-bottom: 1px solid var(--scan-border);
+  gap: 9px;
+  font-size: .84rem;
 }
 
-.retailer-seller-list li:last-child {
-  border-bottom: 0;
+.retailer-partner-benefits li svg {
+  color: var(--scan-success);
 }
 
-.retailer-seller-list li > span {
-  color: #aaa8a2;
-  font-size: .69rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.retailer-seller-list li div {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.retailer-seller-list strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: .81rem;
-}
-
-.retailer-seller-list small {
+.retailer-partner-preview li {
+  padding-left: 16px;
+  position: relative;
   color: var(--scan-muted);
-  font-size: .67rem;
+  font-size: .82rem;
 }
 
-.retailer-seller-list b {
-  font-size: .78rem;
-  font-variant-numeric: tabular-nums;
+.retailer-partner-preview li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: .55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--scan-border);
 }
 
-.retailer-busy-hours {
-  display: grid;
-  gap: 14px;
-}
-
-.retailer-busy-hours > div {
-  display: grid;
-  grid-template-columns: 92px minmax(60px, 1fr) 42px;
-  align-items: center;
-  gap: 8px;
-}
-
-.retailer-busy-hours span {
-  font-size: .76rem;
-  font-weight: 620;
-}
-
-.retailer-busy-hours i {
-  height: 6px;
-  display: block;
-  overflow: hidden;
-  background: #e9e7e2;
-}
-
-.retailer-busy-hours i b {
-  height: 100%;
-  display: block;
-  background: var(--scan-red);
-  transition: width 280ms var(--scan-enter);
-}
-
-.retailer-busy-hours strong {
-  font-size: .72rem;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.retailer-busy-hours small {
-  grid-column: 2 / -1;
-  color: var(--scan-muted);
-  font-size: .64rem;
-}
+/* ---- Insights (Sales + Products, secondary) ---- */
 
 .retailer-sales-chart {
   height: clamp(270px, 38vw, 390px);
@@ -360,6 +798,9 @@
 }
 
 .retailer-product-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   border-top: 1px solid var(--scan-border);
 }
 
@@ -395,9 +836,13 @@
   font-size: .84rem;
 }
 
-.retailer-product-list > li > div small {
+.retailer-product-list > li > div small,
+.retailer-product-list dt {
   color: var(--scan-muted);
-  font-size: .68rem;
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .055em;
+  text-transform: uppercase;
 }
 
 .retailer-product-list dl {
@@ -419,6 +864,13 @@
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.retailer-product-secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, .9fr);
+  gap: 16px;
+  align-items: start;
 }
 
 .retailer-unavailable-section,
@@ -477,195 +929,25 @@
   font-weight: 700;
 }
 
-.retailer-alert-feed {
-  position: relative;
-}
-
-.retailer-alert-feed::before {
-  content: '';
-  position: absolute;
-  top: 24px;
-  bottom: 24px;
-  left: 20px;
-  width: 1px;
-  background: var(--scan-border);
-}
-
-.retailer-alert-feed > li {
-  position: relative;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 16px;
-  padding: 0 0 18px;
-}
-
-.retailer-alert-feed > li:last-child {
-  padding-bottom: 0;
-}
-
-.retailer-alert-marker {
-  z-index: 1;
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--scan-border);
-  border-radius: 50%;
-  background: #fff;
-  color: var(--scan-red-dark);
-}
-
-.retailer-alert-feed article {
-  padding: 2px 0 20px;
-  border-bottom: 1px solid var(--scan-border);
-}
-
-.retailer-alert-feed > li:last-child article {
-  border-bottom: 0;
-}
-
-.retailer-alert-feed article > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.retailer-alert-feed time {
-  color: var(--scan-muted);
-  font-size: .66rem;
-}
-
-.retailer-alert-feed h2 {
-  max-width: 780px;
-  margin: 12px 0 7px;
-  font-size: 1rem;
-  line-height: 1.35;
-  letter-spacing: -.02em;
-}
-
-.retailer-alert-feed p {
-  max-width: 760px;
-  margin: 0;
-  color: var(--scan-muted);
-  font-size: .78rem;
-  line-height: 1.5;
-}
-
-.retailer-alert-feed article > div {
-  max-width: 760px;
-  display: grid;
-  gap: 6px;
-  margin-top: 13px;
-  padding: 11px 13px;
-  background: var(--scan-subtle);
-}
-
-.retailer-alert-feed article > div strong {
-  font-size: .76rem;
-  line-height: 1.4;
-}
-
-.retailer-data-details {
-  border: 1px solid var(--scan-border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.retailer-data-details > summary {
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 18px;
-  list-style: none;
-  cursor: pointer;
-  font-size: .78rem;
-  font-weight: 650;
-}
-
-.retailer-data-details > summary::-webkit-details-marker {
-  display: none;
-}
-
-.retailer-data-details[open] > summary svg {
-  transform: rotate(90deg);
-}
-
-.retailer-data-details .retailer-sync-card {
-  margin: 0 10px 10px;
-  border-radius: 6px;
-}
-
-.retailer-sync-card {
-  border-top: 3px solid var(--scan-warning);
-}
-
-.retailer-sync-card.is-healthy {
-  border-top-color: var(--scan-success);
-}
-
-.retailer-sync-copy {
-  margin: auto 0 0;
-  color: var(--scan-muted);
-  font-size: .78rem;
-  line-height: 1.5;
-}
-
-.retailer-sync-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 9px;
-  margin: 20px 0 0;
-}
-
-.retailer-sync-grid div {
-  padding: 13px;
-  border: 1px solid var(--scan-border);
-  background: var(--scan-subtle);
-}
-
-.retailer-sync-grid dt {
-  color: var(--scan-muted);
-  font-size: .63rem;
-  font-weight: 700;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-
-.retailer-sync-grid dd {
-  margin: 7px 0 0;
-  overflow-wrap: anywhere;
-  font-size: .8rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 650;
-}
-
-.retailer-privacy-note p {
-  max-width: 760px;
-  margin: 0;
-  color: var(--scan-muted);
-  font-size: .78rem;
-  line-height: 1.55;
-}
-
 @media (max-width: 1040px) {
   .scan-workspace-retailer {
     grid-template-columns: 190px minmax(0, 1fr);
   }
 
-  .retailer-today-grid,
+  .retailer-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .retailer-hero-terms {
+    grid-template-columns: 1fr;
+  }
+
   .retailer-product-secondary {
     grid-template-columns: 1fr;
   }
 
   .retailer-product-list > li {
     grid-template-columns: 32px minmax(180px, 1fr) minmax(270px, .9fr);
-  }
-
-  .retailer-sync-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -679,8 +961,9 @@
     height: 44px;
   }
 
-  .retailer-today-numbers {
-    grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(140px, .75fr));
+  .retailer-offer-grid,
+  .retailer-action-grid {
+    grid-template-columns: 1fr;
   }
 
   .retailer-product-list > li {
@@ -716,67 +999,23 @@
 
   .scan-workspace-retailer .scan-freshness { display: inline-flex; }
 
-  .retailer-today-numbers span,
-  .retailer-product-list dt,
-  .retailer-alert-feed article > div span {
-    font-size: .7rem;
-  }
-
-  .retailer-seller-list small,
-  .retailer-product-list > li > div small,
-  .retailer-stock-check li small,
-  .retailer-alert-feed time {
-    font-size: .7rem;
-  }
-
-  .retailer-busy-hours small {
-    font-size: .68rem;
-  }
-
-  .scan-workspace-retailer .scan-mobile-nav button {
-    font-size: .72rem;
-  }
-
-  .retailer-today-hero > header {
+  .retailer-greeting {
+    flex-direction: column;
     align-items: flex-start;
-    padding: 20px 18px 17px;
+    gap: 12px;
   }
 
-  .retailer-today-hero h2 {
-    font-size: 3.15rem;
+  .retailer-hero-offer footer {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .retailer-today-hero header > p {
-    max-width: 130px;
-    text-align: right;
+  .retailer-hero-offer footer small {
+    order: 2;
   }
 
-  .retailer-today-numbers {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .retailer-today-numbers > div {
-    min-height: 104px;
-    padding: 17px 18px;
-    border-top: 1px solid var(--scan-border);
-  }
-
-  .retailer-today-numbers .is-primary {
-    grid-column: 1 / -1;
-    min-height: 112px;
-    border-top: 0;
-  }
-
-  .retailer-today-numbers > div:nth-child(2) {
-    border-left: 0;
-  }
-
-  .retailer-today-numbers strong {
-    font-size: 1.65rem;
-  }
-
-  .retailer-today-numbers .is-primary strong {
-    font-size: 2.75rem;
+  .retailer-benefits-totals {
+    grid-template-columns: 1fr;
   }
 
   .retailer-simple-section {
@@ -790,20 +1029,6 @@
   .retailer-attention-list button {
     grid-column: 2;
     justify-self: start;
-  }
-
-  .retailer-seller-list li {
-    grid-template-columns: 22px minmax(0, 1fr);
-  }
-
-  .retailer-seller-list b {
-    grid-column: 2;
-    justify-self: start;
-    color: var(--scan-red-dark);
-  }
-
-  .retailer-busy-hours > div {
-    grid-template-columns: 78px minmax(50px, 1fr) 38px;
   }
 
   .scan-workspace-retailer .scan-metric-strip {
@@ -848,33 +1073,17 @@
     flex-direction: column;
   }
 
-  .retailer-alert-feed > li {
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 11px;
-  }
-
-  .retailer-alert-feed::before {
-    left: 18px;
-  }
-
-  .retailer-alert-marker {
-    width: 36px;
-    height: 36px;
-  }
-
-  .retailer-alert-feed article > header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 7px;
-  }
-
   .retailer-sync-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .retailer-busy-hours i b {
+  .retailer-connected-pill i {
+    animation: none;
+  }
+
+  .retailer-partner-progress i {
     transition: none;
   }
 }

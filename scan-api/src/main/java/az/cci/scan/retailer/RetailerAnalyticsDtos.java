@@ -120,7 +120,8 @@ public final class RetailerAnalyticsDtos {
         List<StoreMetric> stores,
         List<DailyMetric> dailySales,
         List<Insight> insights,
-        SyncStatus sync
+        SyncStatus sync,
+        long lifetimeTransactionsProcessed
     ) {
     }
 }

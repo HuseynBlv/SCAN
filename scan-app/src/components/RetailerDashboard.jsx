@@ -9,7 +9,13 @@ import {
   YAxis,
 } from 'recharts'
 import { ScanApiError } from '../services/scanApi'
-import { fetchRetailerOverview } from '../services/retailerApi'
+import {
+  activateRetailerOffer,
+  fetchRetailerActions,
+  fetchRetailerOffers,
+  fetchRetailerOverview,
+  fetchRetailerPartnerStatus,
+} from '../services/retailerApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
 import { usePretextLayout } from './usePretextLayout'
@@ -27,11 +33,15 @@ import {
 import './CciDashboard.css'
 import './RetailerDashboard.css'
 
+// The retailer home page answers "what do I get from SCAN?", not "here is a dashboard to
+// interpret". Real analytics (sales trend, best sellers, slow movers) stay one tap away under
+// Insights, but they support decisions here - they are not the reason to open the app.
 const NAV_ITEMS = [
-  { id: 'today', label: 'Today', icon: 'home' },
-  { id: 'sales', label: 'Sales', icon: 'chart' },
-  { id: 'products', label: 'Products', icon: 'products' },
-  { id: 'alerts', label: 'Alerts', icon: 'alerts' },
+  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'offers', label: 'Offers', icon: 'recommendations' },
+  { id: 'actions', label: 'Actions', icon: 'opportunities' },
+  { id: 'insights', label: 'Insights', icon: 'chart' },
+  { id: 'partner', label: 'Partner', icon: 'time-store' },
 ]
 
 const PERIODS = [
@@ -41,9 +51,50 @@ const PERIODS = [
   { value: 'ALL_TIME', label: 'All time' },
 ]
 
+const OFFER_TABS = [
+  { id: 'available', label: 'Available' },
+  { id: 'active', label: 'Active' },
+  { id: 'completed', label: 'Completed' },
+]
+
+const ACTION_TYPE_META = {
+  URGENT: { label: 'Urgent', tone: 'warning' },
+  OPPORTUNITY: { label: 'Opportunity', tone: 'red' },
+  INVENTORY: { label: 'Inventory', tone: 'neutral' },
+  PERFORMANCE: { label: 'Performance', tone: 'success' },
+}
+
+// SCAN Partner benefits are a uniform commercial policy for every retailer at a given tier, not
+// a fact observed from any one retailer's data - so, unlike everything else on this screen, this
+// copy is legitimately the same for every account at the same level.
+const PARTNER_BENEFITS = {
+  SILVER: ['Personalized CCI offers become available once your store meets Gold requirements.'],
+  GOLD: [
+    'Personalized CCI offers',
+    'Partner-only promotions',
+    'Promotional bonuses',
+    'Early access to selected campaigns',
+    'Store recommendations',
+    'Performance benchmarking',
+  ],
+  PLATINUM: [
+    'Everything in Gold',
+    'Priority promotional campaigns',
+    'Enhanced commercial offers',
+    'New product trials',
+    'Additional merchandising opportunities',
+  ],
+}
+
+const PLATINUM_PREVIEW = [
+  'Priority promotional campaigns',
+  'Enhanced commercial offers',
+  'New product trials',
+  'Additional merchandising opportunities',
+]
+
 const integer = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 const decimal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
-const MIN_PATTERN_BASKETS = 5
 
 function formatMoney(value, currency) {
   const amount = Number(value || 0)
@@ -66,30 +117,18 @@ function humanize(value) {
 
 function formatDay(value) {
   if (!value) return 'Today'
-  return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(value))
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(value))
+}
+
+function greeting(now = new Date()) {
+  const hour = now.getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
 }
 
 function retailerDisplayName(data) {
   return data.retailerCode === 'KAGGLE' ? 'Demo shop' : data.retailerName
-}
-
-function isCciOnlyInsight(insight) {
-  return /CCI product|CCI basket|CCI penetration|contained a CCI/i.test(`${insight.fact} ${insight.interpretation}`)
-}
-
-function isDataInsight(insight) {
-  return /mapping|mapped|unmapped|unresolved|data sync|transaction export/i.test(`${insight.fact} ${insight.interpretation} ${insight.recommendedAction}`)
-}
-
-function operationalInsights(data) {
-  if (data.totalBaskets < MIN_PATTERN_BASKETS) return []
-  return data.insights.filter((insight) => !isCciOnlyInsight(insight) && !isDataInsight(insight))
-}
-
-function retailerAction(insight) {
-  return /\btest\b|promotion|placement|bundle|experiment/i.test(insight.recommendedAction)
-    ? null
-    : insight.recommendedAction
 }
 
 function attentionItems(data) {
@@ -100,8 +139,6 @@ function attentionItems(data) {
       title: 'Checkout data needs attention',
       description: data.sync.errors[0] || `The latest feed is ${humanize(data.sync.state)}.`,
       action: 'Check the latest checkout export or reconnect the feed.',
-      timestamp: data.sync.receivedAt || data.generatedAt,
-      type: 'Data feed',
     })
   }
   if (data.totalBaskets > 0 && data.mappedLinePercentage < 90) {
@@ -113,24 +150,30 @@ function attentionItems(data) {
         ? 'No transaction lines are matched to normalized products.'
         : `${decimal.format(data.mappedLinePercentage)}% of transaction lines are matched to normalized products.`,
       action: 'Ask the SCAN administrator to review unmatched products.',
-      timestamp: data.generatedAt,
-      type: 'Product data',
     })
   }
   return items
 }
 
-function alertFeed(data) {
-  const operational = operationalInsights(data).map((insight, index) => ({
-    id: `insight-${index}`,
-    title: insight.fact,
-    description: insight.interpretation,
-    action: retailerAction(insight),
-    timestamp: data.generatedAt,
-    type: /baskets occurred|busiest part of the day/i.test(`${insight.fact} ${insight.interpretation}`) ? 'Busy time' : 'Shop update',
-  }))
-  return [...attentionItems(data), ...operational]
-    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+function useCountUp(target, durationMs = 700) {
+  const [display, setDisplay] = useState(target)
+  const previous = useRef(target)
+  useEffect(() => {
+    const start = previous.current
+    const delta = target - start
+    if (!delta) { setDisplay(target); previous.current = target; return undefined }
+    const startedAt = performance.now()
+    let frame
+    function tick(now) {
+      const progress = Math.min(1, (now - startedAt) / durationMs)
+      setDisplay(start + delta * progress)
+      if (progress < 1) frame = requestAnimationFrame(tick)
+      else previous.current = target
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [target, durationMs])
+  return display
 }
 
 function Login({ error, loading, onSubmit }) {
@@ -148,8 +191,8 @@ function Login({ error, loading, onSubmit }) {
         <ScanBrand subtitle="Sales & Consumption Analytics Network" />
         <div className="cci-login-copy">
           <span className="cci-eyebrow">Retailer workspace</span>
-          <h1 id="retailer-login-title">Know what needs your attention.</h1>
-          <p>See how the shop is doing, what is selling, and whether the latest checkout data arrived.</p>
+          <h1 id="retailer-login-title">Connect once. Operate normally. Get more value.</h1>
+          <p>SCAN turns your checkout data into commercial benefits, personalized offers, and simple recommendations - automatically.</p>
         </div>
         <form className="cci-login-form" onSubmit={submit}>
           <label>Username<input autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
@@ -198,102 +241,275 @@ function SalesTrend({ data }) {
   )
 }
 
-function SyncStatus({ data, detailed = false }) {
+function SyncStatus({ data }) {
   const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
   return (
     <section className={`scan-panel retailer-sync-card ${healthy ? 'is-healthy' : 'is-warning'}`}>
-      <header className="scan-panel-header"><div><h3>{healthy ? 'Checkout data is connected' : 'Data sync needs attention'}</h3><p>{data.sync.filename || 'No source file received'}</p></div><StatusBadge tone={healthy ? 'success' : 'warning'}>{healthy ? 'Up to date' : humanize(data.sync.state)}</StatusBadge></header>
-      {detailed ? (
-        <dl className="retailer-sync-grid">
-          <div><dt>Completed</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
-          <div><dt>Receipts</dt><dd>{integer.format(data.sync.importedReceipts)}</dd></div>
-          <div><dt>Transaction lines</dt><dd>{integer.format(data.sync.importedLines)}</dd></div>
-          <div><dt>Unresolved products</dt><dd>{integer.format(data.sync.unresolvedProducts)}</dd></div>
-        </dl>
-      ) : <p className="retailer-sync-copy">Last completed {formatDateTime(data.sync.completedAt)} · {integer.format(data.sync.importedReceipts)} receipts imported</p>}
-      {data.sync.errors.length ? <div className="scan-inline-notice scan-inline-error" role="alert">{data.sync.errors.join(' · ')}</div> : null}
+      <header className="scan-panel-header"><div><h3>POS Connection</h3><p>{data.sync.filename || 'No source file received'}</p></div><StatusBadge tone={healthy ? 'success' : 'warning'}>{healthy ? 'Connected' : humanize(data.sync.state)}</StatusBadge></header>
+      <dl className="retailer-sync-grid">
+        <div><dt>Last sync</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
+        <div><dt>Transactions processed</dt><dd>{integer.format(data.lifetimeTransactionsProcessed)}</dd></div>
+      </dl>
+      <p className="retailer-pos-copy">SCAN automatically analyzes your sales data. No manual reporting required.</p>
     </section>
   )
 }
 
-function TodayHero({ data }) {
+function AttentionBanner({ items, onNavigate }) {
   return (
-    <section className="retailer-today-hero" aria-labelledby="retailer-today-title">
-      <header><div><span className="scan-eyebrow">Shop summary</span><h2 id="retailer-today-title">Today</h2></div><p>{formatDay(data.generatedAt)}</p></header>
-      <div className="retailer-today-numbers">
-        <div className="is-primary"><span>Sales today</span><strong>{formatMoney(data.totalSales, data.currency)}</strong></div>
-        <div><span>Transactions</span><strong>{integer.format(data.totalBaskets)}</strong></div>
-        <div><span>Average basket</span><strong>{formatMoney(data.averageBasketValue, data.currency)}</strong></div>
+    <section className="retailer-simple-section retailer-needs-attention">
+      <header><h2>Needs attention</h2><StatusBadge tone="warning">{items.length} {items.length === 1 ? 'item' : 'items'}</StatusBadge></header>
+      <div className="retailer-attention-list">
+        {items.map((item) => <article key={item.id}><ScanIcon name="alerts" size={21} /><div><strong>{item.title}</strong><p>{item.description}</p></div><button onClick={() => onNavigate('actions')} type="button">View in Actions <ScanIcon name="chevron" size={16} /></button></article>)}
       </div>
     </section>
   )
 }
 
-function NeedsAttention({ data, onNavigate }) {
-  const items = attentionItems(data)
+function KpiCard({ label, value, note, tone }) {
   return (
-    <section className="retailer-simple-section retailer-needs-attention">
-      <header><h2>Needs attention</h2>{items.length ? <StatusBadge tone="warning">{items.length} {items.length === 1 ? 'item' : 'items'}</StatusBadge> : null}</header>
-      {items.length ? (
-        <div className="retailer-attention-list">
-          {items.map((item) => <article key={item.id}><ScanIcon name="alerts" size={21} /><div><strong>{item.title}</strong><p>{item.description}</p></div><button onClick={() => onNavigate('alerts')} type="button">View details <ScanIcon name="chevron" size={16} /></button></article>)}
-        </div>
-      ) : (
-        <div className="retailer-normal-state"><span aria-hidden="true">✓</span><div><strong>{data.totalBaskets ? 'Everything looks normal.' : 'No sales recorded yet.'}</strong><p>{data.totalBaskets ? 'The checkout feed has no data issue requiring action.' : 'Sales will appear after today’s first completed transaction.'}</p></div></div>
-      )}
+    <article className={`retailer-kpi-card ${tone ? `is-${tone}` : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{note}</small>
+    </article>
+  )
+}
+
+function ActivateButton({ offer, onActivate, activating, justActivated, label }) {
+  if (justActivated) {
+    return (
+      <button className="scan-button retailer-activate-button is-success" disabled type="button">
+        <ScanIcon name="check" size={16} /> Offer activated
+      </button>
+    )
+  }
+  return (
+    <button
+      className="scan-button scan-button-primary retailer-activate-button"
+      disabled={activating}
+      onClick={() => onActivate(offer.offerKey)}
+      type="button"
+    >
+      {activating ? 'Activating…' : label}
+    </button>
+  )
+}
+
+function RecommendedOfferHero({ offer, onViewOffers }) {
+  return (
+    <section className="retailer-hero-offer">
+      <span className="scan-eyebrow">Recommended for your store</span>
+      <h2>{offer.productName}</h2>
+      <p className="retailer-hero-reason">{offer.reason}</p>
+      <div className="retailer-hero-terms">
+        <div><span>SCAN Partner offer</span><strong>{offer.normalCondition}</strong></div>
+        <div><span>Partner benefit</span><strong>{offer.partnerCondition}</strong></div>
+        <div><span>Estimated benefit</span><strong>{offer.benefitSummary}</strong></div>
+      </div>
+      <footer>
+        <small>Based on your recent sales</small>
+        <button className="scan-button scan-button-primary" onClick={onViewOffers} type="button">View offer</button>
+      </footer>
     </section>
   )
 }
 
-function TopSellers({ data, limit = 3 }) {
+function BenefitsCard({ partnerStatus, currency, benefitsDisplay }) {
   return (
-    <section className="retailer-simple-section">
-      <header><div><h2>Top sellers today</h2><p>Ranked by recorded sales</p></div></header>
-      {data.topProducts.length ? (
-        <ol className="retailer-seller-list">
-          {data.topProducts.slice(0, limit).map((product, index) => (
-            <li key={`${product.name}-${product.category}`}><span>{index + 1}</span><div><strong title={product.name}>{product.name}</strong><small>{product.category} · {integer.format(product.basketCount)} transactions</small></div><b>{formatMoney(product.revenue, data.currency)}</b></li>
+    <section className="scan-panel retailer-benefits-card">
+      <header className="scan-panel-header"><div><h3>Your SCAN Benefits</h3><p>Estimated commercial value from accepted offers, discounts, bonuses and promotions</p></div></header>
+      <div className="retailer-benefits-totals">
+        <div><span>This month</span><strong>{formatMoney(benefitsDisplay ?? partnerStatus.benefits.thisMonth, currency)}</strong></div>
+        <div><span>Last month</span><strong>{formatMoney(partnerStatus.benefits.lastMonth, currency)}</strong></div>
+        <div><span>Lifetime</span><strong>{formatMoney(partnerStatus.benefits.lifetime, currency)}</strong></div>
+      </div>
+      {partnerStatus.benefitHistory.length ? (
+        <ul className="retailer-benefit-rows">
+          {partnerStatus.benefitHistory.slice(0, 4).map((entry) => (
+            <li key={entry.title + entry.activatedAt}>
+              <span className="retailer-benefit-amount">{entry.estimatedBenefitAzn != null ? `+ ${formatMoney(entry.estimatedBenefitAzn, currency)}` : entry.benefitSummary}</span>
+              <small>{entry.title}</small>
+            </li>
           ))}
-        </ol>
-      ) : <EmptyState compact title="No products sold yet">Today’s sellers will appear after transactions are received.</EmptyState>}
+        </ul>
+      ) : <p className="retailer-benefit-empty">Activate an offer to start building your SCAN benefit history.</p>}
     </section>
   )
 }
 
-function BusyHours({ data }) {
-  const sufficient = data.totalBaskets >= MIN_PATTERN_BASKETS && data.dayparts.length
+function Home({ data, engagement, onNavigate }) {
+  const { offers, partnerStatus } = engagement
+  const heroOffer = offers.available[0]
+  const attention = attentionItems(data)
+  const benefitsDisplay = useCountUp(partnerStatus.benefits.thisMonth)
+
   return (
-    <section className="retailer-simple-section">
-      <header><div><h2>Busy hours</h2><p>Share of today’s transactions</p></div></header>
-      {sufficient ? (
-        <div className="retailer-busy-hours">
-          {data.dayparts.slice(0, 4).map((item) => <div key={item.segment}><span>{humanize(item.segment)}</span><i aria-hidden="true"><b style={{ width: `${Math.min(item.sharePercentage, 100)}%` }} /></i><strong>{decimal.format(item.sharePercentage)}%</strong><small>{integer.format(item.basketCount)} transactions</small></div>)}
+    <div className="scan-page-stack retailer-home">
+      <section className="retailer-greeting">
+        <div>
+          <span className="scan-eyebrow">{greeting()}, {retailerDisplayName(data)}</span>
+          <h1>Your store is connected to SCAN</h1>
         </div>
-      ) : <EmptyState compact title="Not enough transactions yet">At least five transactions are needed before showing a time pattern.</EmptyState>}
-    </section>
-  )
-}
+        <span className="retailer-connected-pill"><i aria-hidden="true" />Connected</span>
+      </section>
 
-function Today({ data, onNavigate }) {
-  return (
-    <div className="scan-page-stack retailer-today">
-      <TodayHero data={data} />
-      <NeedsAttention data={data} onNavigate={onNavigate} />
-      <div className="retailer-today-grid"><TopSellers data={data} /><BusyHours data={data} /></div>
+      <div className="retailer-kpi-grid">
+        <KpiCard label="Benefits this month" value={formatMoney(benefitsDisplay, data.currency)} note="Total SCAN benefits" />
+        <KpiCard label="Available offers" value={offers.available.length} note="Offers available for your store" />
+        <KpiCard label="Partner status" value={partnerStatus.level} note="SCAN Partner" tone="level" />
+      </div>
+
+      {heroOffer
+        ? <RecommendedOfferHero offer={heroOffer} onViewOffers={() => onNavigate('offers')} />
+        : <EmptyState title="No personalized offers yet">Offers appear once SCAN has enough recorded CCI product sales from your store.</EmptyState>}
+
+      <BenefitsCard partnerStatus={partnerStatus} currency={data.currency} />
+
+      <SyncStatus data={data} />
+
+      {attention.length ? <AttentionBanner items={attention} onNavigate={onNavigate} /> : null}
     </div>
   )
 }
 
-function Sales({ data, loading, onPeriodChange, period }) {
+function OfferCard({ offer, onActivate, activating, justActivated }) {
+  const [expanded, setExpanded] = useState(false)
+  const tone = offer.status === 'ACTIVE' ? 'success' : offer.status === 'COMPLETED' ? 'neutral' : 'red'
+  return (
+    <article className={`retailer-offer-card ${expanded ? 'is-expanded' : ''}`}>
+      <header>
+        <div><h3>{offer.productName}</h3>{offer.category ? <small>{offer.category}</small> : null}</div>
+        <StatusBadge tone={tone}>{humanize(offer.status)}</StatusBadge>
+      </header>
+      <p className="retailer-offer-reason">{offer.reason}</p>
+      <dl className="retailer-offer-terms">
+        <div><dt>Order</dt><dd>{offer.normalCondition}</dd></div>
+        <div><dt>Partner benefit</dt><dd>{offer.partnerCondition}</dd></div>
+        <div><dt>Estimated saving</dt><dd>{offer.benefitSummary}</dd></div>
+        <div><dt>Valid until</dt><dd>{formatDay(offer.expiresAt)}</dd></div>
+      </dl>
+      <button className="retailer-offer-why-toggle" onClick={() => setExpanded((value) => !value)} type="button">
+        {expanded ? 'Hide details' : "Why you're seeing this"} <ScanIcon name="chevron" size={15} />
+      </button>
+      {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
+      {offer.status === 'AVAILABLE' ? (
+        <ActivateButton activating={activating} justActivated={justActivated} label="Activate offer" offer={offer} onActivate={onActivate} />
+      ) : null}
+    </article>
+  )
+}
+
+function emptyOfferCopy(tab) {
+  if (tab === 'available') return 'Offers appear once SCAN has enough recorded CCI product sales from your store.'
+  if (tab === 'active') return 'Offers you activate will appear here until they expire.'
+  return 'Expired offers will appear here.'
+}
+
+function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
+  const [tab, setTab] = useState('available')
+  const list = offers[tab]
   return (
     <div className="scan-page-stack">
-      <PageIntro eyebrow="Sales" title="Sales history" description="Recorded sales, transactions, and average basket for the selected period." aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} />
-      <MetricStrip label="Sales summary" items={[
-        { label: 'Sales', value: formatMoney(data.totalSales, data.currency), note: humanize(data.period) },
-        { label: 'Transactions', value: integer.format(data.totalBaskets), note: 'Validated receipts' },
-        { label: 'Average basket', value: formatMoney(data.averageBasketValue, data.currency), note: 'Sales divided by transactions' },
-      ]} />
-      <ChartPanel title="How are sales changing over time?" description="Recorded daily sales"><SalesTrend data={data} /></ChartPanel>
+      <PageIntro description="Commercial offers computed from your store's own recorded CCI product sales." eyebrow="Offers" title="SCAN Partner offers" />
+      <div className="retailer-offer-tabs" role="tablist">
+        {OFFER_TABS.map((item) => (
+          <button aria-selected={tab === item.id} className={tab === item.id ? 'is-active' : ''} key={item.id} onClick={() => setTab(item.id)} role="tab" type="button">
+            {item.label} <span>{offers[item.id].length}</span>
+          </button>
+        ))}
+      </div>
+      {list.length ? (
+        <div className="retailer-offer-grid">
+          {list.map((offer) => (
+            <OfferCard
+              activating={activatingKey === offer.offerKey}
+              justActivated={justActivatedKey === offer.offerKey}
+              key={offer.offerKey}
+              offer={offer}
+              onActivate={onActivate}
+            />
+          ))}
+        </div>
+      ) : <EmptyState title={`No ${tab} offers`}>{emptyOfferCopy(tab)}</EmptyState>}
+    </div>
+  )
+}
+
+function ActionCard({ action }) {
+  const meta = ACTION_TYPE_META[action.type]
+  return (
+    <article className="retailer-action-card">
+      <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
+      <h3>{action.title}</h3>
+      <p>{action.explanation}</p>
+      <div className="retailer-action-metric"><span>{action.metricLabel}</span><strong>{action.metricValue}</strong></div>
+      <div className="retailer-action-recommendation"><span>Recommendation</span><p>{action.recommendation}</p></div>
+    </article>
+  )
+}
+
+function Actions({ data, actions, onNavigate }) {
+  const attention = attentionItems(data)
+  return (
+    <div className="scan-page-stack">
+      <PageIntro description="What happened, why it matters, and what you can do about it." eyebrow="Actions" title="Actions" />
+      {attention.length ? <AttentionBanner items={attention} onNavigate={onNavigate} /> : null}
+      {actions.length ? (
+        <div className="retailer-action-grid">{actions.map((action) => <ActionCard action={action} key={action.id} />)}</div>
+      ) : (
+        <EmptyState title="No actions right now">SCAN will surface a recommendation as soon as there is a real pattern worth acting on.</EmptyState>
+      )}
+    </div>
+  )
+}
+
+function Partner({ partnerStatus }) {
+  return (
+    <div className="scan-page-stack">
+      <PageIntro description="Your standing is based on healthy participation in SCAN, not purchase volume." eyebrow="Partner" title="SCAN Partner" />
+      <section className="scan-panel retailer-partner-card">
+        <div className="retailer-partner-level">
+          <strong>{humanize(partnerStatus.level)}</strong>
+          <span>{partnerStatus.nextLevel ? `${partnerStatus.progressPercentage}% to ${humanize(partnerStatus.nextLevel)}` : 'Highest tier reached'}</span>
+        </div>
+        {partnerStatus.nextLevel ? <div className="retailer-partner-progress" aria-hidden="true"><i style={{ width: `${partnerStatus.progressPercentage}%` }} /></div> : null}
+        {partnerStatus.daysUntilNextLevel != null ? <p className="retailer-partner-eta">{partnerStatus.daysUntilNextLevel} days until {humanize(partnerStatus.nextLevel)} eligibility</p> : null}
+        <ul className="retailer-partner-requirements">
+          {partnerStatus.requirements.map((requirement) => (
+            <li className={requirement.met ? 'is-met' : ''} key={requirement.label}>
+              {requirement.met ? <ScanIcon name="check" size={16} /> : <span className="retailer-requirement-dot" aria-hidden="true" />}
+              {requirement.label}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="scan-panel retailer-partner-benefits">
+        <header className="scan-panel-header"><h3>{humanize(partnerStatus.level)} benefits</h3></header>
+        <ul>{(PARTNER_BENEFITS[partnerStatus.level] || []).map((benefit) => <li key={benefit}><ScanIcon name="check" size={15} />{benefit}</li>)}</ul>
+      </section>
+
+      {partnerStatus.level !== 'PLATINUM' ? (
+        <section className="scan-panel retailer-partner-preview">
+          <header className="scan-panel-header"><h3>Platinum unlock preview</h3><StatusBadge tone="neutral">Eligible campaigns only</StatusBadge></header>
+          <ul>{PLATINUM_PREVIEW.map((benefit) => <li key={benefit}>{benefit}</li>)}</ul>
+        </section>
+      ) : null}
+
+      <section className="scan-panel retailer-benefits-card">
+        <header className="scan-panel-header"><h3>Benefit history</h3></header>
+        {partnerStatus.benefitHistory.length ? (
+          <ul className="retailer-benefit-history">
+            {partnerStatus.benefitHistory.map((entry) => (
+              <li key={entry.title + entry.activatedAt}>
+                <time dateTime={entry.activatedAt}>{formatDay(entry.activatedAt)}</time>
+                <div><strong>{entry.title}</strong><small>{entry.benefitSummary}</small></div>
+              </li>
+            ))}
+          </ul>
+        ) : <EmptyState compact title="No benefit history yet">Activate an offer to start your SCAN Partner benefit history.</EmptyState>}
+      </section>
     </div>
   )
 }
@@ -315,20 +531,26 @@ function ProductList({ data, products, search }) {
   )
 }
 
-function Products({ data, loading, onPeriodChange, period }) {
+function Insights({ data, loading, onPeriodChange, period }) {
   const [search, setSearch] = useState('')
   const products = data.topProducts.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(search.trim().toLowerCase()))
-  const shortPeriod = data.period === 'TODAY' || data.period === 'LAST_7_DAYS'
+  const shortPeriod = period === 'TODAY' || period === 'LAST_7_DAYS'
   return (
     <div className="scan-page-stack">
-      <PageIntro eyebrow="Products" title="Product performance" description="What is selling in this shop, based on recorded transaction lines." aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} />
+      <PageIntro aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} description="Supporting detail behind your offers and actions - not the main event." eyebrow="Insights" title="Store Insights" />
+      <MetricStrip label="Sales summary" items={[
+        { label: 'Sales', value: formatMoney(data.totalSales, data.currency), note: humanize(data.period) },
+        { label: 'Transactions', value: integer.format(data.totalBaskets), note: 'Validated receipts' },
+        { label: 'Average basket', value: formatMoney(data.averageBasketValue, data.currency), note: 'Sales divided by transactions' },
+      ]} />
+      <ChartPanel description="Recorded daily sales" title="Sales movement"><SalesTrend data={data} /></ChartPanel>
       <section className="retailer-simple-section retailer-products-section">
-        <header><div><h2>Best sellers</h2><p>Top products by recorded sales</p></div>{data.topProducts.length > 6 ? <label className="retailer-product-search"><span className="sr-only">Search products</span><ScanIcon name="explore" size={18} /><input onChange={(event) => setSearch(event.target.value)} placeholder="Search products" type="search" value={search} /></label> : null}</header>
+        <header><div><h2>Best-selling products</h2><p>Top products by recorded sales</p></div>{data.topProducts.length > 6 ? <label className="retailer-product-search"><span className="sr-only">Search products</span><ScanIcon name="explore" size={18} /><input onChange={(event) => setSearch(event.target.value)} placeholder="Search products" type="search" value={search} /></label> : null}</header>
         <ProductList data={data} products={products} search={search.trim()} />
       </section>
       <div className="retailer-product-secondary">
-        <section className="retailer-simple-section retailer-unavailable-section"><header><h2>Slow movers</h2><StatusBadge tone="neutral">Not available</StatusBadge></header><p>A complete product list is needed to identify products selling more slowly than the rest.</p></section>
-        <section className="retailer-simple-section retailer-stock-check"><header><div><h2>High sales activity</h2><p>Products worth checking on the shelf</p></div><StatusBadge tone="neutral">Inventory not connected</StatusBadge></header>
+        <section className="retailer-simple-section retailer-unavailable-section"><header><h2>Slow-moving products</h2><StatusBadge tone="neutral">See Actions</StatusBadge></header><p>Products selling more slowly than usual are now surfaced as Inventory actions, with the specific comparison behind each one.</p></section>
+        <section className="retailer-simple-section retailer-stock-check"><header><div><h2>Potential stockouts</h2><p>Products worth checking on the shelf</p></div><StatusBadge tone="neutral">Inventory not connected</StatusBadge></header>
           {shortPeriod && data.topProducts.length ? <ul>{[...data.topProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 3).map((product) => <li key={product.name}><div><strong>{product.name}</strong><small>{decimal.format(product.quantity)} units sold · {humanize(data.period)}</small></div><span>Check stock</span></li>)}</ul> : <p>Choose Today or Last 7 days to see products with the most recorded unit sales. SCAN does not know current stock levels.</p>}
         </section>
       </div>
@@ -336,26 +558,14 @@ function Products({ data, loading, onPeriodChange, period }) {
   )
 }
 
-function Alerts({ data }) {
-  const alerts = alertFeed(data)
-  return (
-    <div className="scan-page-stack">
-      <PageIntro eyebrow="Alerts" title="Alerts" description="Shop updates that may need attention." aside={<StatusBadge tone={alerts.length ? 'warning' : 'success'}>{alerts.length ? `${alerts.length} ${alerts.length === 1 ? 'item' : 'items'}` : 'All clear'}</StatusBadge>} />
-      <section className="retailer-simple-section">
-        {alerts.length ? <ol className="retailer-alert-feed">{alerts.map((alert) => <li key={alert.id}><div className="retailer-alert-marker"><ScanIcon name={alert.id === 'sync' || alert.id === 'mapping' ? 'alerts' : 'chart'} size={19} /></div><article><header><StatusBadge tone={alert.id === 'sync' || alert.id === 'mapping' ? 'warning' : 'neutral'}>{alert.type}</StatusBadge><time dateTime={alert.timestamp}>{formatDateTime(alert.timestamp)}</time></header><h2>{alert.title}</h2><p>{alert.description}</p>{alert.action ? <div><span>What to do</span><strong>{alert.action}</strong></div> : null}</article></li>)}</ol> : <div className="retailer-normal-state is-large"><span aria-hidden="true">✓</span><div><strong>Everything looks normal.</strong><p>There are no shop or data-feed alerts for today.</p></div></div>}
-      </section>
-      <details className="retailer-data-details"><summary>Checkout data details <ScanIcon name="chevron" size={17} /></summary><SyncStatus data={data} detailed /></details>
-      <section className="scan-panel retailer-privacy-note"><header className="scan-panel-header"><div><h3>Your sales stay private</h3><p>How SCAN uses this data</p></div><ScanIcon name="shield" /></header><p>SCAN analyzes transaction and product data for this retailer account. No customer identity is shown. CCI receives only aggregates approved for sharing.</p></section>
-    </div>
-  )
-}
-
-function Page({ activePage, data, loading, onNavigate, onPeriodChange, period }) {
+function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onPeriodChange, period, activatingKey, justActivatedKey }) {
   if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
-  if (activePage === 'sales') return <Sales data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
-  if (activePage === 'products') return <Products data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
-  if (activePage === 'alerts') return <Alerts data={data} />
-  return <Today data={data} onNavigate={onNavigate} />
+  if (activePage === 'insights') return <Insights data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
+  if (engagementLoading || !engagement) return <LoadingState title="Loading your SCAN benefits…" description="Preparing offers, actions, and partner status." />
+  if (activePage === 'offers') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
+  if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} />
+  if (activePage === 'partner') return <Partner partnerStatus={engagement.partnerStatus} />
+  return <Home data={data} engagement={engagement} onNavigate={onNavigate} />
 }
 
 export default function RetailerDashboard() {
@@ -364,11 +574,16 @@ export default function RetailerDashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [activePage, setActivePage] = useState('today')
+  const [engagement, setEngagement] = useState(null)
+  const [engagementLoading, setEngagementLoading] = useState(false)
+  const [engagementError, setEngagementError] = useState('')
+  const [activatingKey, setActivatingKey] = useState(null)
+  const [justActivatedKey, setJustActivatedKey] = useState(null)
+  const [activePage, setActivePage] = useState('home')
   const [refreshKey, setRefreshKey] = useState(0)
   const layoutRef = useRef(null)
 
-  usePretextLayout(layoutRef, `${activePage}:${period}:${data?.generatedAt || 'login'}`)
+  usePretextLayout(layoutRef, `${activePage}:${period}:${data?.generatedAt || 'login'}:${engagement ? 'ready' : 'loading'}`)
 
   useEffect(() => {
     if (!credentials) return undefined
@@ -385,30 +600,97 @@ export default function RetailerDashboard() {
     return () => controller.abort()
   }, [credentials, period, refreshKey])
 
-  function refresh() { setLoading(true); setError(''); setRefreshKey((value) => value + 1) }
-  function changePeriod(nextPeriod) { setLoading(true); setError(''); setPeriod(nextPeriod) }
-  function navigate(nextPage) {
-    if ((nextPage === 'today' || nextPage === 'alerts') && period !== 'TODAY') changePeriod('TODAY')
-    setActivePage(nextPage)
-  }
-  function signOut() { setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('TODAY'); setActivePage('today') }
+  useEffect(() => {
+    if (!credentials) return undefined
+    const controller = new AbortController()
+    Promise.all([
+      fetchRetailerOffers({ ...credentials, signal: controller.signal }),
+      fetchRetailerActions({ ...credentials, signal: controller.signal }),
+      fetchRetailerPartnerStatus({ ...credentials, signal: controller.signal }),
+    ])
+      .then(([offers, actions, partnerStatus]) => {
+        if (!controller.signal.aborted) setEngagement({ offers, actions, partnerStatus })
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
+          setEngagementError(requestError?.message || 'Unable to load SCAN offers and benefits.')
+        }
+      })
+      .finally(() => { if (!controller.signal.aborted) setEngagementLoading(false) })
+    return () => controller.abort()
+  }, [credentials, refreshKey])
 
-  if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={(next) => { setCredentials(next); setData(null); setError(''); setLoading(true); setRefreshKey((value) => value + 1) }} />
+  async function activateOffer(offerKey) {
+    setActivatingKey(offerKey)
+    setEngagementError('')
+    try {
+      await activateRetailerOffer({ ...credentials, offerKey })
+      // Show the success checkmark in place before the offer moves to the Active tab, rather
+      // than refetching immediately and having the card disappear out from under the click.
+      setJustActivatedKey(offerKey)
+      setActivatingKey(null)
+      setTimeout(async () => {
+        try {
+          const [refreshedOffers, refreshedActions, refreshedPartnerStatus] = await Promise.all([
+            fetchRetailerOffers(credentials),
+            fetchRetailerActions(credentials),
+            fetchRetailerPartnerStatus(credentials),
+          ])
+          setEngagement({ offers: refreshedOffers, actions: refreshedActions, partnerStatus: refreshedPartnerStatus })
+        } catch (refreshError) {
+          setEngagementError(refreshError?.message || 'Unable to refresh SCAN offers and benefits.')
+        } finally {
+          setJustActivatedKey((current) => (current === offerKey ? null : current))
+        }
+      }, 2200)
+    } catch (activationError) {
+      setEngagementError(activationError?.message || 'This offer could not be activated.')
+      setActivatingKey(null)
+    }
+  }
+
+  function refresh() { setLoading(true); setEngagementLoading(true); setError(''); setEngagementError(''); setRefreshKey((value) => value + 1) }
+  function changePeriod(nextPeriod) { setLoading(true); setError(''); setPeriod(nextPeriod) }
+  function navigate(nextPage) { setActivePage(nextPage) }
+  function signOut() {
+    setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('TODAY'); setActivePage('home')
+    setEngagement(null); setEngagementLoading(false); setEngagementError(''); setActivatingKey(null); setJustActivatedKey(null)
+  }
+
+  if (!credentials || (!data && error)) {
+    return <Login error={error} loading={loading} onSubmit={(next) => {
+      setCredentials(next); setData(null); setError(''); setLoading(true)
+      setEngagement(null); setEngagementLoading(true); setRefreshKey((value) => value + 1)
+    }} />
+  }
   if (!data) return <LoadingState title="Reading your latest sales…" description="Preparing your shop summary." />
 
-  const actions = (
+  const headerActions = (
     <>
       {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
       <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
-      <button className="scan-icon-button" disabled={loading} onClick={refresh} type="button" aria-label={loading ? 'Refreshing…' : 'Refresh'}><ScanIcon name="refresh" size={18} /></button>
+      <button aria-label={loading ? 'Refreshing…' : 'Refresh'} className="scan-icon-button" disabled={loading || engagementLoading} onClick={refresh} type="button"><ScanIcon name="refresh" size={18} /></button>
     </>
   )
 
   return (
     <div ref={layoutRef}>
-      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={actions} eyebrow="My shop" meta={<p>Private retailer view</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
-        {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" type="button" onClick={refresh}>Retry</button></div> : null}
-        <Page activePage={activePage} data={data} loading={loading} onNavigate={navigate} onPeriodChange={changePeriod} period={period} />
+      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="My shop" meta={<p>Private retailer view</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
+        {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" onClick={refresh} type="button">Retry</button></div> : null}
+        {engagementError ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{engagementError}</span></div> : null}
+        <Page
+          activatingKey={activatingKey}
+          activePage={activePage}
+          data={data}
+          engagement={engagement}
+          engagementLoading={engagementLoading}
+          justActivatedKey={justActivatedKey}
+          loading={loading}
+          onActivate={activateOffer}
+          onNavigate={navigate}
+          onPeriodChange={changePeriod}
+          period={period}
+        />
       </WorkspaceShell>
     </div>
   )

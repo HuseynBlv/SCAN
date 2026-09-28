@@ -36,10 +36,11 @@ prove that a promotion will increase sales.
 
 | Portal | What it shows today |
 |---|---|
-| Retailer Today | Today’s sales, transactions, average basket, actual data issues, top sellers, and busy hours |
-| Retailer Sales | Three core metrics and one daily sales trend for the selected supported period |
-| Retailer Products | Searchable best sellers plus honest slow-mover and stock-data limitations |
-| Retailer Alerts | A chronological feed of grounded shop updates, import issues, mapping gaps, and the privacy boundary |
+| Retailer Home | Connection status, SCAN benefits and available offers as the headline KPIs, one recommended commercial offer computed from the store's own recorded CCI sales, and POS sync status |
+| Retailer Offers | Available/Active/Completed commercial offers, each with a real reason grounded in that store's own sales, a "why you're seeing this" detail, and one-click activation |
+| Retailer Actions | Up to one Urgent, Opportunity, Inventory, and Performance recommendation, each backed by a real 14/30-day comparison - never more shown than the data supports |
+| Retailer Insights | Secondary analytics: three core metrics, a daily sales trend, and searchable best sellers, supporting the offers and actions above rather than leading the experience |
+| Retailer Partner | SCAN Partner level and progress, computed from participation (connection, tenure, data quality, sync regularity) rather than purchase volume, plus benefit history |
 | CCI Home | A dynamic discovery statement, up to three action-ready opportunities, four context metrics, Basket DNA, and data health |
 | CCI Opportunities | Action-ready recommendations separated from weak or data-quality signals |
 | CCI Explore and Stores | Companion, CCI SKU, time-pattern, and store-level descriptive analytics |
@@ -230,7 +231,9 @@ credentials in memory only; reloading the page requires signing in again.
 2. Select a CSV/XLS/XLSX file. Review detected structure and reconciliation totals before importing.
 3. For an unknown layout, save the suggested column mapping, validate again, then import the
    unchanged file. Resolve any source products under **Product mapping**.
-4. Open the retailer portal **Today** page and show sales, grounded attention items, and top sellers.
+4. Open the retailer portal **Home** page and show connection status, SCAN benefits, and a
+   recommended commercial offer; open **Offers** to activate one and **Actions** to show a
+   grounded recommendation.
 5. Open the CCI portal and explain that it receives only approved aggregate basket intelligence.
 6. Submit the same file again and verify the duplicate-safe import result and unchanged basket totals.
 
