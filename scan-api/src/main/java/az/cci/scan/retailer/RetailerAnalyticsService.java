@@ -137,6 +137,7 @@ public class RetailerAnalyticsService {
             case TODAY -> today;
             case LAST_7_DAYS -> today.minusDays(6);
             case LAST_30_DAYS -> today.minusDays(29);
+            case LAST_90_DAYS -> today.minusDays(89);
             case ALL_TIME -> throw new IllegalStateException("ALL_TIME handled above");
         };
         return firstDate.atStartOfDay(zoneId).toInstant();

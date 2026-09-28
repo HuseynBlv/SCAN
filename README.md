@@ -37,8 +37,8 @@ prove that a promotion will increase sales.
 | Portal | What it shows today |
 |---|---|
 | Retailer Home | Connection status, SCAN benefits and available offers as the headline KPIs, one recommended commercial offer computed from the store's own recorded CCI sales, and POS sync status |
-| Retailer Offers | Available/Active/Completed commercial offers, each with a real reason grounded in that store's own sales, a "why you're seeing this" detail, and one-click activation |
-| Retailer Actions | Up to one Urgent, Opportunity, Inventory, and Performance recommendation, each backed by a real 14/30-day comparison - never more shown than the data supports |
+| Retailer Offers | Available/Active/Completed commercial offers using different real trade-marketing mechanics (volume discount, bonus product, weekend activation, basket-growth opportunity), each with a real reason grounded in that store's own sales, a "why you're seeing this" detail, and one-click activation |
+| Retailer Actions | Up to one Stock risk, Opportunity, Inventory, and Performance recommendation, each labeled CCI or Store and backed by a real 14/30-day comparison or basket-affinity signal - never more shown than the data supports |
 | Retailer Insights | Secondary analytics: three core metrics, a daily sales trend, and searchable best sellers, supporting the offers and actions above rather than leading the experience |
 | Retailer Partner | SCAN Partner level and progress, computed from participation (connection, tenure, data quality, sync regularity) rather than purchase volume, plus benefit history |
 | CCI Home | A dynamic discovery statement, up to three action-ready opportunities, four context metrics, Basket DNA, and data health |

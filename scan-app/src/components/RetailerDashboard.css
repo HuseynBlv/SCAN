@@ -152,6 +152,35 @@
   letter-spacing: -.03em;
 }
 
+.retailer-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.retailer-hero-metric {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  text-align: right;
+}
+
+.retailer-hero-metric strong {
+  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  color: var(--scan-red-dark);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em;
+}
+
+.retailer-hero-metric span {
+  color: var(--scan-muted);
+  font-size: .68rem;
+  font-weight: 650;
+  max-width: 160px;
+}
+
 .retailer-hero-reason {
   max-width: 640px;
   margin: 0;
@@ -389,7 +418,7 @@
 
 .retailer-sync-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
 }
 
@@ -470,21 +499,43 @@
   gap: 13px;
   padding: 20px 22px;
   border: 1px solid var(--scan-border);
+  border-left: 3px solid var(--scan-border);
   border-radius: 12px;
   background: #fff;
   transition: box-shadow 160ms var(--scan-enter), border-color 160ms var(--scan-enter);
 }
 
+/* Each offer mechanic gets its own restrained accent, so cards read as structurally different
+   at a glance, not just different numbers in an identical template. */
+.retailer-offer-card.is-discount { border-left-color: var(--scan-red); }
+.retailer-offer-card.is-bonus { border-left-color: var(--scan-success); }
+.retailer-offer-card.is-weekend { border-left-color: var(--scan-warning); }
+.retailer-offer-card.is-basket { border-left-color: var(--scan-info); }
+
 .retailer-offer-card:hover {
   border-color: #cfcdc7;
   box-shadow: 0 4px 14px rgba(20, 20, 20, .06);
 }
+.retailer-offer-card.is-discount:hover { border-left-color: var(--scan-red); }
+.retailer-offer-card.is-bonus:hover { border-left-color: var(--scan-success); }
+.retailer-offer-card.is-weekend:hover { border-left-color: var(--scan-warning); }
+.retailer-offer-card.is-basket:hover { border-left-color: var(--scan-info); }
 
 .retailer-offer-card > header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+}
+
+.retailer-offer-type {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--scan-muted);
+  font-size: .63rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
 
 .retailer-offer-card > header h3 {
@@ -494,6 +545,23 @@
 }
 
 .retailer-offer-card > header small {
+  color: var(--scan-muted);
+  font-size: .7rem;
+}
+
+.retailer-offer-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.retailer-offer-metric strong {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+
+.retailer-offer-metric span {
   color: var(--scan-muted);
   font-size: .7rem;
 }
@@ -591,6 +659,21 @@
   background: #fff;
 }
 
+.retailer-action-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.retailer-action-scope {
+  color: var(--scan-muted);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
 .retailer-action-card > h3 {
   margin: 2px 0 0;
   font-size: .96rem;
@@ -666,8 +749,16 @@
   font-weight: 650;
 }
 
+.retailer-partner-headline {
+  margin: 10px 0 0;
+  font-size: .92rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* A secondary indicator, not the main event - smaller and set below the commercial headline. */
 .retailer-partner-progress {
-  height: 8px;
+  height: 5px;
   margin-top: 14px;
   overflow: hidden;
   background: #ebeae6;
@@ -686,6 +777,34 @@
   margin: 10px 0 0;
   color: var(--scan-muted);
   font-size: .76rem;
+}
+
+.retailer-partner-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 18px 0 0;
+}
+
+.retailer-partner-metrics > div {
+  padding: 12px 14px;
+  border: 1px solid var(--scan-border);
+  background: var(--scan-subtle);
+}
+
+.retailer-partner-metrics dt {
+  color: var(--scan-muted);
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.retailer-partner-metrics dd {
+  margin: 6px 0 0;
+  font-size: .86rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
 }
 
 .retailer-partner-requirements {
@@ -1003,6 +1122,21 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .retailer-hero-top {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .retailer-hero-metric {
+    align-items: flex-start;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .retailer-partner-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .retailer-hero-offer footer {

@@ -23,13 +23,24 @@ public final class RetailerEngagementDtos {
         COMPLETED
     }
 
+    /** The trade-marketing mechanic behind an offer, so offers read as structurally different, not templated. */
+    public enum OfferType {
+        VOLUME_DISCOUNT,
+        BONUS_PRODUCT,
+        WEEKEND_ACTIVATION,
+        BASKET_GROWTH
+    }
+
     public record Offer(
         String offerKey,
+        OfferType offerType,
         String title,
         String productName,
         String category,
         String reason,
         List<String> whyReasons,
+        String metricLabel,
+        String metricValue,
         String normalCondition,
         String partnerCondition,
         BigDecimal estimatedBenefitAzn,
@@ -48,15 +59,22 @@ public final class RetailerEngagementDtos {
     }
 
     public enum ActionType {
-        URGENT,
+        STOCK_RISK,
         OPPORTUNITY,
         INVENTORY,
         PERFORMANCE
     }
 
+    /** Whether an action concerns a Coca-Cola System product or the wider store range - SCAN helps with both. */
+    public enum ActionScope {
+        CCI,
+        STORE
+    }
+
     public record Action(
         String id,
         ActionType type,
+        ActionScope scope,
         String title,
         String explanation,
         String recommendation,
@@ -92,6 +110,10 @@ public final class RetailerEngagementDtos {
         String nextLevel,
         Integer daysUntilNextLevel,
         List<PartnerRequirement> requirements,
+        int daysConnected,
+        BigDecimal dataReliabilityPercent,
+        boolean transactionSyncActive,
+        String dataCompletenessLabel,
         BenefitSummary benefits,
         List<BenefitHistoryEntry> benefitHistory
     ) {

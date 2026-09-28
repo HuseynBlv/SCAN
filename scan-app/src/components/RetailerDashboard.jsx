@@ -45,9 +45,9 @@ const NAV_ITEMS = [
 ]
 
 const PERIODS = [
-  { value: 'TODAY', label: 'Today' },
-  { value: 'LAST_7_DAYS', label: 'Last 7 days' },
-  { value: 'LAST_30_DAYS', label: 'Last 30 days' },
+  { value: 'LAST_7_DAYS', label: '7 days' },
+  { value: 'LAST_30_DAYS', label: '30 days' },
+  { value: 'LAST_90_DAYS', label: '90 days' },
   { value: 'ALL_TIME', label: 'All time' },
 ]
 
@@ -57,8 +57,15 @@ const OFFER_TABS = [
   { id: 'completed', label: 'Completed' },
 ]
 
+const OFFER_TYPE_META = {
+  VOLUME_DISCOUNT: { label: 'Volume discount', accent: 'discount' },
+  BONUS_PRODUCT: { label: 'Bonus product', accent: 'bonus' },
+  WEEKEND_ACTIVATION: { label: 'Weekend activation', accent: 'weekend' },
+  BASKET_GROWTH: { label: 'Basket-growth opportunity', accent: 'basket' },
+}
+
 const ACTION_TYPE_META = {
-  URGENT: { label: 'Urgent', tone: 'warning' },
+  STOCK_RISK: { label: 'Stock risk', tone: 'warning' },
   OPPORTUNITY: { label: 'Opportunity', tone: 'red' },
   INVENTORY: { label: 'Inventory', tone: 'neutral' },
   PERFORMANCE: { label: 'Performance', tone: 'success' },
@@ -66,32 +73,35 @@ const ACTION_TYPE_META = {
 
 // SCAN Partner benefits are a uniform commercial policy for every retailer at a given tier, not
 // a fact observed from any one retailer's data - so, unlike everything else on this screen, this
-// copy is legitimately the same for every account at the same level.
+// copy is legitimately the same for every account at the same level. Silver already includes
+// personalized offers: Gold and Platinum add more, they do not gate offers from existing at all.
 const PARTNER_BENEFITS = {
-  SILVER: ['Personalized CCI offers become available once your store meets Gold requirements.'],
+  SILVER: [
+    'Standard personalized offers',
+    'SCAN recommendations',
+    'Store performance insights',
+    'Standard promotional campaigns',
+  ],
   GOLD: [
-    'Personalized CCI offers',
-    'Partner-only promotions',
-    'Promotional bonuses',
-    'Early access to selected campaigns',
-    'Store recommendations',
-    'Performance benchmarking',
+    'Enhanced personalized offers',
+    'Exclusive promotional campaigns',
+    'Bonus-product opportunities',
+    'Early campaign access',
+    'Additional merchandising opportunities',
   ],
   PLATINUM: [
-    'Everything in Gold',
-    'Priority promotional campaigns',
-    'Enhanced commercial offers',
+    'Priority promotional activations',
     'New product trials',
-    'Additional merchandising opportunities',
+    'Premium partner campaigns',
+    'Enhanced merchandising support',
+    'Priority access to selected CCI programs',
   ],
 }
 
-const PLATINUM_PREVIEW = [
-  'Priority promotional campaigns',
-  'Enhanced commercial offers',
-  'New product trials',
-  'Additional merchandising opportunities',
-]
+const NEXT_LEVEL_PREVIEW = {
+  GOLD: PARTNER_BENEFITS.GOLD,
+  PLATINUM: PARTNER_BENEFITS.PLATINUM,
+}
 
 const integer = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 const decimal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
@@ -131,6 +141,8 @@ function retailerDisplayName(data) {
   return data.retailerCode === 'KAGGLE' ? 'Demo shop' : data.retailerName
 }
 
+// Only real, business-facing feed problems belong here. Data-quality/mapping-coverage concerns
+// are an internal SCAN/CCI operations matter, not something a retailer needs to see or act on.
 function attentionItems(data) {
   const items = []
   if (data.sync.state !== 'COMPLETED' || data.sync.errors.length) {
@@ -139,17 +151,6 @@ function attentionItems(data) {
       title: 'Checkout data needs attention',
       description: data.sync.errors[0] || `The latest feed is ${humanize(data.sync.state)}.`,
       action: 'Check the latest checkout export or reconnect the feed.',
-    })
-  }
-  if (data.totalBaskets > 0 && data.mappedLinePercentage < 90) {
-    const noProductsMapped = data.mappedLinePercentage === 0
-    items.push({
-      id: 'mapping',
-      title: noProductsMapped ? 'Product analysis is unavailable' : 'Product matching needs review',
-      description: noProductsMapped
-        ? 'No transaction lines are matched to normalized products.'
-        : `${decimal.format(data.mappedLinePercentage)}% of transaction lines are matched to normalized products.`,
-      action: 'Ask the SCAN administrator to review unmatched products.',
     })
   }
   return items
@@ -248,7 +249,8 @@ function SyncStatus({ data }) {
       <header className="scan-panel-header"><div><h3>POS Connection</h3><p>{data.sync.filename || 'No source file received'}</p></div><StatusBadge tone={healthy ? 'success' : 'warning'}>{healthy ? 'Connected' : humanize(data.sync.state)}</StatusBadge></header>
       <dl className="retailer-sync-grid">
         <div><dt>Last sync</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
-        <div><dt>Transactions processed</dt><dd>{integer.format(data.lifetimeTransactionsProcessed)}</dd></div>
+        <div><dt>Receipts processed</dt><dd>{integer.format(data.lifetimeTransactionsProcessed)}</dd></div>
+        <div><dt>Data status</dt><dd>{healthy ? 'Up to date' : 'Needs attention'}</dd></div>
       </dl>
       <p className="retailer-pos-copy">SCAN automatically analyzes your sales data. No manual reporting required.</p>
     </section>
@@ -299,13 +301,21 @@ function ActivateButton({ offer, onActivate, activating, justActivated, label })
 function RecommendedOfferHero({ offer, onViewOffers }) {
   return (
     <section className="retailer-hero-offer">
-      <span className="scan-eyebrow">Recommended for your store</span>
-      <h2>{offer.productName}</h2>
+      <div className="retailer-hero-top">
+        <div>
+          <span className="scan-eyebrow">Recommended for your store</span>
+          <h2>{offer.productName}</h2>
+        </div>
+        <div className="retailer-hero-metric">
+          <strong>{offer.metricValue}</strong>
+          <span>{offer.metricLabel}</span>
+        </div>
+      </div>
       <p className="retailer-hero-reason">{offer.reason}</p>
       <div className="retailer-hero-terms">
-        <div><span>SCAN Partner offer</span><strong>{offer.normalCondition}</strong></div>
+        <div><span>Recommended</span><strong>{offer.normalCondition}</strong></div>
         <div><span>Partner benefit</span><strong>{offer.partnerCondition}</strong></div>
-        <div><span>Estimated benefit</span><strong>{offer.benefitSummary}</strong></div>
+        <div><span>Estimated commercial value</span><strong>{offer.benefitSummary}</strong></div>
       </div>
       <footer>
         <small>Based on your recent sales</small>
@@ -318,7 +328,7 @@ function RecommendedOfferHero({ offer, onViewOffers }) {
 function BenefitsCard({ partnerStatus, currency, benefitsDisplay }) {
   return (
     <section className="scan-panel retailer-benefits-card">
-      <header className="scan-panel-header"><div><h3>Your SCAN Benefits</h3><p>Estimated commercial value from accepted offers, discounts, bonuses and promotions</p></div></header>
+      <header className="scan-panel-header"><div><h3>Your SCAN Benefits</h3><p>Estimated commercial value from accepted offers, discounts and promotional benefits.</p></div></header>
       <div className="retailer-benefits-totals">
         <div><span>This month</span><strong>{formatMoney(benefitsDisplay ?? partnerStatus.benefits.thisMonth, currency)}</strong></div>
         <div><span>Last month</span><strong>{formatMoney(partnerStatus.benefits.lastMonth, currency)}</strong></div>
@@ -376,17 +386,23 @@ function Home({ data, engagement, onNavigate }) {
 function OfferCard({ offer, onActivate, activating, justActivated }) {
   const [expanded, setExpanded] = useState(false)
   const tone = offer.status === 'ACTIVE' ? 'success' : offer.status === 'COMPLETED' ? 'neutral' : 'red'
+  const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType) }
   return (
-    <article className={`retailer-offer-card ${expanded ? 'is-expanded' : ''}`}>
+    <article className={`retailer-offer-card is-${typeMeta.accent} ${expanded ? 'is-expanded' : ''}`}>
       <header>
-        <div><h3>{offer.productName}</h3>{offer.category ? <small>{offer.category}</small> : null}</div>
+        <div>
+          <span className="retailer-offer-type">{typeMeta.label}</span>
+          <h3>{offer.productName}</h3>
+          {offer.category ? <small>{offer.category}</small> : null}
+        </div>
         <StatusBadge tone={tone}>{humanize(offer.status)}</StatusBadge>
       </header>
+      <div className="retailer-offer-metric"><strong>{offer.metricValue}</strong><span>{offer.metricLabel}</span></div>
       <p className="retailer-offer-reason">{offer.reason}</p>
       <dl className="retailer-offer-terms">
-        <div><dt>Order</dt><dd>{offer.normalCondition}</dd></div>
+        <div><dt>Condition</dt><dd>{offer.normalCondition}</dd></div>
         <div><dt>Partner benefit</dt><dd>{offer.partnerCondition}</dd></div>
-        <div><dt>Estimated saving</dt><dd>{offer.benefitSummary}</dd></div>
+        <div><dt>Benefit</dt><dd>{offer.benefitSummary}</dd></div>
         <div><dt>Valid until</dt><dd>{formatDay(offer.expiresAt)}</dd></div>
       </dl>
       <button className="retailer-offer-why-toggle" onClick={() => setExpanded((value) => !value)} type="button">
@@ -411,7 +427,7 @@ function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
   const list = offers[tab]
   return (
     <div className="scan-page-stack">
-      <PageIntro description="Commercial offers computed from your store's own recorded CCI product sales." eyebrow="Offers" title="SCAN Partner offers" />
+      <PageIntro description="Personalized CCI offers based on how products actually perform in your store." eyebrow="Offers" title="SCAN Partner offers" />
       <div className="retailer-offer-tabs" role="tablist">
         {OFFER_TABS.map((item) => (
           <button aria-selected={tab === item.id} className={tab === item.id ? 'is-active' : ''} key={item.id} onClick={() => setTab(item.id)} role="tab" type="button">
@@ -440,7 +456,10 @@ function ActionCard({ action }) {
   const meta = ACTION_TYPE_META[action.type]
   return (
     <article className="retailer-action-card">
-      <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
+      <header>
+        <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
+        <span className="retailer-action-scope">{action.scope === 'CCI' ? 'CCI' : 'Store'}</span>
+      </header>
       <h3>{action.title}</h3>
       <p>{action.explanation}</p>
       <div className="retailer-action-metric"><span>{action.metricLabel}</span><strong>{action.metricValue}</strong></div>
@@ -465,16 +484,29 @@ function Actions({ data, actions, onNavigate }) {
 }
 
 function Partner({ partnerStatus }) {
+  const nextPreview = partnerStatus.nextLevel ? NEXT_LEVEL_PREVIEW[partnerStatus.nextLevel] : null
   return (
     <div className="scan-page-stack">
-      <PageIntro description="Your standing is based on healthy participation in SCAN, not purchase volume." eyebrow="Partner" title="SCAN Partner" />
+      <PageIntro description="Your Partner level grows as your store stays connected and consistently shares reliable sales data." eyebrow="Partner" title="SCAN Partner" />
       <section className="scan-panel retailer-partner-card">
         <div className="retailer-partner-level">
           <strong>{humanize(partnerStatus.level)}</strong>
           <span>{partnerStatus.nextLevel ? `${partnerStatus.progressPercentage}% to ${humanize(partnerStatus.nextLevel)}` : 'Highest tier reached'}</span>
         </div>
+        <p className="retailer-partner-headline">This store has an active commercial relationship with SCAN and CCI.</p>
         {partnerStatus.nextLevel ? <div className="retailer-partner-progress" aria-hidden="true"><i style={{ width: `${partnerStatus.progressPercentage}%` }} /></div> : null}
-        {partnerStatus.daysUntilNextLevel != null ? <p className="retailer-partner-eta">{partnerStatus.daysUntilNextLevel} days until {humanize(partnerStatus.nextLevel)} eligibility</p> : null}
+        {partnerStatus.daysUntilNextLevel != null ? (
+          <p className="retailer-partner-eta">{partnerStatus.daysUntilNextLevel} days until {humanize(partnerStatus.nextLevel)} eligibility, if the connection remains active and data quality stays reliable.</p>
+        ) : null}
+
+        <dl className="retailer-partner-metrics">
+          <div><dt>Connected for</dt><dd>{integer.format(partnerStatus.daysConnected)} {partnerStatus.daysConnected === 1 ? 'day' : 'days'}</dd></div>
+          <div><dt>Data reliability</dt><dd>{decimal.format(partnerStatus.dataReliabilityPercent)}%</dd></div>
+          <div><dt>Transaction sync</dt><dd>{partnerStatus.transactionSyncActive ? 'Active' : 'Inactive'}</dd></div>
+          <div><dt>Data completeness</dt><dd>{partnerStatus.dataCompletenessLabel}</dd></div>
+          <div><dt>Next level</dt><dd>{partnerStatus.nextLevel ? humanize(partnerStatus.nextLevel) : 'Highest tier reached'}</dd></div>
+        </dl>
+
         <ul className="retailer-partner-requirements">
           {partnerStatus.requirements.map((requirement) => (
             <li className={requirement.met ? 'is-met' : ''} key={requirement.label}>
@@ -490,10 +522,10 @@ function Partner({ partnerStatus }) {
         <ul>{(PARTNER_BENEFITS[partnerStatus.level] || []).map((benefit) => <li key={benefit}><ScanIcon name="check" size={15} />{benefit}</li>)}</ul>
       </section>
 
-      {partnerStatus.level !== 'PLATINUM' ? (
+      {nextPreview ? (
         <section className="scan-panel retailer-partner-preview">
-          <header className="scan-panel-header"><h3>Platinum unlock preview</h3><StatusBadge tone="neutral">Eligible campaigns only</StatusBadge></header>
-          <ul>{PLATINUM_PREVIEW.map((benefit) => <li key={benefit}>{benefit}</li>)}</ul>
+          <header className="scan-panel-header"><h3>{humanize(partnerStatus.nextLevel)} unlock preview</h3><StatusBadge tone="neutral">Eligible campaigns only</StatusBadge></header>
+          <ul>{nextPreview.map((benefit) => <li key={benefit}>{benefit}</li>)}</ul>
         </section>
       ) : null}
 
@@ -534,7 +566,7 @@ function ProductList({ data, products, search }) {
 function Insights({ data, loading, onPeriodChange, period }) {
   const [search, setSearch] = useState('')
   const products = data.topProducts.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(search.trim().toLowerCase()))
-  const shortPeriod = period === 'TODAY' || period === 'LAST_7_DAYS'
+  const shortPeriod = period === 'LAST_7_DAYS'
   return (
     <div className="scan-page-stack">
       <PageIntro aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} description="Supporting detail behind your offers and actions - not the main event." eyebrow="Insights" title="Store Insights" />
@@ -551,7 +583,7 @@ function Insights({ data, loading, onPeriodChange, period }) {
       <div className="retailer-product-secondary">
         <section className="retailer-simple-section retailer-unavailable-section"><header><h2>Slow-moving products</h2><StatusBadge tone="neutral">See Actions</StatusBadge></header><p>Products selling more slowly than usual are now surfaced as Inventory actions, with the specific comparison behind each one.</p></section>
         <section className="retailer-simple-section retailer-stock-check"><header><div><h2>Potential stockouts</h2><p>Products worth checking on the shelf</p></div><StatusBadge tone="neutral">Inventory not connected</StatusBadge></header>
-          {shortPeriod && data.topProducts.length ? <ul>{[...data.topProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 3).map((product) => <li key={product.name}><div><strong>{product.name}</strong><small>{decimal.format(product.quantity)} units sold · {humanize(data.period)}</small></div><span>Check stock</span></li>)}</ul> : <p>Choose Today or Last 7 days to see products with the most recorded unit sales. SCAN does not know current stock levels.</p>}
+          {shortPeriod && data.topProducts.length ? <ul>{[...data.topProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 3).map((product) => <li key={product.name}><div><strong>{product.name}</strong><small>{decimal.format(product.quantity)} units sold · {humanize(data.period)}</small></div><span>Check stock</span></li>)}</ul> : <p>Choose 7 days to see products with the most recorded unit sales. SCAN does not know current stock levels.</p>}
         </section>
       </div>
     </div>
@@ -570,7 +602,7 @@ function Page({ activePage, data, engagement, engagementLoading, loading, onActi
 
 export default function RetailerDashboard() {
   const [credentials, setCredentials] = useState(null)
-  const [period, setPeriod] = useState('TODAY')
+  const [period, setPeriod] = useState('LAST_30_DAYS')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -675,7 +707,7 @@ export default function RetailerDashboard() {
 
   return (
     <div ref={layoutRef}>
-      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="My shop" meta={<p>Private retailer view</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
+      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="My shop" meta={<p>Retailer Workspace</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
         {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" onClick={refresh} type="button">Retry</button></div> : null}
         {engagementError ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{engagementError}</span></div> : null}
         <Page

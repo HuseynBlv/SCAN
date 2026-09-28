@@ -95,13 +95,24 @@ public class RetailerPartnerStatusService {
             level = "SILVER";
             progressPercentage = (int) Math.round(metCount * 100.0 / requirements.size());
             nextLevel = "GOLD";
-            daysUntilNextLevel = null;
+            // Only promise a day count when days-active is genuinely the sole remaining gap -
+            // never imply a date when the connection or data quality itself isn't there yet.
+            boolean onlyTenureRemaining = connected && reliableData && regularSync && !active30;
+            daysUntilNextLevel = onlyTenureRemaining ? (int) Math.max(0, DAYS_TO_GOLD - daysActive) : null;
         }
 
         return new PartnerStatusResponse(
-            level, progressPercentage, nextLevel, daysUntilNextLevel,
-            requirements, benefits(retailer, now), benefitHistory(retailer)
+            level, progressPercentage, nextLevel, daysUntilNextLevel, requirements,
+            (int) daysActive, mappedPercentage(retailer), regularSync, dataCompletenessLabel(retailer),
+            benefits(retailer, now), benefitHistory(retailer)
         );
+    }
+
+    private String dataCompletenessLabel(Retailer retailer) {
+        BigDecimal mapped = mappedPercentage(retailer);
+        if (mapped.compareTo(BigDecimal.valueOf(90)) >= 0) return "High";
+        if (mapped.compareTo(BigDecimal.valueOf(60)) >= 0) return "Medium";
+        return "Low";
     }
 
     private BigDecimal mappedPercentage(Retailer retailer) {

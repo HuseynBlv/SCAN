@@ -16,4 +16,6 @@ public interface CanonicalProductRepository extends JpaRepository<CanonicalProdu
     List<CanonicalProduct> findAllByNormalizedKeyIn(Collection<String> normalizedKeys);
 
     List<CanonicalProduct> findAllByOrderByNormalizedNameAsc();
+
+    List<CanonicalProduct> findAllByCciTrue();
 }

@@ -116,7 +116,7 @@ class RetailerEngagementIntegrationTest {
 
         // Recent 14 days: 6 units/day. Prior 14-28 days: 4 units/day. That is a real ~50% growth
         // in recorded quantity, comfortably over the action service's 15% acceleration threshold,
-        // so the URGENT action reflects a genuine trend rather than a fabricated one.
+        // so the STOCK_RISK action reflects a genuine trend rather than a fabricated one.
         StringBuilder rows = new StringBuilder(
             "store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total\n"
         );
@@ -154,7 +154,8 @@ class RetailerEngagementIntegrationTest {
         assertThat(offer.productName()).isEqualTo("Coca-Cola Zero 330ml");
         assertThat(offer.status()).isEqualTo(OfferStatus.AVAILABLE);
         assertThat(offer.estimatedBenefitAzn()).isGreaterThan(BigDecimal.ZERO);
-        assertThat(offer.partnerCondition()).contains("8%");
+        assertThat(offer.offerType()).isNotNull();
+        assertThat(offer.reason()).isNotBlank();
 
         OffersResponse freshOffers = offerCatalogService.offers(freshRetailer);
         assertThat(freshOffers.available()).isEmpty();
@@ -188,7 +189,8 @@ class RetailerEngagementIntegrationTest {
     @Test
     void reportsARealisticActionForAnAcceleratingCciProduct() {
         List<Action> actions = actionService.actions(activeRetailer);
-        assertThat(actions).anyMatch(action -> action.type() == ActionType.URGENT
+        assertThat(actions).anyMatch(action -> action.type() == ActionType.STOCK_RISK
+            && action.scope() == az.cci.scan.retailer.RetailerEngagementDtos.ActionScope.CCI
             && action.title().contains("Coca-Cola Zero 330ml"));
         // A fresh retailer with no transactions produces no fabricated actions.
         assertThat(actionService.actions(freshRetailer)).isEmpty();
@@ -209,6 +211,36 @@ class RetailerEngagementIntegrationTest {
             .filteredOn(requirement -> requirement.label().contains("30+"))
             .allMatch(requirement -> !requirement.met());
         assertThat(freshStatus.benefits().thisMonth()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void aSilverStoreAlreadyHasAvailableOffersNoContradictionWithGoldOnlyPersonalization() throws Exception {
+        // Onboarded 5 days ago - short of the 30-day Gold requirement, so this store is Silver -
+        // but it already has real, recorded CCI sales. Silver retailers must already see
+        // personalized offers; only enhanced/exclusive terms are meant to wait for Gold.
+        Retailer newcomer = new Retailer("NEWCO", "Newcomer Market", "Asia/Baku", true);
+        setCreatedAt(newcomer, Instant.now().minus(5, ChronoUnit.DAYS));
+        newcomer = retailerRepository.save(newcomer);
+        importProfileRepository.save(new ImportProfile(
+            newcomer, "CANONICAL", "synthetic-canonical-v1", "yyyy-MM-dd'T'HH:mm:ss", "Asia/Baku", "AZN"
+        ));
+        StringBuilder rows = new StringBuilder(
+            "store_id,receipt_id,transaction_timestamp,product_code,barcode,product_name,quantity,unit_price,discount_amount,line_total\n"
+        );
+        Instant now = Instant.now();
+        for (int day = 0; day < 5; day++) {
+            String timestamp = now.minus(day, ChronoUnit.DAYS).toString().substring(0, 19);
+            rows.append("STORE-01,R-NEWCO-").append(day)
+                .append(",").append(timestamp)
+                .append(",COKE-ZERO,5449000131805,Coca-Cola Zero 330ml,6,1.20,0.00,7.20\n");
+        }
+        importService.importFile(newcomer.getCode(), "CANONICAL", csv(rows.toString()));
+
+        PartnerStatusResponse status = partnerStatusService.status(newcomer);
+        assertThat(status.level()).isEqualTo("SILVER");
+
+        OffersResponse offers = offerCatalogService.offers(newcomer);
+        assertThat(offers.available()).isNotEmpty();
     }
 
     private void saveCanonical(String name, String barcode, String category, boolean cci) {
