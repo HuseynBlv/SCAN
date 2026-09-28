@@ -2,6 +2,8 @@ package az.cci.scan.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -31,6 +33,14 @@ import java.util.UUID;
 )
 public class RetailerOfferActivation {
 
+    /** The trade-marketing mechanic behind the offer at the moment it was activated. */
+    public enum OfferType {
+        VOLUME_DISCOUNT,
+        BONUS_PRODUCT,
+        WEEKEND_ACTIVATION,
+        BASKET_GROWTH
+    }
+
     @Id
     @UuidGenerator
     private UUID id;
@@ -41,6 +51,10 @@ public class RetailerOfferActivation {
 
     @Column(name = "offer_key", nullable = false, length = 160)
     private String offerKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "offer_type", nullable = false, length = 32)
+    private OfferType offerType;
 
     @Column(nullable = false, length = 256)
     private String title;
@@ -75,6 +89,7 @@ public class RetailerOfferActivation {
     public RetailerOfferActivation(
         Retailer retailer,
         String offerKey,
+        OfferType offerType,
         String title,
         String productName,
         String category,
@@ -86,6 +101,7 @@ public class RetailerOfferActivation {
     ) {
         this.retailer = retailer;
         this.offerKey = offerKey;
+        this.offerType = offerType;
         this.title = title;
         this.productName = productName;
         this.category = category;
@@ -106,6 +122,10 @@ public class RetailerOfferActivation {
 
     public String getOfferKey() {
         return offerKey;
+    }
+
+    public OfferType getOfferType() {
+        return offerType;
     }
 
     public String getTitle() {

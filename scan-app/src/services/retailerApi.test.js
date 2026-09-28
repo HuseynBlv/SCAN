@@ -10,15 +10,18 @@ import {
 function validOffer(overrides = {}) {
   return {
     offerKey: 'CCI-COCA-COLA-ZERO-330ML',
+    offerType: 'VOLUME_DISCOUNT',
     title: 'Coca-Cola Zero 330ml',
     productName: 'Coca-Cola Zero 330ml',
     category: 'Beverages',
-    reason: 'Coca-Cola Zero 330ml is your top CCI seller by recorded revenue.',
+    reason: 'Sales increased 18% compared with the previous 30 days.',
     whyReasons: ['Coca-Cola Zero 330ml generated ₼500.00 in recorded sales over the last 30 days.'],
-    normalCondition: 'Order 2 cases',
-    partnerCondition: '8% partner discount',
-    estimatedBenefitAzn: 11.2,
-    benefitSummary: 'Save ₼11.20',
+    metricLabel: 'Growth vs previous 30 days',
+    metricValue: '+18%',
+    normalCondition: 'Order 3 cases',
+    partnerCondition: '10% campaign discount',
+    estimatedBenefitAzn: 14.4,
+    benefitSummary: 'Estimated benefit: ₼14.40',
     expiresAt: '2026-09-05T10:00:00Z',
     status: 'AVAILABLE',
     ...overrides,
@@ -198,11 +201,12 @@ describe('fetchRetailerActions', () => {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue([{
-        id: 'urgent-coca-cola-500ml',
-        type: 'URGENT',
-        title: 'Coca-Cola 500ml demand is accelerating',
+        id: 'stock-risk-coca-cola-500ml',
+        type: 'STOCK_RISK',
+        scope: 'CCI',
+        title: 'Coca-Cola 500ml is selling 34% faster than usual',
         explanation: 'Coca-Cola 500ml demand is up 34% over the last 14 days.',
-        recommendation: 'Consider checking shelf stock and adding to your next order.',
+        recommendation: 'Consider adding stock to your next order and checking shelf availability.',
         metricLabel: 'Sales velocity (last 14 days)',
         metricValue: '24.3 units/day',
       }]),
@@ -213,7 +217,8 @@ describe('fetchRetailerActions', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/retailer/actions', expect.objectContaining({ method: 'GET' }))
     expect(result).toHaveLength(1)
-    expect(result[0].type).toBe('URGENT')
+    expect(result[0].type).toBe('STOCK_RISK')
+    expect(result[0].scope).toBe('CCI')
   })
 })
 
@@ -230,6 +235,10 @@ describe('fetchRetailerPartnerStatus', () => {
         nextLevel: 'PLATINUM',
         daysUntilNextLevel: 8,
         requirements: [{ label: 'Store connected', met: true }],
+        daysConnected: 45,
+        dataReliabilityPercent: 94,
+        transactionSyncActive: true,
+        dataCompletenessLabel: 'High',
         benefits: { thisMonth: 84.5, lastMonth: 61.2, lifetime: 247.8 },
         benefitHistory: [{
           activatedAt: '2026-08-26T10:00:00Z',

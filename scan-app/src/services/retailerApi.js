@@ -5,7 +5,7 @@ import {
   errorMessage,
 } from './scanApi'
 
-const PERIODS = new Set(['TODAY', 'LAST_7_DAYS', 'LAST_30_DAYS', 'ALL_TIME'])
+const PERIODS = new Set(['TODAY', 'LAST_7_DAYS', 'LAST_30_DAYS', 'LAST_90_DAYS', 'ALL_TIME'])
 
 function invalid(field) {
   throw new ScanApiError(`SCAN API returned an invalid retailer field: ${field}.`)
@@ -174,7 +174,9 @@ export async function fetchRetailerOverview({ period, username, password, signal
 }
 
 const OFFER_STATUSES = new Set(['AVAILABLE', 'ACTIVE', 'COMPLETED'])
-const ACTION_TYPES = new Set(['URGENT', 'OPPORTUNITY', 'INVENTORY', 'PERFORMANCE'])
+const OFFER_TYPES = new Set(['VOLUME_DISCOUNT', 'BONUS_PRODUCT', 'WEEKEND_ACTIVATION', 'BASKET_GROWTH'])
+const ACTION_TYPES = new Set(['STOCK_RISK', 'OPPORTUNITY', 'INVENTORY', 'PERFORMANCE'])
+const ACTION_SCOPES = new Set(['CCI', 'STORE'])
 
 function enumValue(value, allowed, field) {
   if (!allowed.has(value)) invalid(field)
@@ -189,11 +191,14 @@ function nullableNumber(value, field) {
 function normalizeOffer(item, field) {
   return {
     offerKey: string(item.offerKey, `${field}.offerKey`),
+    offerType: enumValue(item.offerType, OFFER_TYPES, `${field}.offerType`),
     title: string(item.title, `${field}.title`),
     productName: string(item.productName, `${field}.productName`),
     category: nullableString(item.category, `${field}.category`),
     reason: string(item.reason, `${field}.reason`),
     whyReasons: stringArray(item.whyReasons, `${field}.whyReasons`),
+    metricLabel: string(item.metricLabel, `${field}.metricLabel`),
+    metricValue: string(item.metricValue, `${field}.metricValue`),
     normalCondition: string(item.normalCondition, `${field}.normalCondition`),
     partnerCondition: string(item.partnerCondition, `${field}.partnerCondition`),
     estimatedBenefitAzn: nullableNumber(item.estimatedBenefitAzn, `${field}.estimatedBenefitAzn`),
@@ -219,6 +224,7 @@ function normalizeAction(item, field) {
   return {
     id: string(item.id, `${field}.id`),
     type: enumValue(item.type, ACTION_TYPES, `${field}.type`),
+    scope: enumValue(item.scope, ACTION_SCOPES, `${field}.scope`),
     title: string(item.title, `${field}.title`),
     explanation: string(item.explanation, `${field}.explanation`),
     recommendation: string(item.recommendation, `${field}.recommendation`),
@@ -240,6 +246,10 @@ function normalizePartnerStatus(data) {
       label: string(item.label, `${field}.label`),
       met: Boolean(item.met),
     })),
+    daysConnected: count(data.daysConnected, 'daysConnected'),
+    dataReliabilityPercent: number(data.dataReliabilityPercent, 'dataReliabilityPercent'),
+    transactionSyncActive: Boolean(data.transactionSyncActive),
+    dataCompletenessLabel: string(data.dataCompletenessLabel, 'dataCompletenessLabel'),
     benefits: (() => {
       const benefits = data.benefits
       if (!benefits || typeof benefits !== 'object') invalid('benefits')

@@ -78,18 +78,21 @@ const overview = {
 function offer(overrides = {}) {
   return {
     offerKey: 'CCI-COCA-COLA-ZERO-330ML',
+    offerType: 'VOLUME_DISCOUNT',
     title: 'Coca-Cola Zero 330ml',
     productName: 'Coca-Cola Zero 330ml',
     category: 'Beverages',
-    reason: 'Coca-Cola Zero 330ml is your top CCI seller by recorded revenue, with ₼500.00 over the last 30 days.',
+    reason: 'Sales increased 18% compared with the previous 30 days.',
     whyReasons: [
       'Coca-Cola Zero 330ml generated ₼500.00 in recorded sales over the last 30 days.',
       'It was purchased in 80 separate baskets in that period.',
     ],
-    normalCondition: 'Order 2 cases',
-    partnerCondition: '8% partner discount',
-    estimatedBenefitAzn: 11.2,
-    benefitSummary: 'Save ₼11.20',
+    metricLabel: 'Growth vs previous 30 days',
+    metricValue: '+18%',
+    normalCondition: 'Order 3 cases',
+    partnerCondition: '10% campaign discount',
+    estimatedBenefitAzn: 14.4,
+    benefitSummary: 'Estimated benefit: ₼14.40',
     expiresAt: '2026-09-05T10:00:00Z',
     status: 'AVAILABLE',
     ...overrides,
@@ -102,11 +105,12 @@ function offers(overrides = {}) {
 
 function action(overrides = {}) {
   return {
-    id: 'urgent-coca-cola-500ml',
-    type: 'URGENT',
-    title: 'Coca-Cola 500ml demand is accelerating',
+    id: 'stock-risk-coca-cola-500ml',
+    type: 'STOCK_RISK',
+    scope: 'CCI',
+    title: 'Coca-Cola 500ml is selling 34% faster than usual',
     explanation: 'Coca-Cola 500ml demand is up 34% over the last 14 days, with 340 units sold.',
-    recommendation: 'Consider checking shelf stock and adding to your next order.',
+    recommendation: 'Consider adding stock to your next order and checking shelf availability.',
     metricLabel: 'Sales velocity (last 14 days)',
     metricValue: '24.3 units/day',
     ...overrides,
@@ -125,6 +129,10 @@ function partnerStatus(overrides = {}) {
       { label: 'Reliable POS data', met: true },
       { label: 'Regular transaction sync', met: true },
     ],
+    daysConnected: 45,
+    dataReliabilityPercent: 94,
+    transactionSyncActive: true,
+    dataCompletenessLabel: 'High',
     benefits: { thisMonth: 84.5, lastMonth: 61.2, lifetime: 247.8 },
     benefitHistory: [{
       activatedAt: '2026-08-26T10:00:00Z',
@@ -179,7 +187,8 @@ describe('RetailerDashboard', () => {
     // The hero recommendation, not total sales, is the headline commercial moment.
     expect(screen.getByText('Recommended for your store')).toBeInTheDocument()
     expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
-    expect(screen.getByText('Save ₼11.20')).toBeInTheDocument()
+    expect(screen.getByText('Estimated benefit: ₼14.40')).toBeInTheDocument()
+    expect(screen.getByText('+18%')).toBeInTheDocument()
     expect(screen.getByText('Your SCAN Benefits')).toBeInTheDocument()
     expect(screen.getByText('POS Connection')).toBeInTheDocument()
     expect(screen.getByText('54,321')).toBeInTheDocument()
@@ -196,7 +205,8 @@ describe('RetailerDashboard', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
     expect(await screen.findByRole('heading', { name: 'SCAN Partner offers' })).toBeInTheDocument()
-    expect(screen.getByText('Order 2 cases')).toBeInTheDocument()
+    expect(screen.getByText('Order 3 cases')).toBeInTheDocument()
+    expect(screen.getByText('Volume discount')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Activate offer' }))
     expect(screen.getByRole('button', { name: 'Activating…' })).toBeDisabled()
@@ -263,6 +273,9 @@ describe('RetailerDashboard', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Partner' })[0])
     expect(await screen.findByText('No benefit history yet')).toBeInTheDocument()
+    // Silver already includes personalized offers - there is no contradiction with Offers
+    // already showing real offers for this same, Silver-level store.
+    expect(screen.getByText('Standard personalized offers')).toBeInTheDocument()
   })
 
   it('shows recommended actions with their supporting metric', async () => {
@@ -272,9 +285,10 @@ describe('RetailerDashboard', () => {
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Actions' })[0])
-    expect(await screen.findByText('Coca-Cola 500ml demand is accelerating')).toBeInTheDocument()
+    expect(await screen.findByText('Coca-Cola 500ml is selling 34% faster than usual')).toBeInTheDocument()
     expect(screen.getByText('24.3 units/day')).toBeInTheDocument()
-    expect(screen.getByText('Consider checking shelf stock and adding to your next order.')).toBeInTheDocument()
+    expect(screen.getByText('Consider adding stock to your next order and checking shelf availability.')).toBeInTheDocument()
+    expect(screen.getByText('CCI')).toBeInTheDocument()
   })
 
   it('surfaces a failed checkout feed as a Needs attention item on Home and Actions', async () => {
@@ -299,9 +313,11 @@ describe('RetailerDashboard', () => {
     await user.click(screen.getAllByRole('button', { name: 'Partner' })[0])
     expect(await screen.findByRole('heading', { name: 'SCAN Partner' })).toBeInTheDocument()
     expect(screen.getByText('72% to Platinum')).toBeInTheDocument()
-    expect(screen.getByText('8 days until Platinum eligibility')).toBeInTheDocument()
+    expect(screen.getByText(/8 days until Platinum eligibility/)).toBeInTheDocument()
     expect(screen.getByText('30+ days active')).toBeInTheDocument()
-    expect(screen.getByText('Personalized CCI offers')).toBeInTheDocument()
+    expect(screen.getByText('94%')).toBeInTheDocument()
+    // Gold unlocks enhancements - it does not gate offers that Silver already has.
+    expect(screen.getByText('Enhanced personalized offers')).toBeInTheDocument()
     expect(screen.getByText('Coca-Cola Zero Partner Offer')).toBeInTheDocument()
   })
 

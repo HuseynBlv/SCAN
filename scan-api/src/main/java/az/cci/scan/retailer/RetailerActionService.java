@@ -1,6 +1,7 @@
 package az.cci.scan.retailer;
 
 import az.cci.scan.domain.Retailer;
+import az.cci.scan.repository.CanonicalProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -8,17 +9,19 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static az.cci.scan.retailer.RetailerEngagementDtos.Action;
+import static az.cci.scan.retailer.RetailerEngagementDtos.ActionScope;
 import static az.cci.scan.retailer.RetailerEngagementDtos.ActionType;
 
 /**
@@ -27,9 +30,13 @@ import static az.cci.scan.retailer.RetailerEngagementDtos.ActionType;
  * padded with a weak or fabricated signal when the underlying data doesn't support it. This
  * mirrors the existing InsightRules philosophy elsewhere in SCAN: say nothing rather than guess.
  *
+ * Each action is also labeled with a scope - CCI (a Coca-Cola System product) or STORE (anything
+ * else) - so the retailer sees that SCAN helps with the whole store, not only Coca-Cola products.
+ *
  * SCAN has no connected inventory system, so - unlike the illustrative product brief this was
- * built from - an action never claims to know units remaining on a shelf. It only ever states
- * what it can support from recorded sales: velocity, trend, and basket timing.
+ * built from - an action never claims to know units remaining on a shelf or predicts a specific
+ * stock-out date. It only ever states what it can support from recorded sales: velocity, trend,
+ * and basket timing.
  */
 @Service
 public class RetailerActionService {
@@ -43,10 +50,19 @@ public class RetailerActionService {
     private static final int PERFORMANCE_WINDOW_DAYS = 30;
 
     private final RetailerAnalyticsQueryRepository queryRepository;
+    private final RetailerProductInsightService insightService;
+    private final CanonicalProductRepository canonicalProductRepository;
     private final Clock clock;
 
-    public RetailerActionService(RetailerAnalyticsQueryRepository queryRepository, Clock clock) {
+    public RetailerActionService(
+        RetailerAnalyticsQueryRepository queryRepository,
+        RetailerProductInsightService insightService,
+        CanonicalProductRepository canonicalProductRepository,
+        Clock clock
+    ) {
         this.queryRepository = queryRepository;
+        this.insightService = insightService;
+        this.canonicalProductRepository = canonicalProductRepository;
         this.clock = clock;
     }
 
@@ -62,18 +78,22 @@ public class RetailerActionService {
             queryRepository.productMetricsInRange(retailer.getId(), priorStart, recentStart);
         Map<String, RetailerAnalyticsDtos.ProductMetric> priorByName = new LinkedHashMap<>();
         prior.forEach(product -> priorByName.put(product.name(), product));
+        Set<String> cciNames = canonicalProductRepository.findAllByCciTrue().stream()
+            .map(product -> product.getNormalizedName())
+            .collect(Collectors.toSet());
 
         List<Action> actions = new ArrayList<>();
-        urgent(recent, priorByName).ifPresent(actions::add);
+        stockRisk(recent, priorByName, cciNames).ifPresent(actions::add);
         opportunity(retailer, now).ifPresent(actions::add);
-        inventory(recent, priorByName).ifPresent(actions::add);
+        inventory(recent, priorByName, cciNames).ifPresent(actions::add);
         performance(retailer, now).ifPresent(actions::add);
         return actions;
     }
 
-    private Optional<Action> urgent(
+    private Optional<Action> stockRisk(
         List<RetailerAnalyticsDtos.ProductMetric> recent,
-        Map<String, RetailerAnalyticsDtos.ProductMetric> priorByName
+        Map<String, RetailerAnalyticsDtos.ProductMetric> priorByName,
+        Set<String> cciNames
     ) {
         return recent.stream()
             .filter(product -> product.basketCount() >= MIN_BASKET_SUPPORT)
@@ -84,13 +104,14 @@ public class RetailerActionService {
                 RetailerAnalyticsDtos.ProductMetric product = growth.product();
                 BigDecimal velocity = product.quantity().divide(BigDecimal.valueOf(WINDOW_DAYS), 1, RoundingMode.HALF_UP);
                 return new Action(
-                    "urgent-" + slug(product.name()),
-                    ActionType.URGENT,
-                    product.name() + " demand is accelerating",
+                    "stock-risk-" + slug(product.name()),
+                    ActionType.STOCK_RISK,
+                    scope(product.name(), cciNames),
+                    product.name() + " is selling " + growth.percent().setScale(0, RoundingMode.HALF_UP) + "% faster than usual",
                     product.name() + " demand is up " + growth.percent().setScale(0, RoundingMode.HALF_UP)
                         + "% over the last " + WINDOW_DAYS + " days, with " + product.quantity().stripTrailingZeros().toPlainString()
                         + " units sold.",
-                    "Consider checking shelf stock and adding to your next order.",
+                    "Consider adding stock to your next order and checking shelf availability.",
                     "Sales velocity (last " + WINDOW_DAYS + " days)",
                     velocity + " units/day"
                 );
@@ -99,7 +120,8 @@ public class RetailerActionService {
 
     private Optional<Action> inventory(
         List<RetailerAnalyticsDtos.ProductMetric> recent,
-        Map<String, RetailerAnalyticsDtos.ProductMetric> priorByName
+        Map<String, RetailerAnalyticsDtos.ProductMetric> priorByName,
+        Set<String> cciNames
     ) {
         return recent.stream()
             .map(product -> growth(product, priorByName.get(product.name())))
@@ -112,10 +134,12 @@ public class RetailerActionService {
                 return new Action(
                     "inventory-" + slug(product.name()),
                     ActionType.INVENTORY,
-                    product.name() + " is moving slower than usual",
+                    scope(product.name(), cciNames),
+                    product.name() + " sales are down " + growth.percent().abs().setScale(0, RoundingMode.HALF_UP)
+                        + "% vs the previous " + WINDOW_DAYS + "-day period",
                     "Sales are " + growth.percent().abs().setScale(0, RoundingMode.HALF_UP)
                         + "% below the prior " + WINDOW_DAYS + "-day period.",
-                    "Consider reducing the next order.",
+                    "Consider reducing the next order until demand recovers.",
                     "Change vs prior " + WINDOW_DAYS + " days",
                     growth.percent().setScale(0, RoundingMode.HALF_UP) + "%"
                 );
@@ -129,26 +153,46 @@ public class RetailerActionService {
         if (topCci.isEmpty()) return Optional.empty();
         String topProduct = topCci.getFirst().name();
 
+        Optional<RetailerProductInsightService.CompanionAffinity> affinity =
+            insightService.companionAffinity(retailer, topProduct, now);
+        if (affinity.isPresent()) {
+            RetailerProductInsightService.CompanionAffinity companion = affinity.get();
+            return Optional.of(new Action(
+                "opportunity-" + slug(topProduct),
+                ActionType.OPPORTUNITY,
+                ActionScope.CCI,
+                topProduct + " + " + companion.companionName() + " basket affinity",
+                topProduct + " and " + companion.companionName() + " appear together in "
+                    + companion.overallSharePercent() + "% of " + topProduct + "'s baskets. This pairing is "
+                    + companion.eveningMultiplier() + "x more common between 18:00-22:00 than during the rest of the day.",
+                "Consider placing " + topProduct + " closer to " + companion.companionName() + " after 17:00.",
+                "Evening basket-affinity multiplier",
+                companion.eveningMultiplier() + "x"
+            ));
+        }
+
+        // No strong companion product yet - fall back to when this product itself sells best,
+        // still a real, grounded signal rather than an invented one.
         List<RetailerAnalyticsQueryRepository.BasketRow> baskets = queryRepository.findBaskets(
             retailer.getId(), now.minus(PERFORMANCE_WINDOW_DAYS, ChronoUnit.DAYS)
         );
         if (baskets.size() < MIN_BASKET_SUPPORT) return Optional.empty();
-
-        ZoneId zoneId = ZoneId.of(retailer.getZoneId());
         Map<String, Long> byDaypart = new LinkedHashMap<>();
-        baskets.forEach(basket -> byDaypart.merge(daypart(basket.timestamp().atZone(zoneId)), 1L, Long::sum));
-        Map.Entry<String, Long> top = byDaypart.entrySet().stream()
-            .max(Map.Entry.comparingByValue())
-            .orElseThrow();
+        baskets.forEach(basket -> byDaypart.merge(
+            RetailerProductInsightService.daypart(basket.timestamp().atZone(java.time.ZoneId.of(retailer.getZoneId()))),
+            1L, Long::sum
+        ));
+        Map.Entry<String, Long> top = byDaypart.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow();
         BigDecimal sharePercentage = BigDecimal.valueOf(top.getValue())
             .multiply(BigDecimal.valueOf(100))
             .divide(BigDecimal.valueOf(baskets.size()), 1, RoundingMode.HALF_UP);
         if (sharePercentage.compareTo(DAYPART_CONCENTRATION_THRESHOLD_PCT) < 0) return Optional.empty();
 
-        String segment = top.getKey().toLowerCase();
+        String segment = top.getKey().toLowerCase(Locale.ROOT);
         return Optional.of(new Action(
             "opportunity-" + slug(topProduct),
             ActionType.OPPORTUNITY,
+            ActionScope.CCI,
             topProduct + " sells most during " + segment,
             sharePercentage + "% of your last " + PERFORMANCE_WINDOW_DAYS + " days' baskets occurred during "
                 + segment + ", where " + topProduct + " is your top CCI seller.",
@@ -173,6 +217,7 @@ public class RetailerActionService {
         return Optional.of(new Action(
             "performance-cci",
             ActionType.PERFORMANCE,
+            ActionScope.CCI,
             "Your CCI product sales are performing strongly",
             "CCI product sales are ₼" + recentRevenue.setScale(2, RoundingMode.HALF_UP) + " in the last "
                 + PERFORMANCE_WINDOW_DAYS + " days, " + growthPct + "% higher than the prior "
@@ -181,6 +226,10 @@ public class RetailerActionService {
             "CCI sales change (vs prior " + PERFORMANCE_WINDOW_DAYS + " days)",
             "+" + growthPct + "%"
         ));
+    }
+
+    private ActionScope scope(String productName, Set<String> cciNames) {
+        return cciNames.contains(productName) ? ActionScope.CCI : ActionScope.STORE;
     }
 
     private Growth growth(
@@ -198,17 +247,7 @@ public class RetailerActionService {
     private record Growth(RetailerAnalyticsDtos.ProductMetric product, BigDecimal percent, long priorBasketCount) {
     }
 
-    private String daypart(ZonedDateTime timestamp) {
-        int hour = timestamp.getHour();
-        if (hour < 6) return "NIGHT";
-        if (hour < 11) return "MORNING";
-        if (hour < 15) return "MIDDAY";
-        if (hour < 18) return "AFTERNOON";
-        if (hour < 22) return "EVENING";
-        return "NIGHT";
-    }
-
     private String slug(String value) {
-        return value.toUpperCase(java.util.Locale.ROOT).replaceAll("[^A-Z0-9]+", "-").replaceAll("^-|-$", "");
+        return value.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]+", "-").replaceAll("^-|-$", "");
     }
 }

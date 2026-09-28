@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -154,6 +155,45 @@ class RetailerAnalyticsQueryRepository {
                  )
         """;
 
+    // One row per basket containing the named product, since a receipt's own creation time is
+    // used for both trend (recent vs prior window) and time-of-day/day-of-week analysis - reused
+    // by RetailerProductInsightService for growth, daypart concentration, and weekend uplift.
+    private static final String PRODUCT_BASKETS_SQL = """
+        select distinct r.id as receipt_id, r.transaction_timestamp
+        from receipt r
+        join transaction_line tl on tl.receipt_id = r.id
+        join retailer_product rp on rp.id = tl.retailer_product_id
+        left join canonical_product cp on cp.id = rp.canonical_product_id
+        where r.retailer_id = ?
+          and r.transaction_timestamp >= ?
+          and coalesce(cp.normalized_name, rp.original_product_name) = ?
+        """;
+
+    // The single most common other product appearing in the same baskets as the named product -
+    // the candidate companion for a basket-affinity offer or action.
+    private static final String TOP_COMPANION_SQL = """
+        select
+            coalesce(ccp.normalized_name, crp.original_product_name) as label,
+            count(distinct companion_line.receipt_id) as basket_count
+        from (
+            select distinct r.id as receipt_id
+            from receipt r
+            join transaction_line tl on tl.receipt_id = r.id
+            join retailer_product rp on rp.id = tl.retailer_product_id
+            left join canonical_product cp on cp.id = rp.canonical_product_id
+            where r.retailer_id = ?
+              and r.transaction_timestamp >= ?
+              and coalesce(cp.normalized_name, rp.original_product_name) = ?
+        ) target
+        join transaction_line companion_line on companion_line.receipt_id = target.receipt_id
+        join retailer_product crp on crp.id = companion_line.retailer_product_id
+        left join canonical_product ccp on ccp.id = crp.canonical_product_id
+        where coalesce(ccp.normalized_name, crp.original_product_name) <> ?
+        group by coalesce(ccp.normalized_name, crp.original_product_name)
+        order by basket_count desc, label asc
+        limit 1
+        """;
+
     private static final String CCI_REVENUE_IN_RANGE_SQL = """
         select coalesce(sum(tl.line_total), 0) as revenue
         from receipt r
@@ -235,6 +275,21 @@ class RetailerAnalyticsQueryRepository {
             ), retailerId, Timestamp.from(startInclusive), Timestamp.from(endExclusive));
     }
 
+    List<ProductBasketRow> productBaskets(UUID retailerId, String productName, Instant startInclusive) {
+        return jdbcTemplate.query(PRODUCT_BASKETS_SQL, (resultSet, rowNumber) -> new ProductBasketRow(
+            resultSet.getObject("receipt_id", UUID.class),
+            resultSet.getTimestamp("transaction_timestamp").toInstant()
+        ), retailerId, Timestamp.from(startInclusive), productName);
+    }
+
+    Optional<NamedCount> topCompanion(UUID retailerId, String productName, Instant startInclusive) {
+        List<NamedCount> rows = jdbcTemplate.query(TOP_COMPANION_SQL, (resultSet, rowNumber) -> new NamedCount(
+            resultSet.getString("label"),
+            resultSet.getLong("basket_count")
+        ), retailerId, Timestamp.from(startInclusive), productName, productName);
+        return rows.stream().findFirst();
+    }
+
     BigDecimal cciRevenueInRange(UUID retailerId, Instant startInclusive, Instant endExclusive) {
         return jdbcTemplate.queryForObject(CCI_REVENUE_IN_RANGE_SQL, (resultSet, rowNumber) ->
             resultSet.getBigDecimal("revenue"), retailerId, Timestamp.from(startInclusive), Timestamp.from(endExclusive));
@@ -247,6 +302,12 @@ class RetailerAnalyticsQueryRepository {
         String storeId,
         boolean containsCci
     ) {
+    }
+
+    record ProductBasketRow(UUID receiptId, Instant timestamp) {
+    }
+
+    record NamedCount(String name, long basketCount) {
     }
 
     record LineStats(long totalLines, long mappedLines, BigDecimal totalQuantity) {
