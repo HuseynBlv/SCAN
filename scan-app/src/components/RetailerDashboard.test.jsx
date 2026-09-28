@@ -184,6 +184,9 @@ describe('RetailerDashboard', () => {
     expect(screen.getByText('Available offers')).toBeInTheDocument()
     expect(screen.getByText('Partner status')).toBeInTheDocument()
     expect(screen.getByText('GOLD')).toBeInTheDocument()
+    // Same currency symbol and decimal precision everywhere on the page - not "AZN 84.5" next
+    // to offer text reading "₼14.40".
+    expect(screen.getAllByText('₼84.50').length).toBeGreaterThan(0)
     // The hero recommendation, not total sales, is the headline commercial moment.
     expect(screen.getByText('Recommended for your store')).toBeInTheDocument()
     expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
@@ -365,5 +368,20 @@ describe('RetailerDashboard', () => {
     await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(screen.getByRole('button', { name: 'Open my dashboard' })).toBeInTheDocument()
+  })
+
+  it('resets to a still-selectable period after signing out and back in', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue(overview)
+    render(<RetailerDashboard />)
+    await signIn(user)
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    await signIn(user)
+    await user.click(screen.getAllByRole('button', { name: 'Insights' })[0])
+    expect(await screen.findByRole('heading', { name: 'Store Insights' })).toBeInTheDocument()
+    // 'TODAY' was removed from the period picker - resetting to it on sign-out would leave the
+    // <select> matching no <option>, showing nothing selected while still querying period=TODAY.
+    expect(screen.getByLabelText('Period')).toHaveValue('LAST_30_DAYS')
   })
 })

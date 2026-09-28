@@ -12,7 +12,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -147,12 +149,19 @@ public class RetailerOfferCatalogService {
             // (just none in the last 30 days) still sees something real, rather than nothing.
             products = queryRepository.topCciProducts(retailer.getId(), Instant.EPOCH, CANDIDATE_LIMIT);
         }
-        Instant expiresAt = now.plus(OFFER_VALIDITY_DAYS, ChronoUnit.DAYS);
+        // Anchored to the start of today (not "now") so an available offer's validity is stable
+        // for the whole day and only actually rolls forward at midnight - a live "now + 7 days"
+        // recompute on every request never visibly counts down, which reads as fake.
+        ZoneId zoneId = ZoneId.of(retailer.getZoneId());
+        Instant todayStart = now.atZone(zoneId).toLocalDate().atStartOfDay(zoneId).toInstant();
+        Instant expiresAt = todayStart.plus(OFFER_VALIDITY_DAYS, ChronoUnit.DAYS);
+        String cycle = WeekFields.ISO.weekBasedYear().getFrom(now.atZone(zoneId))
+            + "W" + WeekFields.ISO.weekOfWeekBasedYear().getFrom(now.atZone(zoneId));
         List<Offer> offers = new ArrayList<>();
         for (int rank = 0; rank < products.size(); rank++) {
             RetailerAnalyticsDtos.ProductMetric product = products.get(rank);
             if (product.quantity() == null || product.quantity().signum() <= 0) continue;
-            buildOffer(retailer, product, rank, now, expiresAt).ifPresent(offers::add);
+            buildOffer(retailer, product, rank, now, expiresAt, cycle).ifPresent(offers::add);
         }
         return offers;
     }
@@ -165,7 +174,7 @@ public class RetailerOfferCatalogService {
      * product still produces an offer.
      */
     private Optional<Offer> buildOffer(
-        Retailer retailer, RetailerAnalyticsDtos.ProductMetric product, int rank, Instant now, Instant expiresAt
+        Retailer retailer, RetailerAnalyticsDtos.ProductMetric product, int rank, Instant now, Instant expiresAt, String cycle
     ) {
         Optional<RetailerProductInsightService.ProductTrend> trend = insightService.trend(retailer, product.name(), now);
         Optional<RetailerProductInsightService.CompanionAffinity> companion =
@@ -174,10 +183,10 @@ public class RetailerOfferCatalogService {
         for (int offset = 0; offset < TYPE_ROTATION.length; offset++) {
             OfferType type = TYPE_ROTATION[(rank + offset) % TYPE_ROTATION.length];
             Optional<Offer> offer = switch (type) {
-                case VOLUME_DISCOUNT -> Optional.of(volumeDiscountOffer(product, trend, expiresAt));
-                case BONUS_PRODUCT -> bonusProductOffer(product, trend, expiresAt);
-                case WEEKEND_ACTIVATION -> weekendActivationOffer(product, trend, expiresAt);
-                case BASKET_GROWTH -> basketGrowthOffer(product, companion, expiresAt);
+                case VOLUME_DISCOUNT -> Optional.of(volumeDiscountOffer(product, trend, expiresAt, cycle, rank));
+                case BONUS_PRODUCT -> bonusProductOffer(product, trend, expiresAt, cycle);
+                case WEEKEND_ACTIVATION -> weekendActivationOffer(product, trend, expiresAt, cycle);
+                case BASKET_GROWTH -> basketGrowthOffer(product, companion, expiresAt, cycle);
             };
             if (offer.isPresent()) return offer;
         }
@@ -187,7 +196,9 @@ public class RetailerOfferCatalogService {
     private Offer volumeDiscountOffer(
         RetailerAnalyticsDtos.ProductMetric product,
         Optional<RetailerProductInsightService.ProductTrend> trend,
-        Instant expiresAt
+        Instant expiresAt,
+        String cycle,
+        int rank
     ) {
         BigDecimal unitPrice = unitPrice(product);
         long cases = casesForTargetBenefit(unitPrice, VOLUME_DISCOUNT_RATE);
@@ -202,9 +213,23 @@ public class RetailerOfferCatalogService {
             metricLabel = "Growth vs previous " + OFFER_WINDOW_DAYS + " days";
             metricValue = "+" + growth + "%";
         } else {
-            reason = product.name() + " is a consistent top seller in your store.";
-            metricLabel = "Recorded sales (last " + OFFER_WINDOW_DAYS + " days)";
-            metricValue = "₼" + product.revenue().setScale(2, RoundingMode.HALF_UP);
+            // No real trend signal to lean on - fall back to a plain, still-real stat, but vary
+            // which one by rank so several low-signal products in the same list don't all read
+            // as the identical sentence with only the product name swapped.
+            int variant = rank % 3;
+            reason = switch (variant) {
+                case 0 -> product.name() + " is a consistent top seller in your store.";
+                case 1 -> product.name() + " was purchased in " + product.basketCount()
+                    + " separate baskets over the last " + OFFER_WINDOW_DAYS + " days.";
+                default -> product.name() + " generated ₼" + product.revenue().setScale(2, RoundingMode.HALF_UP)
+                    + " in recorded sales over the last " + OFFER_WINDOW_DAYS + " days.";
+            };
+            metricLabel = variant == 1
+                ? "Baskets (last " + OFFER_WINDOW_DAYS + " days)"
+                : "Recorded sales (last " + OFFER_WINDOW_DAYS + " days)";
+            metricValue = variant == 1
+                ? String.valueOf(product.basketCount())
+                : "₼" + product.revenue().setScale(2, RoundingMode.HALF_UP);
         }
         List<String> whyReasons = List.of(
             reason,
@@ -212,7 +237,7 @@ public class RetailerOfferCatalogService {
         );
 
         return new Offer(
-            offerKey(product), OfferType.VOLUME_DISCOUNT, product.name(), product.name(), product.category(),
+            offerKey(product, cycle), OfferType.VOLUME_DISCOUNT, product.name(), product.name(), product.category(),
             reason, whyReasons, metricLabel, metricValue,
             "Order " + cases + (cases == 1 ? " case" : " cases"),
             rate(VOLUME_DISCOUNT_RATE) + "% campaign discount",
@@ -223,7 +248,8 @@ public class RetailerOfferCatalogService {
     private Optional<Offer> bonusProductOffer(
         RetailerAnalyticsDtos.ProductMetric product,
         Optional<RetailerProductInsightService.ProductTrend> trend,
-        Instant expiresAt
+        Instant expiresAt,
+        String cycle
     ) {
         if (trend.isEmpty() || trend.get().topDaypart() == null) return Optional.empty();
         RetailerProductInsightService.ProductTrend data = trend.get();
@@ -238,7 +264,7 @@ public class RetailerOfferCatalogService {
             data.topDaypartSharePercent() + "% of " + product.name() + "'s recent baskets fell in that window."
         );
         return Optional.of(new Offer(
-            offerKey(product), OfferType.BONUS_PRODUCT, product.name(), product.name(), product.category(),
+            offerKey(product, cycle), OfferType.BONUS_PRODUCT, product.name(), product.name(), product.category(),
             reason, whyReasons, "Strongest daypart", capitalize(daypart) + " (" + data.topDaypartSharePercent() + "%)",
             "Buy " + cases + (cases == 1 ? " case" : " cases"),
             "Receive 1 promotional case",
@@ -249,7 +275,8 @@ public class RetailerOfferCatalogService {
     private Optional<Offer> weekendActivationOffer(
         RetailerAnalyticsDtos.ProductMetric product,
         Optional<RetailerProductInsightService.ProductTrend> trend,
-        Instant expiresAt
+        Instant expiresAt,
+        String cycle
     ) {
         if (trend.isEmpty() || trend.get().weekendUpliftPercent() == null
             || trend.get().weekendUpliftPercent().signum() <= 0) return Optional.empty();
@@ -264,7 +291,7 @@ public class RetailerOfferCatalogService {
             "This comparison uses " + product.name() + "'s own recorded baskets over the last " + OFFER_WINDOW_DAYS + " days."
         );
         return Optional.of(new Offer(
-            offerKey(product), OfferType.WEEKEND_ACTIVATION, product.name(), product.name(), product.category(),
+            offerKey(product, cycle), OfferType.WEEKEND_ACTIVATION, product.name(), product.name(), product.category(),
             reason, whyReasons, "Weekend uplift", "+" + uplift + "%",
             "Order " + cases + (cases == 1 ? " case" : " cases") + " before Friday",
             rate(WEEKEND_DISCOUNT_RATE) + "% partner pricing",
@@ -275,7 +302,8 @@ public class RetailerOfferCatalogService {
     private Optional<Offer> basketGrowthOffer(
         RetailerAnalyticsDtos.ProductMetric product,
         Optional<RetailerProductInsightService.CompanionAffinity> companion,
-        Instant expiresAt
+        Instant expiresAt,
+        String cycle
     ) {
         if (companion.isEmpty()) return Optional.empty();
         RetailerProductInsightService.CompanionAffinity affinity = companion.get();
@@ -287,7 +315,7 @@ public class RetailerOfferCatalogService {
                 + affinity.eveningMultiplier() + "x more often between 18:00-22:00 than the rest of the day."
         );
         return Optional.of(new Offer(
-            offerKey(product), OfferType.BASKET_GROWTH, product.name(), product.name(), product.category(),
+            offerKey(product, cycle), OfferType.BASKET_GROWTH, product.name(), product.name(), product.category(),
             reason, whyReasons, "Evening basket-affinity", affinity.eveningMultiplier() + "x",
             "Feature " + product.name() + " with " + affinity.companionName(),
             "Special campaign pricing on selected volume",
@@ -340,8 +368,11 @@ public class RetailerOfferCatalogService {
         return rate.movePointRight(2).stripTrailingZeros().toPlainString();
     }
 
-    private String offerKey(RetailerAnalyticsDtos.ProductMetric product) {
-        return "CCI-" + slug(product.name());
+    private String offerKey(RetailerAnalyticsDtos.ProductMetric product, String cycle) {
+        // Scoped to the current commercial cycle (ISO week) so a product's offer becomes
+        // eligible again once this cycle's activation has run its course, instead of a single
+        // acceptance permanently excluding that product from ever getting a fresh offer.
+        return "CCI-" + cycle + "-" + slug(product.name());
     }
 
     private String capitalize(String value) {

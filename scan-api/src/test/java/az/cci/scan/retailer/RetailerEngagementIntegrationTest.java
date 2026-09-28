@@ -164,6 +164,18 @@ class RetailerEngagementIntegrationTest {
     }
 
     @Test
+    void offerValidityIsStableAcrossRequestsAndKeyedToTheCurrentCommercialCycle() {
+        // A "valid until" date that recomputes to "now + 7 days" on every single request never
+        // visibly counts down - it should be stable within the same day, and the offer key
+        // should be scoped to a real commercial cycle (not just the product), so a fresh offer
+        // becomes possible again once this cycle's has run its course.
+        Offer first = offerCatalogService.offers(activeRetailer).available().getFirst();
+        Offer second = offerCatalogService.offers(activeRetailer).available().getFirst();
+        assertThat(first.expiresAt()).isEqualTo(second.expiresAt());
+        assertThat(first.offerKey()).matches("CCI-\\d{4}W\\d{1,2}-.+");
+    }
+
+    @Test
     void activatingAnOfferPersistsItAsARealBenefitAndCannotBeActivatedTwice() {
         Offer candidate = offerCatalogService.offers(activeRetailer).available().getFirst();
 
