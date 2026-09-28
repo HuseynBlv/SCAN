@@ -58,10 +58,10 @@ const OFFER_TABS = [
 ]
 
 const OFFER_TYPE_META = {
-  VOLUME_DISCOUNT: { label: 'Volume discount', accent: 'discount' },
-  BONUS_PRODUCT: { label: 'Bonus product', accent: 'bonus' },
-  WEEKEND_ACTIVATION: { label: 'Weekend activation', accent: 'weekend' },
-  BASKET_GROWTH: { label: 'Basket-growth opportunity', accent: 'basket' },
+  VOLUME_DISCOUNT: { label: 'Volume offer', accent: 'discount', icon: 'sales' },
+  BONUS_PRODUCT: { label: 'Bonus product', accent: 'bonus', icon: 'products' },
+  WEEKEND_ACTIVATION: { label: 'Weekend campaign', accent: 'weekend', icon: 'time-store' },
+  BASKET_GROWTH: { label: 'Personalized pricing', accent: 'basket', icon: 'basket' },
 }
 
 const ACTION_TYPE_META = {
@@ -250,7 +250,7 @@ function SyncStatus({ data }) {
   const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
   return (
     <section className={`scan-panel retailer-sync-card ${healthy ? 'is-healthy' : 'is-warning'}`}>
-      <header className="scan-panel-header"><div><h3>POS Connection</h3><p>{data.sync.filename || 'No source file received'}</p></div><StatusBadge tone={healthy ? 'success' : 'warning'}>{healthy ? 'Connected' : humanize(data.sync.state)}</StatusBadge></header>
+      <header className="scan-panel-header"><div><h3>POS Connection</h3><p>{data.sync.filename || 'No source file received'}</p></div><span className={`retailer-pos-status-pill ${healthy ? 'is-healthy' : 'is-warning'}`}><i aria-hidden="true" />{healthy ? 'Connected' : humanize(data.sync.state)}</span></header>
       <dl className="retailer-sync-grid">
         <div><dt>Last sync</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
         <div><dt>Receipts processed</dt><dd>{integer.format(data.lifetimeTransactionsProcessed)}</dd></div>
@@ -272,10 +272,10 @@ function AttentionBanner({ items, onNavigate }) {
   )
 }
 
-function KpiCard({ label, value, note, tone }) {
+function KpiCard({ label, value, note, tone, icon }) {
   return (
     <article className={`retailer-kpi-card ${tone ? `is-${tone}` : ''}`}>
-      <span>{label}</span>
+      <div className="retailer-kpi-head"><ScanIcon name={icon} size={16} /><span>{label}</span></div>
       <strong>{value}</strong>
       <small>{note}</small>
     </article>
@@ -303,10 +303,12 @@ function ActivateButton({ offer, onActivate, activating, justActivated, label })
 }
 
 function RecommendedOfferHero({ offer, onViewOffers }) {
+  const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType), accent: 'discount', icon: 'recommendations' }
   return (
     <section className="retailer-hero-offer">
       <div className="retailer-hero-top">
-        <div>
+        <div className={`retailer-hero-mark is-${typeMeta.accent}`} aria-hidden="true"><ScanIcon name={typeMeta.icon} size={22} /></div>
+        <div className="retailer-hero-identity">
           <span className="scan-eyebrow">Recommended for your store</span>
           <h2>{offer.productName}</h2>
         </div>
@@ -319,7 +321,7 @@ function RecommendedOfferHero({ offer, onViewOffers }) {
       <div className="retailer-hero-terms">
         <div><span>Recommended</span><strong>{offer.normalCondition}</strong></div>
         <div><span>Partner benefit</span><strong>{offer.partnerCondition}</strong></div>
-        <div><span>Estimated commercial value</span><strong>{offer.benefitSummary}</strong></div>
+        <div className="is-payoff"><span>Estimated commercial value</span><strong>{offer.benefitSummary}</strong></div>
       </div>
       <footer>
         <small>Based on your recent sales</small>
@@ -369,9 +371,9 @@ function Home({ data, engagement, onNavigate }) {
       </section>
 
       <div className="retailer-kpi-grid">
-        <KpiCard label="Benefits this month" value={formatMoney(benefitsDisplay, data.currency)} note="Total SCAN benefits" />
-        <KpiCard label="Available offers" value={offers.available.length} note="Offers available for your store" />
-        <KpiCard label="Partner status" value={partnerStatus.level} note="SCAN Partner" tone="level" />
+        <KpiCard icon="sales" label="Benefits this month" value={formatMoney(benefitsDisplay, data.currency)} note="Total SCAN benefits" />
+        <KpiCard icon="recommendations" label="Available offers" value={offers.available.length} note="Offers available for your store" />
+        <KpiCard icon="time-store" label="Partner status" value={partnerStatus.level} note="SCAN Partner" tone="level" />
       </div>
 
       {heroOffer
@@ -390,23 +392,26 @@ function Home({ data, engagement, onNavigate }) {
 function OfferCard({ offer, onActivate, activating, justActivated }) {
   const [expanded, setExpanded] = useState(false)
   const tone = offer.status === 'ACTIVE' ? 'success' : offer.status === 'COMPLETED' ? 'neutral' : 'red'
-  const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType) }
+  const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType), accent: 'discount', icon: 'recommendations' }
   return (
     <article className={`retailer-offer-card is-${typeMeta.accent} ${expanded ? 'is-expanded' : ''}`}>
       <header>
-        <div>
-          <span className="retailer-offer-type">{typeMeta.label}</span>
-          <h3>{offer.productName}</h3>
-          {offer.category ? <small>{offer.category}</small> : null}
+        <div className={`retailer-offer-type-chip is-${typeMeta.accent}`}>
+          <ScanIcon name={typeMeta.icon} size={14} />
+          {typeMeta.label}
         </div>
         <StatusBadge tone={tone}>{humanize(offer.status)}</StatusBadge>
       </header>
+      <div className="retailer-offer-identity">
+        <h3>{offer.productName}</h3>
+        {offer.category ? <small>{offer.category}</small> : null}
+      </div>
       <div className="retailer-offer-metric"><strong>{offer.metricValue}</strong><span>{offer.metricLabel}</span></div>
       <p className="retailer-offer-reason">{offer.reason}</p>
       <dl className="retailer-offer-terms">
         <div><dt>Condition</dt><dd>{offer.normalCondition}</dd></div>
         <div><dt>Partner benefit</dt><dd>{offer.partnerCondition}</dd></div>
-        <div><dt>Benefit</dt><dd>{offer.benefitSummary}</dd></div>
+        <div className="is-payoff"><dt>Benefit</dt><dd>{offer.benefitSummary}</dd></div>
         <div><dt>Valid until</dt><dd>{formatDay(offer.expiresAt)}</dd></div>
       </dl>
       <button className="retailer-offer-why-toggle" onClick={() => setExpanded((value) => !value)} type="button">
@@ -494,7 +499,7 @@ function Partner({ partnerStatus }) {
       <PageIntro description="Your Partner level grows as your store stays connected and consistently shares reliable sales data." eyebrow="Partner" title="SCAN Partner" />
       <section className="scan-panel retailer-partner-card">
         <div className="retailer-partner-level">
-          <strong>{humanize(partnerStatus.level)}</strong>
+          <strong className={`is-${partnerStatus.level.toLowerCase()}`}>{humanize(partnerStatus.level)}</strong>
           <span>{partnerStatus.nextLevel ? `${partnerStatus.progressPercentage}% to ${humanize(partnerStatus.nextLevel)}` : 'Highest tier reached'}</span>
         </div>
         <p className="retailer-partner-headline">This store has an active commercial relationship with SCAN and CCI.</p>

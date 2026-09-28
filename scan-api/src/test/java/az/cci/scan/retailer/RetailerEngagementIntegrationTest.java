@@ -204,6 +204,9 @@ class RetailerEngagementIntegrationTest {
         assertThat(actions).anyMatch(action -> action.type() == ActionType.STOCK_RISK
             && action.scope() == az.cci.scan.retailer.RetailerEngagementDtos.ActionScope.CCI
             && action.title().contains("Coca-Cola Zero 330ml"));
+        // Opportunity leads the list when present - the clearest basket-intelligence example
+        // belongs first, not wherever insertion order happened to put it.
+        assertThat(actions.getFirst().type()).isEqualTo(ActionType.OPPORTUNITY);
         // A fresh retailer with no transactions produces no fabricated actions.
         assertThat(actionService.actions(freshRetailer)).isEmpty();
     }
