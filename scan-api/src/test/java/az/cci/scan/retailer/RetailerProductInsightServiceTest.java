@@ -181,6 +181,28 @@ class RetailerProductInsightServiceTest {
     }
 
     @Test
+    void growthIsMeasuredInUnitsSoldNotBasketCount() {
+        // Same basket count in both windows (10 recent, 10 prior) but double the quantity per
+        // basket recently. A basket-count-based growth calculation would report 0% here; the
+        // real, intended answer - the same definition RetailerActionService uses - is +100%.
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        List<String> rows = new ArrayList<>();
+        for (int day = 1; day <= 10; day++) {
+            rows.add(row("FANTA", "5000112611397", "Fanta Orange 500ml", today.minusDays(day).atTime(12, 0), 2, "3.00"));
+        }
+        for (int day = 35; day <= 44; day++) {
+            rows.add(row("FANTA", "5000112611397", "Fanta Orange 500ml", today.minusDays(day).atTime(12, 0), 1, "3.00"));
+        }
+        importRows(rows);
+
+        Optional<RetailerProductInsightService.ProductTrend> trend =
+            insightService.trend(retailer, "Fanta Orange 500ml", now);
+
+        assertThat(trend).isPresent();
+        assertThat(trend.get().growthPercent()).isEqualByComparingTo(BigDecimal.valueOf(100.0).setScale(1));
+    }
+
+    @Test
     void omitsASignalRatherThanGuessingWhenSupportIsThin() {
         // Two receipts is well under the five-basket support floor - no daypart, no weekend
         // uplift, no companion should be reported from this alone.

@@ -109,8 +109,12 @@ const decimal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maxim
 function formatMoney(value, currency) {
   const amount = Number(value || 0)
   if (!currency || currency === 'N/A') return amount.toFixed(2)
+  // Intl has no manat glyph for AZN in this locale (it renders the literal code, "AZN 14.4",
+  // with an inconsistent decimal count) - match the ₼ symbol and fixed 2 decimals the backend
+  // already uses in offer and benefit text, so money reads the same everywhere on the page.
+  if (currency === 'AZN') return `₼${amount.toFixed(2)}`
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
   } catch {
     return `${amount.toFixed(2)} ${currency}`
   }
@@ -685,7 +689,7 @@ export default function RetailerDashboard() {
   function changePeriod(nextPeriod) { setLoading(true); setError(''); setPeriod(nextPeriod) }
   function navigate(nextPage) { setActivePage(nextPage) }
   function signOut() {
-    setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('TODAY'); setActivePage('home')
+    setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('LAST_30_DAYS'); setActivePage('home')
     setEngagement(null); setEngagementLoading(false); setEngagementError(''); setActivatingKey(null); setJustActivatedKey(null)
   }
 

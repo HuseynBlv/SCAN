@@ -54,7 +54,10 @@ class RetailerProductInsightService {
             .filter(row -> row.timestamp().isBefore(recentStart)).toList();
         if (recent.size() < MIN_BASKET_SUPPORT) return Optional.empty();
 
-        BigDecimal growthPercent = prior.isEmpty() ? null : percentChange(recent.size(), prior.size());
+        // Growth is measured in recorded units sold, not basket count - the same definition
+        // RetailerActionService uses for its own trend comparisons, so the same product never
+        // shows two different "growth" percentages depending on which SCAN page reports it.
+        BigDecimal growthPercent = quantityGrowth(retailer, productName, recentStart, now);
 
         Map<String, Long> byDaypart = new LinkedHashMap<>();
         recent.forEach(row -> byDaypart.merge(daypart(row.timestamp().atZone(zoneId)), 1L, Long::sum));
@@ -126,8 +129,20 @@ class RetailerProductInsightService {
         return Optional.of(new CompanionAffinity(companionName, overallShare, eveningMultiplier));
     }
 
-    private BigDecimal percentChange(long recent, long prior) {
-        return percentChange(BigDecimal.valueOf(recent), BigDecimal.valueOf(prior));
+    private BigDecimal quantityGrowth(Retailer retailer, String productName, Instant recentStart, Instant now) {
+        Instant priorStart = recentStart.minus(TREND_WINDOW_DAYS, ChronoUnit.DAYS);
+        BigDecimal recentQuantity = quantityFor(retailer, productName, recentStart, now);
+        BigDecimal priorQuantity = quantityFor(retailer, productName, priorStart, recentStart);
+        if (priorQuantity == null || priorQuantity.signum() <= 0 || recentQuantity == null) return null;
+        return percentChange(recentQuantity, priorQuantity);
+    }
+
+    private BigDecimal quantityFor(Retailer retailer, String productName, Instant start, Instant end) {
+        return queryRepository.productMetricsInRange(retailer.getId(), start, end).stream()
+            .filter(product -> product.name().equals(productName))
+            .map(RetailerAnalyticsDtos.ProductMetric::quantity)
+            .findFirst()
+            .orElse(null);
     }
 
     private BigDecimal percentChange(BigDecimal recent, BigDecimal prior) {
