@@ -1,35 +1,71 @@
 name: Keep demo warm
 
+# Manual "demo window": one long-running job pings /health every 4 minutes so Render Free (which
+# sleeps after 15 idle minutes) stays awake for a presentation. It is deliberately not scheduled:
+# GitHub throttles cron runs to one every few hours, which cannot keep a 15-minute idle timer
+# alive, and an always-on ping would use ~744 of the workspace's 750 free Render hours per month.
+#
+# /health does not touch the database. Right before presenting, also run scripts/warm-demo.sh
+# locally to wake Neon; the workflow has no credentials by design.
+
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      target:
+        description: Service to keep awake
+        type: choice
+        default: demo
+        options:
+          - demo
+          - pilot
+      duration_minutes:
+        description: How long to keep it awake (1-360)
+        type: string
+        default: "120"
 
 permissions:
   contents: read
 
 concurrency:
   group: keep-demo-warm
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   ping:
-    name: Ping scan-demo health check
+    name: Ping health check for the demo window
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 375
 
     steps:
-      - name: Request /health with a retry for cold starts
+      - name: Keep the service awake
+        env:
+          TARGET: ${{ inputs.target }}
+          DURATION_MINUTES: ${{ inputs.duration_minutes }}
         run: |
-          url="https://scan-demo.onrender.com/health"
-          for attempt in 1 2 3; do
-            if curl --fail --silent --show-error --max-time 60 "$url"; then
-              echo
-              echo "scan-demo is awake (attempt $attempt)."
-              exit 0
+          case "$TARGET" in
+            demo)  url="https://scan-demo.onrender.com/health" ;;
+            pilot) url="https://scan-caspos-pilot.onrender.com/health" ;;
+            *) echo "Unknown target: $TARGET" >&2; exit 1 ;;
+          esac
+          if ! [[ "$DURATION_MINUTES" =~ ^[0-9]+$ ]] || [ "$DURATION_MINUTES" -lt 1 ] || [ "$DURATION_MINUTES" -gt 360 ]; then
+            echo "duration_minutes must be a whole number from 1 to 360." >&2
+            exit 1
+          fi
+
+          end=$((SECONDS + DURATION_MINUTES * 60))
+          consecutive_failures=0
+          while [ "$SECONDS" -lt "$end" ]; do
+            if curl --fail --silent --show-error --max-time 90 --output /dev/null \
+              --write-out "$(date -u +%H:%M:%S) $TARGET awake in %{time_total}s\n" "$url"; then
+              consecutive_failures=0
+            else
+              consecutive_failures=$((consecutive_failures + 1))
+              echo "$(date -u +%H:%M:%S) ping failed ($consecutive_failures in a row)." >&2
+              if [ "$consecutive_failures" -ge 3 ]; then
+                echo "$TARGET did not answer 3 times in a row; stopping so this run shows as failed." >&2
+                exit 1
+              fi
             fi
-            echo "Attempt $attempt failed; retrying in 15s..."
-            sleep 15
+            sleep 240
           done
-          echo "scan-demo did not respond to /health after 3 attempts." >&2
-          exit 1
+          echo "Demo window of $DURATION_MINUTES minutes finished."
