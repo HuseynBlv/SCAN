@@ -11,6 +11,8 @@ import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
+import az.cci.scan.repository.FieldTaskRepository;
+import az.cci.scan.repository.InvestigationRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.ScanAccountRepository;
 import az.cci.scan.repository.StoreRepository;
@@ -31,6 +33,12 @@ class RetailerDeletionServiceTest {
 
     @Autowired
     private ImportService importService;
+
+    @Autowired
+    private FieldTaskRepository fieldTaskRepository;
+
+    @Autowired
+    private InvestigationRepository investigationRepository;
 
     @Autowired
     private RetailerRepository retailerRepository;
@@ -73,6 +81,8 @@ class RetailerDeletionServiceTest {
         importPreviewRepository.deleteAll();
         importProfileRepository.deleteAll();
         storeRepository.deleteAll();
+        fieldTaskRepository.deleteAll();
+        investigationRepository.deleteAll();
         retailerRepository.deleteAll();
 
         target = retailerRepository.save(new Retailer("TOKILL", "Doomed Retailer", "Asia/Baku", true));
