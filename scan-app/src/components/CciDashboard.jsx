@@ -19,11 +19,15 @@ import {
   fetchInvestigations,
   fetchMeetingBrief,
   fetchMovers,
+  fetchWatchlist,
+  fetchWatchlistChanges,
+  followProduct,
   openGeneralInvestigation,
   openProductInvestigation,
   recordFieldTaskResult,
   rejectHypothesis,
   reopenInvestigation,
+  unfollowProduct,
 } from '../services/intelligenceApi'
 import { compactChartLabel } from './chartLabels'
 import ScanBrand from './ScanBrand'
@@ -332,9 +336,72 @@ function MeetingBriefPanel({ onPrepare }) {
   )
 }
 
+// Unlike auto-detected movers (which only surface once a change clears a support/magnitude
+// floor), a followed product's real current comparison always shows here - the team asked for it
+// specifically, so there's no threshold to clear. See WatchlistService on the backend.
+function WatchingSection({ watchlist, watchlistChanges, productOptions, onFollow, onUnfollow }) {
+  const [productName, setProductName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [busyItemId, setBusyItemId] = useState(null)
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!productName.trim()) return
+    setSubmitting(true)
+    try {
+      await onFollow(productName.trim())
+      setProductName('')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleUnfollow(itemId) {
+    setBusyItemId(itemId)
+    try {
+      await onUnfollow(itemId)
+    } finally {
+      setBusyItemId(null)
+    }
+  }
+
+  return (
+    <section className="cci-home-section">
+      <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Explicitly followed</span><h2>Watching</h2></div></header>
+      <form className="cci-watch-form" onSubmit={submit}>
+        <label className="sr-only" htmlFor="cci-watch-product">Follow a product</label>
+        <input id="cci-watch-product" list="cci-watch-product-options" onChange={(event) => setProductName(event.target.value)} placeholder="Follow a product…" value={productName} />
+        <datalist id="cci-watch-product-options">{productOptions.map((name) => <option key={name} value={name} />)}</datalist>
+        <button className="scan-button scan-button-dark" disabled={submitting || !productName.trim()} type="submit">Follow</button>
+      </form>
+      {watchlist.length ? (
+        <div className="cci-watch-list">
+          {watchlist.map((item) => {
+            const change = watchlistChanges.find((entry) => entry.productName === item.productName)
+            return (
+              <div className="cci-watch-row" key={item.id}>
+                <div>
+                  <strong>{item.productName}</strong>
+                  <small>
+                    {change
+                      ? `${integer.format(change.recentBaskets)} baskets recently vs. ${integer.format(change.priorBaskets)} before (${change.basketChangePct >= 0 ? '+' : ''}${decimal.format(change.basketChangePct)}%)`
+                      : 'No comparison data yet'}
+                  </small>
+                </div>
+                <button className="scan-button scan-button-light" disabled={busyItemId === item.id} onClick={() => handleUnfollow(item.id)} type="button">Unfollow</button>
+              </div>
+            )
+          })}
+        </div>
+      ) : <EmptyState compact title="Not watching anything yet">Follow a product to always see its real current numbers here, regardless of size.</EmptyState>}
+    </section>
+  )
+}
+
 function MyWork({
-  credentials, movers, investigations, fieldTasks, intelligenceLoading, intelligenceError,
-  onOpenInvestigation, onStartProductInvestigation, onAskAbout, onNavigate, onPrepareBrief,
+  credentials, movers, investigations, fieldTasks, watchlist, watchlistChanges, productOptions,
+  intelligenceLoading, intelligenceError, onOpenInvestigation, onStartProductInvestigation,
+  onAskAbout, onNavigate, onPrepareBrief, onFollow, onUnfollow,
 }) {
   const [busyProduct, setBusyProduct] = useState(null)
   const inProgress = investigations.filter((item) => item.status === 'IN_PROGRESS')
@@ -384,6 +451,8 @@ function MyWork({
           </div>
         ) : <EmptyState compact title="No new changes detected">No CCI product moved enough in the last {DEFAULT_PERIOD_DAYS} days to flag, or every real decline already has an open investigation.</EmptyState>}
       </section>
+
+      <WatchingSection onFollow={onFollow} onUnfollow={onUnfollow} productOptions={productOptions} watchlist={watchlist} watchlistChanges={watchlistChanges} />
 
       <div className="scan-two-column cci-my-work-columns">
         <section className="cci-home-section">
@@ -1117,10 +1186,15 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       investigations={intelligence.investigations}
       movers={intelligence.movers}
       onAskAbout={actions.askCopilotAboutProduct}
+      onFollow={actions.followProduct}
       onNavigate={onNavigate}
       onOpenInvestigation={(id) => { actions.selectInvestigation(id); onNavigate('investigate') }}
       onPrepareBrief={actions.prepareBrief}
       onStartProductInvestigation={actions.startProductInvestigationFromWork}
+      onUnfollow={actions.unfollowProduct}
+      productOptions={productOptions}
+      watchlist={intelligence.watchlist}
+      watchlistChanges={intelligence.watchlistChanges}
     />
   )
 }
@@ -1139,6 +1213,8 @@ export default function CciDashboard() {
   const [investigations, setInvestigations] = useState([])
   const [fieldTasks, setFieldTasks] = useState([])
   const [movers, setMovers] = useState([])
+  const [watchlist, setWatchlist] = useState([])
+  const [watchlistChanges, setWatchlistChanges] = useState([])
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [intelligenceError, setIntelligenceError] = useState('')
   const [selectedInvestigationId, setSelectedInvestigationId] = useState(null)
@@ -1151,15 +1227,19 @@ export default function CciDashboard() {
     setIntelligenceLoading(true)
     setIntelligenceError('')
     try {
-      const [investigationsResponse, fieldTasksResponse, moversResponse] = await Promise.all([
+      const [investigationsResponse, fieldTasksResponse, moversResponse, watchlistResponse, watchlistChangesResponse] = await Promise.all([
         fetchInvestigations({ ...creds, signal }),
         fetchFieldTasks({ ...creds, signal }),
         fetchMovers({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, limit: 10, signal }),
+        fetchWatchlist({ ...creds, signal }),
+        fetchWatchlistChanges({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, signal }),
       ])
       if (signal?.aborted) return
       setInvestigations(investigationsResponse)
       setFieldTasks(fieldTasksResponse)
       setMovers(moversResponse)
+      setWatchlist(watchlistResponse)
+      setWatchlistChanges(watchlistChangesResponse)
     } catch (requestError) {
       if (requestError?.name !== 'AbortError') {
         setIntelligenceError(requestError?.message || 'Unable to load commercial intelligence data.')
@@ -1210,6 +1290,7 @@ export default function CciDashboard() {
   function signOut() {
     setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false)
     setActivePage('my-work'); setInvestigations([]); setFieldTasks([]); setMovers([])
+    setWatchlist([]); setWatchlistChanges([])
     setSelectedInvestigationId(null); setCopilotContext(null)
   }
 
@@ -1239,6 +1320,8 @@ export default function CciDashboard() {
     askCopilotAboutProduct: (productName) => { setCopilotContext({ contextType: 'PRODUCT', subjectName: productName }); setActivePage('copilot') },
     askCopilotAboutInvestigation: (investigationId) => { setCopilotContext({ contextType: 'INVESTIGATION', investigationId }); setActivePage('copilot') },
     prepareBrief: (template) => fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),
+    followProduct: (productName) => withReload(() => followProduct({ ...credentials, productName })),
+    unfollowProduct: (itemId) => withReload(() => unfollowProduct({ ...credentials, itemId })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [credentials])
 
@@ -1297,7 +1380,8 @@ export default function CciDashboard() {
           credentials={credentials}
           data={data}
           intelligence={{
-            investigations, fieldTasks, movers, loading: intelligenceLoading, error: intelligenceError,
+            investigations, fieldTasks, movers, watchlist, watchlistChanges,
+            loading: intelligenceLoading, error: intelligenceError,
             selectedInvestigationId, copilotContext,
           }}
           onNavigate={setActivePage}

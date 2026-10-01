@@ -137,3 +137,21 @@ export function fetchMeetingBrief({ retailerCode, template, periodDays, username
 export function fetchMovers({ retailerCode, periodDays, limit, username, password, signal }) {
   return request("GET", `/api/v1/analytics/movers${query({ retailerCode, periodDays, limit })}`, { username, password, signal });
 }
+
+// --- Watchlist ---------------------------------------------------
+
+export function fetchWatchlist({ retailerCode, username, password, signal }) {
+  return request("GET", `/api/v1/watchlist${query({ retailerCode })}`, { username, password, signal });
+}
+
+export function followProduct({ retailerCode, productName, username, password }) {
+  return request("POST", `/api/v1/watchlist${query({ retailerCode })}`, { username, password, body: { productName } });
+}
+
+export function unfollowProduct({ retailerCode, itemId, username, password }) {
+  return request("DELETE", `/api/v1/watchlist/${itemId}${query({ retailerCode })}`, { username, password });
+}
+
+export function fetchWatchlistChanges({ retailerCode, periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/watchlist/changes${query({ retailerCode, periodDays })}`, { username, password, signal });
+}

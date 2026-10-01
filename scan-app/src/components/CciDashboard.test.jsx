@@ -10,8 +10,12 @@ import {
   fetchInvestigations,
   fetchMeetingBrief,
   fetchMovers,
+  fetchWatchlist,
+  fetchWatchlistChanges,
+  followProduct,
   openProductInvestigation,
   recordFieldTaskResult,
+  unfollowProduct,
 } from '../services/intelligenceApi'
 
 vi.mock('../services/scanApi', async (importOriginal) => {
@@ -41,6 +45,10 @@ vi.mock('../services/intelligenceApi', () => ({
   createFieldTask: vi.fn(),
   recordFieldTaskResult: vi.fn(),
   askCopilot: vi.fn(),
+  fetchWatchlist: vi.fn(),
+  followProduct: vi.fn(),
+  unfollowProduct: vi.fn(),
+  fetchWatchlistChanges: vi.fn(),
 }))
 
 const overview = {
@@ -133,6 +141,10 @@ function mockIntelligenceDefaults() {
   createFieldTask.mockReset()
   recordFieldTaskResult.mockReset()
   askCopilot.mockReset()
+  fetchWatchlist.mockReset().mockResolvedValue([])
+  fetchWatchlistChanges.mockReset().mockResolvedValue([])
+  followProduct.mockReset()
+  unfollowProduct.mockReset()
 }
 
 async function signIn(user) {
@@ -463,5 +475,32 @@ describe('CciDashboard', () => {
 
     expect(fetchMeetingBrief).toHaveBeenCalledWith(expect.objectContaining({ template: 'WEEKLY_SALES_REVIEW' }))
     expect(await screen.findByText(/CCI products appeared in 2.1% of baskets/)).toBeInTheDocument()
+  })
+
+  it('follows a product from My Work and shows its real current numbers, regardless of size', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    const watched = { id: 'watch-1', productName: 'Sprite 500ml', addedBy: 'scan-demo-cci', createdAt: '2026-08-20T10:00:00Z' }
+    followProduct.mockResolvedValue(watched)
+    fetchWatchlist.mockResolvedValueOnce([]).mockResolvedValue([watched])
+    fetchWatchlistChanges.mockResolvedValueOnce([]).mockResolvedValue([
+      { productName: 'Sprite 500ml', category: null, recentBaskets: 1, priorBaskets: 2, basketChangePct: -50 },
+    ])
+    await signIn(user)
+
+    expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Follow a product'), 'Sprite 500ml')
+    await user.click(screen.getByRole('button', { name: 'Follow' }))
+
+    expect(followProduct).toHaveBeenCalledWith(expect.objectContaining({ productName: 'Sprite 500ml' }))
+    expect(await screen.findByText(/1 baskets recently vs\. 2 before/)).toBeInTheDocument()
+
+    unfollowProduct.mockResolvedValue(null)
+    fetchWatchlist.mockResolvedValue([])
+    fetchWatchlistChanges.mockResolvedValue([])
+    await user.click(screen.getByRole('button', { name: 'Unfollow' }))
+
+    expect(unfollowProduct).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'watch-1' }))
+    expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
   })
 })

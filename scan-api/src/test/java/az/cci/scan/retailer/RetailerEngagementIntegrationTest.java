@@ -14,6 +14,7 @@ import az.cci.scan.repository.RetailerOfferActivationRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.ScanAccountRepository;
 import az.cci.scan.repository.StoreRepository;
@@ -59,6 +60,9 @@ class RetailerEngagementIntegrationTest {
 
     @Autowired
     private InvestigationRepository investigationRepository;
+
+    @Autowired
+    private WatchlistItemRepository watchlistItemRepository;
 
     @Autowired
     private RetailerRepository retailerRepository;
@@ -110,6 +114,7 @@ class RetailerEngagementIntegrationTest {
         storeRepository.deleteAll();
         canonicalProductRepository.deleteAll();
         fieldTaskRepository.deleteAll();
+        watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         retailerRepository.deleteAll();
 

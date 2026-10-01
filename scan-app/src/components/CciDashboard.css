@@ -254,6 +254,14 @@
 .cci-my-work-columns { align-items: start; }
 
 .cci-work-list { display: grid; border-top: 1px solid var(--scan-border); }
+.cci-watch-form { display: flex; gap: 8px; margin-bottom: 16px; }
+.cci-watch-form input { flex: 1; max-width: 360px; min-height: 42px; padding: 9px 12px; border: 1px solid var(--scan-border); border-radius: 6px; }
+
+.cci-watch-list { display: grid; border-top: 1px solid var(--scan-border); }
+.cci-watch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 4px; border-bottom: 1px solid var(--scan-border); }
+.cci-watch-row strong { display: block; font-size: .88rem; }
+.cci-watch-row small { display: block; margin-top: 3px; color: var(--scan-muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+
 .cci-work-list-item {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 14px 4px; border: 0; border-bottom: 1px solid var(--scan-border); background: transparent; text-align: left;
