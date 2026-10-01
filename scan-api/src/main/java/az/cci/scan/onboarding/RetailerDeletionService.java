@@ -1,17 +1,21 @@
 package az.cci.scan.onboarding;
 
 import az.cci.scan.config.PilotAccessProperties;
+import az.cci.scan.domain.FieldTask;
 import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.ImportProfile;
+import az.cci.scan.domain.Investigation;
 import az.cci.scan.domain.Receipt;
 import az.cci.scan.domain.Retailer;
 import az.cci.scan.domain.RetailerProduct;
 import az.cci.scan.domain.ScanAccount;
 import az.cci.scan.domain.Store;
 import az.cci.scan.operations.AuditService;
+import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ImportProfileRepository;
+import az.cci.scan.repository.InvestigationRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
@@ -54,6 +58,8 @@ public class RetailerDeletionService {
     private final RetailerProductRepository retailerProductRepository;
     private final ScanAccountRepository scanAccountRepository;
     private final OperationalAuditEventRepository auditEventRepository;
+    private final FieldTaskRepository fieldTaskRepository;
+    private final InvestigationRepository investigationRepository;
     private final PilotAccessProperties pilotAccessProperties;
     private final AuditService auditService;
 
@@ -67,6 +73,8 @@ public class RetailerDeletionService {
         RetailerProductRepository retailerProductRepository,
         ScanAccountRepository scanAccountRepository,
         OperationalAuditEventRepository auditEventRepository,
+        FieldTaskRepository fieldTaskRepository,
+        InvestigationRepository investigationRepository,
         PilotAccessProperties pilotAccessProperties,
         AuditService auditService
     ) {
@@ -79,6 +87,8 @@ public class RetailerDeletionService {
         this.retailerProductRepository = retailerProductRepository;
         this.scanAccountRepository = scanAccountRepository;
         this.auditEventRepository = auditEventRepository;
+        this.fieldTaskRepository = fieldTaskRepository;
+        this.investigationRepository = investigationRepository;
         this.pilotAccessProperties = pilotAccessProperties;
         this.auditService = auditService;
     }
@@ -141,6 +151,12 @@ public class RetailerDeletionService {
 
         List<Store> stores = storeRepository.findAllByRetailerOrderByCreatedAtAsc(retailer);
         storeRepository.deleteAll(stores);
+
+        // field_task references investigation (nullable), so it has to go first.
+        List<FieldTask> fieldTasks = fieldTaskRepository.findAllByRetailerOrderByCreatedAtDesc(retailer);
+        fieldTaskRepository.deleteAll(fieldTasks);
+        List<Investigation> investigations = investigationRepository.findAllByRetailerOrderByCreatedAtDesc(retailer);
+        investigationRepository.deleteAll(investigations);
 
         // This retailer's own audit history goes too - it's squarely part of "its data" - but a
         // single new record survives with no retailer attached, so the deletion itself stays

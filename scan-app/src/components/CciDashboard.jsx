@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -9,6 +9,22 @@ import {
   YAxis,
 } from 'recharts'
 import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
+import {
+  addInvestigationNote,
+  askCopilot,
+  closeInvestigation,
+  confirmHypothesis,
+  createFieldTask,
+  fetchFieldTasks,
+  fetchInvestigations,
+  fetchMeetingBrief,
+  fetchMovers,
+  openGeneralInvestigation,
+  openProductInvestigation,
+  recordFieldTaskResult,
+  rejectHypothesis,
+  reopenInvestigation,
+} from '../services/intelligenceApi'
 import { compactChartLabel } from './chartLabels'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
@@ -29,28 +45,26 @@ import {
 import './CciDashboard.css'
 
 const NAV_ITEMS = [
-  { id: 'home', label: 'Home', icon: 'home' },
-  { id: 'opportunities', label: 'Opportunities', icon: 'opportunities' },
-  { id: 'explore', label: 'Explore', icon: 'explore' },
-  { id: 'stores', label: 'Stores', icon: 'stores' },
-  { id: 'ask', label: 'Ask SCAN', icon: 'ask' },
+  { id: 'my-work', label: 'My Work', icon: 'home' },
+  { id: 'investigate', label: 'Investigate', icon: 'explore' },
+  { id: 'activations', label: 'Activations', icon: 'pulse' },
+  { id: 'network', label: 'Network', icon: 'database' },
+  { id: 'copilot', label: 'Copilot', icon: 'ask' },
 ]
 
-const EXPLORE_TABS = [
+const NETWORK_TABS = [
+  { value: 'stores', label: 'Stores' },
   { value: 'basket', label: 'Baskets' },
   { value: 'products', label: 'Products' },
   { value: 'time', label: 'Time' },
-  { value: 'stores', label: 'Stores' },
+  { value: 'signals', label: 'Signals' },
 ]
 
 const MIN_OPPORTUNITY_SUPPORT = 5
+const DEFAULT_PERIOD_DAYS = 14
 
 const integer = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
-const decimal = decimalFormatter()
-
-function decimalFormatter() {
-  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
-}
+const decimal = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 
 function formatMoney(value, currency) {
   const amount = Number(value || 0)
@@ -85,6 +99,19 @@ function humanize(value) {
   return `${value || ''}`.toLowerCase().replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
 }
 
+function statusTone(status) {
+  if (status === 'CLOSED' || status === 'COMPLETED' || status === 'CONFIRMED') return 'success'
+  if (status === 'IN_PROGRESS' || status === 'OPEN') return 'warning'
+  if (status === 'REJECTED') return 'neutral'
+  return 'neutral'
+}
+
+function confidenceTone(confidence) {
+  if (confidence === 'HIGH') return 'red'
+  if (confidence === 'MEDIUM') return 'warning'
+  return 'neutral'
+}
+
 function insightType(insight) {
   const copy = `${insight.fact} ${insight.interpretation} ${insight.recommendedAction}`.toLowerCase()
   if (/daypart|morning|midday|afternoon|evening|night|time-specific/.test(copy)) return 'Time'
@@ -109,10 +136,14 @@ function isActionableInsight(insight, data) {
   return !/too small|currently present but weak|collect more|before acting|needs review|resolve high-volume unmapped|cannot be calculated/.test(caution)
 }
 
-function partitionInsights(data) {
-  const opportunities = data.insights.filter((insight) => isActionableInsight(insight, data)).slice(0, 3)
-  const signals = data.insights.filter((insight) => !isActionableInsight(insight, data))
-  return { opportunities, signals }
+function evidenceForInsight(insight, data) {
+  const support = companionSupport(insight, data)
+  if (support !== null) return `${integer.format(support)} CCI baskets support this relationship`
+  if (insightType(insight) === 'Time') return `${integer.format(data.totalBaskets)} validated baskets in the time analysis`
+  if (insightType(insight) === 'Data') return `${decimal.format(data.mappedLinePercentage)}% of transaction lines mapped`
+  return data.stores.length
+    ? `${integer.format(data.cciBaskets)} CCI baskets across ${integer.format(data.stores.length)} reporting stores`
+    : `${integer.format(data.cciBaskets)} CCI baskets in the current aggregate`
 }
 
 function Login({ error, loading, onSubmit }) {
@@ -129,16 +160,16 @@ function Login({ error, loading, onSubmit }) {
       <section className="cci-login-card" aria-labelledby="cci-login-title">
         <ScanBrand subtitle="Sales & Consumption Analytics Network" />
         <div className="cci-login-copy">
-          <span className="cci-eyebrow">CCI intelligence workspace</span>
-          <h1 id="cci-login-title">From every basket to the next action.</h1>
-          <p>Review retailer-approved aggregate evidence, separate meaningful opportunities from early signals, and decide what to test.</p>
+          <span className="cci-eyebrow">CCI commercial intelligence workspace</span>
+          <h1 id="cci-login-title">From every basket to the next decision.</h1>
+          <p>Detect what changed, investigate why, and turn it into a field check, an activation, or a decision — without leaving SCAN.</p>
         </div>
         <form className="cci-login-form" onSubmit={submit}>
           <label>Username<input autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
           <label>Password<input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           <p className="cci-login-context"><strong>Retailer access is assigned to this account.</strong> SCAN opens only approved aggregate data after sign-in.</p>
           {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
-          <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Connecting…' : 'Open analytics'}</button>
+          <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Connecting…' : 'Open workspace'}</button>
         </form>
         <div className="portal-switch-links">
           <a className="portal-switch-link" href="/?portal=retailer">Retailer owner portal <span aria-hidden="true">→</span></a>
@@ -215,69 +246,638 @@ function DataTrust({ data }) {
   )
 }
 
-function evidenceForInsight(insight, data) {
-  const support = companionSupport(insight, data)
-  if (support !== null) return `${integer.format(support)} CCI baskets support this relationship`
-  if (insightType(insight) === 'Time') return `${integer.format(data.totalBaskets)} validated baskets in the time analysis`
-  if (insightType(insight) === 'Data') return `${decimal.format(data.mappedLinePercentage)}% of transaction lines mapped`
-  return data.stores.length
-    ? `${integer.format(data.cciBaskets)} CCI baskets across ${integer.format(data.stores.length)} reporting stores`
-    : `${integer.format(data.cciBaskets)} CCI baskets in the current aggregate`
+function StoreTable({ data }) {
+  return <MetricTable columns={['Store', 'Baskets', 'CCI baskets', 'CCI penetration', 'Average basket']} empty="No store-level aggregates are available." rows={data.stores.map((store) => [store.storeId, integer.format(store.basketCount), integer.format(store.cciBasketCount), `${decimal.format(store.cciPenetrationPercentage)}%`, formatMoney(store.averageBasketValue, data.currency)])} />
 }
 
-function AskLauncher({ questions, onAsk }) {
-  const [query, setQuery] = useState('')
+/* ------------------------------------------------------------------ */
+/* My Work                                                             */
+/* ------------------------------------------------------------------ */
 
-  function submit(event) {
-    event.preventDefault()
-    onAsk(query)
+function NeedsAttentionCard({ mover, onInvestigate, onAsk, busy }) {
+  const declined = mover.basketChangePct < 0
+  return (
+    <article className="cci-work-card">
+      <header>
+        <StatusBadge tone={declined ? 'warning' : 'success'}>{declined ? 'Declining' : 'Rising'}</StatusBadge>
+      </header>
+      <h3>{mover.productName}{declined ? ' is down' : ' is up'} {decimal.format(Math.abs(mover.basketChangePct))}%</h3>
+      <p>{integer.format(mover.recentBaskets)} baskets recently vs. {integer.format(mover.priorBaskets)} in the prior period. {mover.category ? `Category: ${mover.category}.` : ''}</p>
+      <div className="cci-work-card-actions">
+        <button className="scan-button scan-button-dark" disabled={busy} onClick={() => onInvestigate(mover.productName)} type="button">Investigate</button>
+        <button className="scan-button scan-button-light" onClick={() => onAsk(mover.productName)} type="button">Ask Copilot</button>
+      </div>
+    </article>
+  )
+}
+
+function WorkListCard({ title, meta, badgeLabel, badgeTone, onOpen }) {
+  return (
+    <button className="cci-work-list-item" onClick={onOpen} type="button">
+      <div>
+        <strong>{title}</strong>
+        <small>{meta}</small>
+      </div>
+      <StatusBadge tone={badgeTone}>{badgeLabel}</StatusBadge>
+    </button>
+  )
+}
+
+const MEETING_TEMPLATES = [
+  { value: 'WEEKLY_SALES_REVIEW', label: 'Weekly Sales Review' },
+  { value: 'TRADE_MARKETING_REVIEW', label: 'Trade Marketing Review' },
+  { value: 'CATEGORY_REVIEW', label: 'Category Review' },
+  { value: 'DISTRIBUTOR_MEETING', label: 'Distributor Meeting' },
+  { value: 'MANAGEMENT_UPDATE', label: 'Management Update' },
+  { value: 'MONTHLY_COMMERCIAL_REVIEW', label: 'Monthly Commercial Review' },
+]
+
+function MeetingBriefPanel({ onPrepare }) {
+  const [template, setTemplate] = useState('WEEKLY_SALES_REVIEW')
+  const [brief, setBrief] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  async function prepare() {
+    setLoading(true)
+    try {
+      setBrief(await onPrepare(template))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="cci-ask-launcher">
-      <form onSubmit={submit}>
-        <ScanIcon name="ask" size={21} />
-        <label className="sr-only" htmlFor="cci-home-question">Ask about basket behavior</label>
-        <input id="cci-home-question" onChange={(event) => setQuery(event.target.value)} placeholder="Ask about basket behavior…" value={query} />
-        <button aria-label="Open Ask SCAN" type="submit"><ScanIcon name="chevron" size={18} /></button>
-      </form>
-      <div className="cci-suggestion-chips" aria-label="Suggested questions">
-        {questions.slice(0, 3).map((item) => <button key={item.question} onClick={() => onAsk(item.question)} type="button">{item.question}</button>)}
+    <section className="cci-home-section cci-meeting-brief">
+      <header className="cci-home-section-heading">
+        <div><span className="scan-eyebrow">Meeting prep</span><h2>Prepare a review</h2></div>
+        <div className="cci-meeting-controls">
+          <select onChange={(event) => setTemplate(event.target.value)} value={template}>
+            {MEETING_TEMPLATES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>
+          <button className="scan-button scan-button-dark" disabled={loading} onClick={prepare} type="button">{loading ? 'Preparing…' : 'Prepare'}</button>
+        </div>
+      </header>
+      {brief ? (
+        <div className="cci-brief-grid">
+          <p className="cci-brief-summary">{brief.networkSummary}</p>
+          <div><h4>Issues requiring a decision</h4>{brief.issuesRequiringDecision.length ? <ul>{brief.issuesRequiringDecision.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>None open.</p>}</div>
+          <div><h4>Field execution</h4><ul>{brief.fieldExecution.map((item, index) => <li key={index}>{item}</li>)}</ul></div>
+          <div><h4>Completed since last review</h4>{brief.completedActions.length ? <ul>{brief.completedActions.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>Nothing closed in this window.</p>}</div>
+          <div><h4>Risks</h4>{brief.risks.length ? <ul>{brief.risks.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>No real declines flagged.</p>}</div>
+          <div><h4>Top opportunities</h4>{brief.topOpportunities.length ? <ul>{brief.topOpportunities.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>No real gains flagged.</p>}</div>
+          <small>{brief.limitations}</small>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function MyWork({
+  credentials, movers, investigations, fieldTasks, intelligenceLoading, intelligenceError,
+  onOpenInvestigation, onStartProductInvestigation, onAskAbout, onNavigate, onPrepareBrief,
+}) {
+  const [busyProduct, setBusyProduct] = useState(null)
+  const inProgress = investigations.filter((item) => item.status === 'IN_PROGRESS')
+  const openTasks = fieldTasks.filter((item) => item.status === 'OPEN')
+  const recentlyClosedInvestigations = investigations
+    .filter((item) => item.status === 'CLOSED')
+    .sort((a, b) => new Date(b.closedAt || 0) - new Date(a.closedAt || 0))
+    .slice(0, 5)
+  const recentlyCompletedTasks = fieldTasks
+    .filter((item) => item.status === 'COMPLETED')
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .slice(0, 5)
+
+  const investigatedProductNames = new Set(
+    investigations.filter((item) => item.subjectType === 'PRODUCT').map((item) => item.subjectName)
+  )
+  const needsAttention = movers.filter((mover) => !investigatedProductNames.has(mover.productName)).slice(0, 4)
+
+  async function handleInvestigate(productName) {
+    setBusyProduct(productName)
+    try {
+      await onStartProductInvestigation(productName)
+    } finally {
+      setBusyProduct(null)
+    }
+  }
+
+  const itemCount = needsAttention.length + inProgress.length + openTasks.length
+
+  return (
+    <div className="scan-page-stack cci-my-work">
+      <section className="cci-discovery-hero">
+        <span className="scan-eyebrow">My Work</span>
+        <h2>{itemCount > 0 ? `${itemCount} item${itemCount === 1 ? '' : 's'} need your attention` : 'Everything is caught up'}</h2>
+        <p>{credentials.retailerCode === 'KAGGLE' ? 'Demo retailer' : ''} {itemCount === 0 ? 'No declines flagged, nothing open, and no field checks waiting.' : 'Review what changed, what is in progress, and what is waiting on the field team.'}</p>
+      </section>
+
+      {intelligenceError ? <div className="scan-inline-notice scan-inline-error" role="alert">{intelligenceError}</div> : null}
+
+      <section className="cci-home-section">
+        <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Detected changes</span><h2>Needs attention</h2></div></header>
+        {intelligenceLoading ? <p className="cci-work-loading">Scanning for real changes…</p> : needsAttention.length ? (
+          <div className="cci-work-grid">
+            {needsAttention.map((mover) => (
+              <NeedsAttentionCard busy={busyProduct === mover.productName} key={mover.productName} mover={mover} onAsk={onAskAbout} onInvestigate={handleInvestigate} />
+            ))}
+          </div>
+        ) : <EmptyState compact title="No new changes detected">No CCI product moved enough in the last {DEFAULT_PERIOD_DAYS} days to flag, or every real decline already has an open investigation.</EmptyState>}
+      </section>
+
+      <div className="scan-two-column cci-my-work-columns">
+        <section className="cci-home-section">
+          <header className="cci-home-section-heading"><div><h3>In progress</h3></div></header>
+          {inProgress.length ? (
+            <div className="cci-work-list">
+              {inProgress.map((item) => (
+                <WorkListCard badgeLabel={humanize(item.status)} badgeTone={statusTone(item.status)} key={item.id} meta={`${item.hypotheses.length} hypothesis(es) · ${item.notes.length} note(s)`} onOpen={() => onOpenInvestigation(item.id)} title={item.title} />
+              ))}
+            </div>
+          ) : <EmptyState compact title="Nothing in progress">Open an investigation to start one.</EmptyState>}
+        </section>
+        <section className="cci-home-section">
+          <header className="cci-home-section-heading"><div><h3>Waiting on team</h3></div></header>
+          {openTasks.length ? (
+            <div className="cci-work-list">
+              {openTasks.map((item) => {
+                const done = item.stores.filter((store) => store.completed).length
+                return (
+                  <WorkListCard badgeLabel={`${done}/${item.stores.length} done`} badgeTone="warning" key={item.id} meta={`Assigned to ${item.assignedTo}`} onOpen={() => onNavigate('investigate')} title={item.title} />
+                )
+              })}
+            </div>
+          ) : <EmptyState compact title="No field checks waiting">Create one from an investigation when you need real-world confirmation.</EmptyState>}
+        </section>
       </div>
+
+      <section className="cci-home-section">
+        <header className="cci-home-section-heading"><div><h3>Recently completed</h3></div></header>
+        {recentlyClosedInvestigations.length || recentlyCompletedTasks.length ? (
+          <div className="cci-work-list">
+            {recentlyClosedInvestigations.map((item) => (
+              <WorkListCard badgeLabel="Closed" badgeTone="success" key={item.id} meta={`Closed ${formatRelativeTime(item.closedAt)}`} onOpen={() => onOpenInvestigation(item.id)} title={item.title} />
+            ))}
+            {recentlyCompletedTasks.map((item) => (
+              <WorkListCard badgeLabel="Field check complete" badgeTone="success" key={item.id} meta={`Completed ${formatRelativeTime(item.updatedAt)}`} onOpen={() => onNavigate('investigate')} title={item.title} />
+            ))}
+          </div>
+        ) : <EmptyState compact title="Nothing completed yet">Closed investigations and finished field checks will appear here.</EmptyState>}
+      </section>
+
+      <MeetingBriefPanel onPrepare={onPrepareBrief} />
     </div>
   )
 }
 
-function TopOpportunities({ data, onNavigate }) {
-  const { opportunities } = partitionInsights(data)
+/* ------------------------------------------------------------------ */
+/* Investigate                                                         */
+/* ------------------------------------------------------------------ */
+
+function StartInvestigationForm({ productOptions, onStartProduct, onStartGeneral, onCancel }) {
+  const [mode, setMode] = useState('product')
+  const [productName, setProductName] = useState('')
+  const [title, setTitle] = useState('')
+  const [question, setQuestion] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      if (mode === 'product') await onStartProduct(productName.trim())
+      else await onStartGeneral({ title: title.trim(), question: question.trim() })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <section className="cci-home-section">
-      <header className="cci-home-section-heading">
-        <div><span className="scan-eyebrow">Decision queue</span><h2>Top opportunities</h2></div>
-        <button className="scan-text-link" onClick={() => onNavigate('opportunities')} type="button">View all <ScanIcon name="chevron" size={16} /></button>
+    <form className="cci-start-investigation" onSubmit={submit}>
+      <SegmentedControl label="Start from" onChange={setMode} options={[{ value: 'product', label: 'A product' }, { value: 'general', label: 'A question' }]} value={mode} />
+      {mode === 'product' ? (
+        <label>Product
+          <input list="cci-product-options" onChange={(event) => setProductName(event.target.value)} placeholder="e.g. Sprite 500ml" required value={productName} />
+          <datalist id="cci-product-options">{productOptions.map((name) => <option key={name} value={name} />)}</datalist>
+        </label>
+      ) : (
+        <>
+          <label>Title<input onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Why is the north region soft?" required value={title} /></label>
+          <label>Question<input onChange={(event) => setQuestion(event.target.value)} placeholder="What changed?" required value={question} /></label>
+        </>
+      )}
+      <div className="cci-form-actions">
+        <button className="scan-button scan-button-light" onClick={onCancel} type="button">Cancel</button>
+        <button className="scan-button scan-button-dark" disabled={submitting} type="submit">{submitting ? 'Starting…' : 'Start investigation'}</button>
+      </div>
+    </form>
+  )
+}
+
+function HypothesisCard({ hypothesis, onConfirm, onReject, busy }) {
+  return (
+    <article className="cci-hypothesis">
+      <header>
+        <StatusBadge tone={confidenceTone(hypothesis.confidence)}>{hypothesis.confidence} confidence</StatusBadge>
+        <StatusBadge tone={statusTone(hypothesis.status)}>{humanize(hypothesis.status)}</StatusBadge>
       </header>
-      {opportunities.length ? (
-        <div className="cci-top-opportunity-list">
-          {opportunities.map((insight, index) => (
-              <article className="cci-top-opportunity" key={`${insight.fact}-${index}`}>
-                <div className="cci-opportunity-rank">{String(index + 1).padStart(2, '0')}</div>
-                <div className="cci-opportunity-summary">
-                  <StatusBadge tone="red">{insightType(insight)} opportunity</StatusBadge>
-                  <h3>{insight.fact}</h3>
-                  <p>{insight.interpretation}</p>
-                </div>
-                <div className="cci-opportunity-action">
-                  <span>Recommended action</span>
-                  <strong>{insight.recommendedAction}</strong>
-                  <button onClick={() => onNavigate('opportunities')} type="button">View evidence <ScanIcon name="chevron" size={15} /></button>
-                </div>
-              </article>
+      <p className="cci-hypothesis-statement">{hypothesis.statement}</p>
+      <dl>
+        <div><dt>Supporting evidence</dt><dd>{hypothesis.supportingEvidence}</dd></div>
+        {hypothesis.contradictingEvidence ? <div><dt>What we still don't know</dt><dd>{hypothesis.contradictingEvidence}</dd></div> : null}
+      </dl>
+      {hypothesis.status === 'OPEN' ? (
+        <div className="cci-form-actions">
+          <button className="scan-button scan-button-light" disabled={busy} onClick={() => onReject(hypothesis.id)} type="button">Reject</button>
+          <button className="scan-button scan-button-dark" disabled={busy} onClick={() => onConfirm(hypothesis.id)} type="button">Confirm</button>
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+function CreateFieldTaskForm({ stores, defaultReason, onCreate, onCancel }) {
+  const [title, setTitle] = useState('')
+  const [reason, setReason] = useState(defaultReason || '')
+  const [assignedTo, setAssignedTo] = useState('Field Sales Team')
+  const [selectedStores, setSelectedStores] = useState([])
+  const [submitting, setSubmitting] = useState(false)
+
+  function toggleStore(storeId) {
+    setSelectedStores((current) => current.includes(storeId) ? current.filter((id) => id !== storeId) : [...current, storeId])
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!selectedStores.length) return
+    setSubmitting(true)
+    try {
+      await onCreate({ title: title.trim(), reason: reason.trim(), assignedTo: assignedTo.trim(), storeIds: selectedStores })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form className="cci-create-field-task" onSubmit={submit}>
+      <label>What should the field team check?<input onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Check Sprite availability" required value={title} /></label>
+      <label>Why<input onChange={(event) => setReason(event.target.value)} placeholder="Evidence-linked reason" required value={reason} /></label>
+      <label>Assigned to<input onChange={(event) => setAssignedTo(event.target.value)} required value={assignedTo} /></label>
+      <fieldset className="cci-store-picker">
+        <legend>Target stores</legend>
+        {stores.length ? stores.map((store) => (
+          <label className="cci-store-checkbox" key={store.storeId}>
+            <input checked={selectedStores.includes(store.storeId)} onChange={() => toggleStore(store.storeId)} type="checkbox" />
+            {store.storeId}
+          </label>
+        )) : <p>No reporting stores are available yet.</p>}
+      </fieldset>
+      <div className="cci-form-actions">
+        <button className="scan-button scan-button-light" onClick={onCancel} type="button">Cancel</button>
+        <button className="scan-button scan-button-dark" disabled={submitting || !selectedStores.length} type="submit">{submitting ? 'Creating…' : 'Create field check'}</button>
+      </div>
+    </form>
+  )
+}
+
+function FieldTaskChecklist({ task, onRecordResult }) {
+  return (
+    <div className="cci-field-task-card">
+      <header>
+        <strong>{task.title}</strong>
+        <StatusBadge tone={statusTone(task.status)}>{humanize(task.status)}</StatusBadge>
+      </header>
+      <p>{task.reason}</p>
+      <ul className="cci-field-task-stores">
+        {task.stores.map((store) => (
+          <FieldTaskStoreRow key={store.id} onRecord={(result) => onRecordResult(task.id, store.externalStoreId, result)} store={store} />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function FieldTaskStoreRow({ store, onRecord }) {
+  const [editing, setEditing] = useState(false)
+  const [stockAvailable, setStockAvailable] = useState(true)
+  const [visibleInCooler, setVisibleInCooler] = useState(true)
+  const [correctPlacement, setCorrectPlacement] = useState(true)
+  const [competitorPresent, setCompetitorPresent] = useState(false)
+  const [note, setNote] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  if (store.completed) {
+    return (
+      <li className="cci-field-task-store is-done">
+        <div><strong>{store.externalStoreId}</strong><small>{store.hasIssue ? 'Issue found' : 'No issue found'}{store.note ? ` · ${store.note}` : ''}</small></div>
+        <StatusBadge tone="success">Checked</StatusBadge>
+      </li>
+    )
+  }
+
+  if (!editing) {
+    return (
+      <li className="cci-field-task-store">
+        <strong>{store.externalStoreId}</strong>
+        <button className="scan-button scan-button-light" onClick={() => setEditing(true)} type="button">Record result</button>
+      </li>
+    )
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      await onRecord({ stockAvailable, visibleInCooler, correctPlacement, competitorPresent, note: note.trim() || null })
+      setEditing(false)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <li className="cci-field-task-store is-editing">
+      <form onSubmit={submit}>
+        <strong>{store.externalStoreId}</strong>
+        <label><input checked={stockAvailable} onChange={(event) => setStockAvailable(event.target.checked)} type="checkbox" /> In stock</label>
+        <label><input checked={visibleInCooler} onChange={(event) => setVisibleInCooler(event.target.checked)} type="checkbox" /> Visible in cooler</label>
+        <label><input checked={correctPlacement} onChange={(event) => setCorrectPlacement(event.target.checked)} type="checkbox" /> Correct placement</label>
+        <label><input checked={competitorPresent} onChange={(event) => setCompetitorPresent(event.target.checked)} type="checkbox" /> Competitor nearby</label>
+        <label className="cci-field-task-note">Note<input onChange={(event) => setNote(event.target.value)} placeholder="Optional" value={note} /></label>
+        <div className="cci-form-actions">
+          <button className="scan-button scan-button-light" onClick={() => setEditing(false)} type="button">Cancel</button>
+          <button className="scan-button scan-button-dark" disabled={submitting} type="submit">{submitting ? 'Saving…' : 'Save'}</button>
+        </div>
+      </form>
+    </li>
+  )
+}
+
+function InvestigationDetail({
+  investigation, fieldTasks, stores, onBack, onAddNote, onConfirmHypothesis, onRejectHypothesis,
+  onClose, onReopen, onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot,
+}) {
+  const [noteBody, setNoteBody] = useState('')
+  const [showFieldTaskForm, setShowFieldTaskForm] = useState(false)
+  const [busyHypothesis, setBusyHypothesis] = useState(null)
+  const systemNotes = investigation.notes.filter((note) => note.system)
+  const humanNotes = investigation.notes.filter((note) => !note.system)
+  const linkedTasks = fieldTasks.filter((task) => task.investigationId === investigation.id)
+
+  async function submitNote(event) {
+    event.preventDefault()
+    if (!noteBody.trim()) return
+    await onAddNote(noteBody.trim())
+    setNoteBody('')
+  }
+
+  async function handleConfirm(hypothesisId) {
+    setBusyHypothesis(hypothesisId)
+    try { await onConfirmHypothesis(hypothesisId) } finally { setBusyHypothesis(null) }
+  }
+  async function handleReject(hypothesisId) {
+    setBusyHypothesis(hypothesisId)
+    try { await onRejectHypothesis(hypothesisId) } finally { setBusyHypothesis(null) }
+  }
+
+  return (
+    <div className="scan-page-stack cci-investigation-detail">
+      <button className="scan-text-link cci-back-link" onClick={onBack} type="button"><ScanIcon name="chevron" size={16} />Back to investigations</button>
+      <PageIntro
+        aside={<StatusBadge tone={statusTone(investigation.status)}>{humanize(investigation.status)}</StatusBadge>}
+        description={investigation.question}
+        eyebrow={humanize(investigation.subjectType)}
+        title={investigation.title}
+      />
+
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>What changed</h3></div></header>
+        {systemNotes.length ? systemNotes.map((note) => <p className="cci-system-note" key={note.id}>{note.body}</p>) : <EmptyState compact title="No detected change on record">This investigation started from a manual question.</EmptyState>}
+      </section>
+
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Possible explanations</h3><p>Never presented as fact — each needs evidence to confirm or reject.</p></div></header>
+        {investigation.hypotheses.length ? (
+          <div className="cci-hypothesis-list">
+            {investigation.hypotheses.map((hypothesis) => (
+              <HypothesisCard busy={busyHypothesis === hypothesis.id} hypothesis={hypothesis} key={hypothesis.id} onConfirm={handleConfirm} onReject={handleReject} />
+            ))}
+          </div>
+        ) : <EmptyState compact title="No hypotheses yet">SCAN did not find a strong enough signal to propose one. Add one manually as evidence comes in.</EmptyState>}
+      </section>
+
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Field checks</h3></div></header>
+        {linkedTasks.length ? (
+          <div className="cci-field-task-list">
+            {linkedTasks.map((task) => <FieldTaskChecklist key={task.id} onRecordResult={onRecordFieldTaskResult} task={task} />)}
+          </div>
+        ) : <EmptyState compact title="No field check created yet">Create one to get real-world confirmation.</EmptyState>}
+        {showFieldTaskForm ? (
+          <CreateFieldTaskForm
+            defaultReason={investigation.hypotheses[0]?.supportingEvidence || ''}
+            onCancel={() => setShowFieldTaskForm(false)}
+            onCreate={async (payload) => { await onCreateFieldTask(payload); setShowFieldTaskForm(false) }}
+            stores={stores}
+          />
+        ) : (
+          <button className="scan-button scan-button-light" onClick={() => setShowFieldTaskForm(true)} type="button">Create field check</button>
+        )}
+      </section>
+
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Notes</h3></div></header>
+        <div className="cci-notes-thread">
+          {humanNotes.length ? humanNotes.map((note) => (
+            <div className="cci-note" key={note.id}><strong>{note.authorUsername}</strong><p>{note.body}</p><small>{formatRelativeTime(note.createdAt)}</small></div>
+          )) : <p className="cci-work-loading">No notes from the team yet.</p>}
+        </div>
+        <form className="cci-add-note" onSubmit={submitNote}>
+          <label className="sr-only" htmlFor="cci-note-body">Add a note</label>
+          <input id="cci-note-body" onChange={(event) => setNoteBody(event.target.value)} placeholder="Add a note…" value={noteBody} />
+          <button className="scan-button scan-button-dark" type="submit">Add</button>
+        </form>
+      </section>
+
+      <section className="cci-next-steps">
+        <button className="scan-button scan-button-light" onClick={() => onAskCopilot(investigation.id)} type="button"><ScanIcon name="ask" size={16} />Ask Copilot about this</button>
+        {investigation.status === 'CLOSED' ? (
+          <button className="scan-button scan-button-light" onClick={onReopen} type="button">Reopen</button>
+        ) : (
+          <button className="scan-button scan-button-light" onClick={onClose} type="button">Close investigation</button>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function Investigate({
+  investigations, fieldTasks, data, selectedInvestigationId, onSelect, onBack, productOptions,
+  onStartProduct, onStartGeneral, onAddNote, onConfirmHypothesis, onRejectHypothesis, onClose, onReopen,
+  onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot, loading, loadError,
+}) {
+  const [showStartForm, setShowStartForm] = useState(false)
+  const selected = investigations.find((item) => item.id === selectedInvestigationId)
+
+  if (selected) {
+    return (
+      <InvestigationDetail
+        fieldTasks={fieldTasks}
+        investigation={selected}
+        onAddNote={onAddNote}
+        onAskCopilot={onAskCopilot}
+        onBack={onBack}
+        onClose={() => onClose(selected.id)}
+        onConfirmHypothesis={(hypothesisId) => onConfirmHypothesis(selected.id, hypothesisId)}
+        onCreateFieldTask={(payload) => onCreateFieldTask({ ...payload, investigationId: selected.id })}
+        onRecordFieldTaskResult={onRecordFieldTaskResult}
+        onRejectHypothesis={(hypothesisId) => onRejectHypothesis(selected.id, hypothesisId)}
+        onReopen={() => onReopen(selected.id)}
+        stores={data.stores}
+      />
+    )
+  }
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro
+        aside={<button className="scan-button scan-button-dark" onClick={() => setShowStartForm((value) => !value)} type="button">{showStartForm ? 'Cancel' : 'Start investigation'}</button>}
+        description="A business investigation workspace: what changed, why it might have changed, and what to do next."
+        eyebrow="Investigate"
+        title="Real questions, with real evidence."
+      />
+      {loadError ? <div className="scan-inline-notice scan-inline-error" role="alert">{loadError}</div> : null}
+      {showStartForm ? (
+        <section className="scan-panel">
+          <StartInvestigationForm
+            onCancel={() => setShowStartForm(false)}
+            onStartGeneral={async (payload) => { const created = await onStartGeneral(payload); setShowStartForm(false); onSelect(created.id) }}
+            onStartProduct={async (productName) => { const created = await onStartProduct(productName); setShowStartForm(false); onSelect(created.id) }}
+            productOptions={productOptions}
+          />
+        </section>
+      ) : null}
+      {loading ? <p className="cci-work-loading">Loading investigations…</p> : investigations.length ? (
+        <div className="cci-investigation-list">
+          {investigations.map((item) => (
+            <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
+              <div>
+                <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                <strong>{item.title}</strong>
+                <small>{item.hypotheses.length} hypothesis(es) · {item.notes.length} note(s) · {formatRelativeTime(item.updatedAt)}</small>
+              </div>
+              <ScanIcon name="chevron" size={18} />
+            </button>
           ))}
         </div>
-      ) : <EmptyState compact title="No action is supported yet">More mapped baskets are needed before SCAN can recommend a test.</EmptyState>}
+      ) : <EmptyState title="No active investigations">Start from a commercial question, or investigate a detected change from My Work.</EmptyState>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Copilot                                                              */
+/* ------------------------------------------------------------------ */
+
+function CopilotAnswerView({ answer }) {
+  return (
+    <section className="scan-answer cci-structured-answer" aria-live="polite">
+      <StatusBadge tone={confidenceTone(answer.confidence)}>{answer.confidence} confidence</StatusBadge>
+      <div className="cci-answer-block"><span>What SCAN found</span><h3>{answer.whatScanFound}</h3></div>
+      <div className="cci-answer-block"><span>Why this matters</span><p>{answer.whyThisMatters}</p></div>
+      {answer.possibleExplanations.length ? (
+        <div className="cci-answer-block">
+          <span>Possible explanation</span>
+          <ul>{answer.possibleExplanations.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        </div>
+      ) : null}
+      {answer.evidence.length ? (
+        <div className="cci-answer-block">
+          <span>Evidence</span>
+          <ul>{answer.evidence.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        </div>
+      ) : null}
+      <div className="cci-answer-block"><span>What we still don't know</span><p>{answer.whatWeStillDontKnow}</p></div>
+      {answer.nextSteps.length ? (
+        <div className="cci-copilot-next-steps">
+          {answer.nextSteps.map((step) => <StatusBadge key={step.label} tone="neutral">{step.label}</StatusBadge>)}
+        </div>
+      ) : null}
     </section>
   )
 }
+
+function Copilot({ context, productOptions, investigations, onAsk }) {
+  const [contextType, setContextType] = useState(context?.contextType || 'GENERAL')
+  const [subjectName, setSubjectName] = useState(context?.subjectName || '')
+  const [investigationId, setInvestigationId] = useState(context?.investigationId || '')
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  async function submit(event) {
+    event.preventDefault()
+    setLoading(true)
+    try {
+      const response = await onAsk({
+        contextType,
+        subjectName: contextType === 'PRODUCT' ? subjectName : null,
+        investigationId: contextType === 'INVESTIGATION' ? investigationId : null,
+        periodDays: DEFAULT_PERIOD_DAYS,
+        question: question.trim() || 'What changed?',
+      })
+      setAnswer(response)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro description="Answers use only real SCAN data - never invented numbers, causes, or historical results." eyebrow="Copilot" title="Ask about a product or an investigation." />
+      <section className="scan-ask-shell">
+        <form className="cci-copilot-form" onSubmit={submit}>
+          <SegmentedControl label="What is this about" onChange={setContextType} options={[{ value: 'PRODUCT', label: 'A product' }, { value: 'INVESTIGATION', label: 'An investigation' }, { value: 'GENERAL', label: 'General' }]} value={contextType} />
+          {contextType === 'PRODUCT' ? (
+            <label>Product
+              <input list="cci-copilot-product-options" onChange={(event) => setSubjectName(event.target.value)} placeholder="e.g. Sprite 500ml" value={subjectName} />
+              <datalist id="cci-copilot-product-options">{productOptions.map((name) => <option key={name} value={name} />)}</datalist>
+            </label>
+          ) : null}
+          {contextType === 'INVESTIGATION' ? (
+            <label>Investigation
+              <select onChange={(event) => setInvestigationId(event.target.value)} value={investigationId}>
+                <option value="">Choose an investigation…</option>
+                {investigations.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+            </label>
+          ) : null}
+          <label className="sr-only" htmlFor="cci-copilot-question">Question</label>
+          <input id="cci-copilot-question" onChange={(event) => setQuestion(event.target.value)} placeholder="What do you want to know?" value={question} />
+          <button className="scan-button scan-button-dark" disabled={loading} type="submit">{loading ? 'Thinking…' : 'Ask'}</button>
+        </form>
+      </section>
+      {answer ? <CopilotAnswerView answer={answer} /> : null}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Activations (Phase 2 placeholder)                                   */
+/* ------------------------------------------------------------------ */
+
+function Activations() {
+  return (
+    <div className="scan-page-stack">
+      <PageIntro description="Test stores against control stores, then review results with honest, non-causal language." eyebrow="Activations" title="Coming in a future phase." />
+      <EmptyState title="Activations are not built yet">Trade Marketing and Sales will be able to set up test-vs-control activations here, with a during-activation performance view and a post-completion review. This is intentionally not faked — it will appear once the activation workflow is real.</EmptyState>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Network (infrastructure + analytical depth)                         */
+/* ------------------------------------------------------------------ */
 
 function BasketDna({ data }) {
   const [mode, setMode] = useState('categories')
@@ -331,113 +931,34 @@ function BasketDna({ data }) {
   )
 }
 
-function RecommendedActions({ data, onNavigate }) {
-  const { opportunities } = partitionInsights(data)
-  if (!opportunities.length) return null
-  return (
-    <section className="cci-home-section cci-next-actions">
-      <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Execution</span><h2>Recommended next actions</h2></div></header>
-      <ol>{opportunities.map((insight, index) => <li key={`${insight.recommendedAction}-${index}`}><span>{index + 1}</span><div><strong>{insight.recommendedAction}</strong><small>{evidenceForInsight(insight, data)}</small></div><button aria-label={`View evidence for ${insight.recommendedAction}`} onClick={() => onNavigate('opportunities')} type="button"><ScanIcon name="chevron" size={18} /></button></li>)}</ol>
-    </section>
-  )
-}
-
-function Home({ data, onNavigate, onAsk }) {
-  const { opportunities } = partitionInsights(data)
-  const questions = buildQuestions(data)
-
-  if (data.totalBaskets === 0) {
-    return <section className="scan-panel"><EmptyState title="No transaction data imported yet">Import a validated retailer export for {data.retailerCode}. SCAN will not show derived intelligence until complete receipts are available.</EmptyState></section>
-  }
-
-  return (
-    <div className="scan-page-stack cci-home">
-      <section className="cci-discovery-hero">
-        <span className="scan-eyebrow">Home</span>
-        <h2>{opportunities.length ? `SCAN found ${opportunities.length} ${opportunities.length === 1 ? 'opportunity' : 'opportunities'}` : `SCAN analyzed ${integer.format(data.totalBaskets)} baskets`}</h2>
-        <p>{integer.format(data.totalBaskets)} baskets analyzed <i>•</i> {integer.format(data.cciBaskets)} CCI baskets <i>•</i> {formatRelativeTime(data.generatedAt)}</p>
-        {!opportunities.length ? <small>No commercial action meets the current evidence threshold.</small> : null}
-        <AskLauncher onAsk={onAsk} questions={questions} />
-      </section>
-      <TopOpportunities data={data} onNavigate={onNavigate} />
-      <MetricStrip label="CCI intelligence context" items={[
-        { label: 'Baskets analyzed', value: integer.format(data.totalBaskets), note: 'Validated receipts' },
-        { label: 'CCI penetration', value: `${decimal.format(data.cciPenetrationPercentage)}%`, note: 'Observed share of validated baskets' },
-        { label: 'Average basket', value: formatMoney(data.averageBasketValue, data.currency), note: 'All validated baskets' },
-        { label: 'Data health', value: `${decimal.format(data.mappedLinePercentage)}%`, note: 'Product mapping coverage' },
-      ]} />
-      <BasketDna data={data} />
-      <div className="scan-two-column cci-home-bottom"><RecommendedActions data={data} onNavigate={onNavigate} /><DataTrust data={data} /></div>
-    </div>
-  )
-}
-
-function Opportunities({ data }) {
-  const { opportunities, signals } = partitionInsights(data)
-  const types = [...new Set(opportunities.map(insightType))]
-  const [filter, setFilter] = useState('All')
-  const filtered = filter === 'All' ? opportunities : opportunities.filter((insight) => insightType(insight) === filter)
-  const [selectedIndex, setSelectedIndex] = useState(0)
-  const selected = filtered[selectedIndex] || filtered[0]
-
+function NetworkStores({ data }) {
   return (
     <div className="scan-page-stack">
-      <PageIntro eyebrow="Opportunities" title="Actions worth testing." description="Recommendations are ranked with the evidence behind each one. Results still require a controlled test." aside={<StatusBadge tone="neutral">{opportunities.length} action-ready</StatusBadge>} />
-      {opportunities.length ? (
-        <>
-          <div className="cci-opportunity-filters">
-            <span>Filter by type</span>
-            {['All', ...types].map((type) => <button aria-pressed={filter === type} className={filter === type ? 'is-active' : ''} key={type} onClick={() => { setFilter(type); setSelectedIndex(0) }} type="button">{type}</button>)}
-          </div>
-          <div className="cci-opportunity-workbench">
-            <section className="cci-ranked-feed" aria-label="Ranked opportunities">
-              {filtered.map((insight, index) => (
-                <button aria-pressed={selected === insight} className={selected === insight ? 'is-selected' : ''} key={`${insight.fact}-${index}`} onClick={() => setSelectedIndex(index)} type="button">
-                  <span className="cci-feed-rank">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="cci-feed-copy"><StatusBadge tone="red">{insightType(insight)}</StatusBadge><strong>{insight.fact}</strong><small>{evidenceForInsight(insight, data)}</small></span>
-                  <ScanIcon name="chevron" size={18} />
-                </button>
-              ))}
-            </section>
-            {selected ? (
-              <aside className="cci-evidence-inspector">
-                <header><StatusBadge tone="red">{insightType(selected)} opportunity</StatusBadge><span>Rank {String(selectedIndex + 1).padStart(2, '0')}</span></header>
-                <h2>{selected.fact}</h2>
-                <div><span>Why it matters</span><p>{selected.interpretation}</p></div>
-                <div className="cci-inspector-action"><span>Recommended action</span><strong>{selected.recommendedAction}</strong></div>
-                <dl><div><dt>Evidence</dt><dd>{evidenceForInsight(selected, data)}</dd></div><div><dt>Product mapping</dt><dd>{decimal.format(data.mappedLinePercentage)}%</dd></div></dl>
-                <small>Observed relationship. Validate through a controlled commercial test.</small>
-              </aside>
-            ) : null}
-          </div>
-        </>
-      ) : <section className="scan-panel"><EmptyState title="No action-ready opportunities">Current analytics do not support a commercial action. Signals remain available below.</EmptyState></section>}
-      {signals.length ? (
-        <section className="scan-page-stack">
-          <header className="scan-subsection-heading"><div><span className="scan-eyebrow">Observed signals</span><h3>Keep watching. Do not act yet.</h3></div><p>These patterns need more evidence or better product mapping.</p></header>
-          <div className="scan-opportunity-grid">{signals.map((insight, index) => <OpportunityCard evidence={evidenceForInsight(insight, data)} index={index} insight={insight} key={`${insight.fact}-${index}`} signal />)}</div>
-        </section>
-      ) : null}
+      <MetricStrip label="Store reporting summary" items={[
+        { label: 'Reporting stores', value: integer.format(data.stores.length), note: 'Present in this dataset' },
+        { label: 'Transaction volume', value: integer.format(data.totalBaskets), note: 'Validated baskets' },
+        { label: 'CCI penetration', value: `${decimal.format(data.cciPenetrationPercentage)}%`, note: 'Across reporting stores' },
+        { label: 'Data health', value: `${decimal.format(data.mappedLinePercentage)}%`, note: 'Product mapping coverage' },
+      ]} />
+      <DataTrust data={data} />
+      <section className="scan-panel"><header className="scan-panel-header"><div><h3>Store overview</h3><p>{formatRelativeTime(data.generatedAt)}</p></div></header><StoreTable data={data} /></section>
     </div>
   )
 }
 
-function BasketExplore({ data }) {
+function NetworkBaskets({ data }) {
   return (
     <div className="scan-page-stack">
       <div className="scan-two-column">
         <ChartPanel title="Which products appear most often with CCI?" description="Share of CCI baskets containing each product · Attachment rate"><CompanionChart data={data.topCompanionProducts} nameKey="name" label="Companion product attachment rates" /></ChartPanel>
         <ChartPanel title="Which categories appear most often with CCI?" description="Share of CCI baskets containing each category · Attachment rate"><CompanionChart data={data.topCompanionCategories} nameKey="category" label="Companion category attachment rates" /></ChartPanel>
       </div>
-      <div className="scan-two-column">
-        <section className="scan-panel"><header className="scan-panel-header"><div><h3>Companion product detail</h3><p>Counts and denominators remain visible for validation</p></div></header><MetricTable columns={['Product', 'CCI baskets', 'Attachment rate']} empty="No companion products are available." rows={data.topCompanionProducts.map((item) => [item.name, integer.format(item.basketCount), `${decimal.format(item.attachmentRatePercentage)}%`])} /></section>
-        <section className="scan-panel"><header className="scan-panel-header"><div><h3>Companion category detail</h3><p>Category evidence from the same mapped CCI baskets</p></div></header><MetricTable columns={['Category', 'CCI baskets', 'Attachment rate']} empty="No companion categories are available." rows={data.topCompanionCategories.map((item) => [item.category, integer.format(item.basketCount), `${decimal.format(item.attachmentRatePercentage)}%`])} /></section>
-      </div>
+      <BasketDna data={data} />
     </div>
   )
 }
 
-function ProductExplore({ data }) {
+function NetworkProducts({ data }) {
   const revenue = data.cciSkuPerformance.reduce((sum, item) => sum + item.revenue, 0)
   const quantity = data.cciSkuPerformance.reduce((sum, item) => sum + item.quantity, 0)
   return (
@@ -452,102 +973,105 @@ function ProductExplore({ data }) {
   )
 }
 
-function TimeExplore({ data }) {
+function NetworkTime({ data }) {
   return <div className="scan-two-column"><section className="scan-panel"><header className="scan-panel-header"><div><h3>When does basket activity peak?</h3><p>Daypart share · Retailer profile timezone</p></div></header><SegmentList data={data.dayparts} /></section><section className="scan-panel"><header className="scan-panel-header"><div><h3>How does weekday activity compare?</h3><p>Share of validated baskets</p></div></header><SegmentList data={data.weekdayWeekend} /></section></div>
 }
 
-function StoreTable({ data }) {
-  return <MetricTable columns={['Store', 'Baskets', 'CCI baskets', 'CCI penetration', 'Average basket']} empty="No store-level aggregates are available." rows={data.stores.map((store) => [store.storeId, integer.format(store.basketCount), integer.format(store.cciBasketCount), `${decimal.format(store.cciPenetrationPercentage)}%`, formatMoney(store.averageBasketValue, data.currency)])} />
-}
-
-function StoreExplore({ data }) {
-  return <section className="scan-panel"><header className="scan-panel-header"><div><h3>Which stores contribute the most basket evidence?</h3><p>Descriptive store comparison from the current dataset</p></div></header><StoreTable data={data} /></section>
-}
-
-function Explore({ data }) {
-  const [tab, setTab] = useState('basket')
+function NetworkSignals({ data }) {
+  const opportunities = data.insights.filter((insight) => isActionableInsight(insight, data))
+  const signals = data.insights.filter((insight) => !isActionableInsight(insight, data))
   return (
     <div className="scan-page-stack">
-      <PageIntro eyebrow="Explore" title="Explore the evidence." description="Review the basket, product, time, and store patterns behind SCAN's findings." aside={<SegmentedControl label="Explore analytics" onChange={setTab} options={EXPLORE_TABS} value={tab} />} />
-      {tab === 'products' ? <ProductExplore data={data} /> : tab === 'time' ? <TimeExplore data={data} /> : tab === 'stores' ? <StoreExplore data={data} /> : <BasketExplore data={data} />}
-    </div>
-  )
-}
-
-function Stores({ data }) {
-  return (
-    <div className="scan-page-stack">
-      <PageIntro eyebrow="Stores" title="Where the evidence comes from." description="See which stores contributed to the current analysis." aside={<StatusBadge tone="neutral">{integer.format(data.stores.length)} reporting</StatusBadge>} />
-      <MetricStrip label="Store reporting summary" items={[
-        { label: 'Reporting stores', value: integer.format(data.stores.length), note: 'Present in this dataset' },
-        { label: 'Transaction volume', value: integer.format(data.totalBaskets), note: 'Validated baskets' },
-        { label: 'CCI penetration', value: `${decimal.format(data.cciPenetrationPercentage)}%`, note: 'Across reporting stores' },
-        { label: 'Data health', value: `${decimal.format(data.mappedLinePercentage)}%`, note: 'Product mapping coverage' },
-      ]} />
-      <section className="scan-panel"><header className="scan-panel-header"><div><h3>Store overview</h3><p>{formatRelativeTime(data.generatedAt)} · Store-specific update times are not available</p></div></header><StoreTable data={data} /></section>
-    </div>
-  )
-}
-
-function buildQuestions(data) {
-  const category = data.topCompanionCategories[0]
-  const daypart = [...data.dayparts].sort((a, b) => b.basketCount - a.basketCount)[0]
-  const store = [...data.stores].sort((a, b) => b.cciPenetrationPercentage - a.cciPenetrationPercentage)[0]
-  const product = [...data.cciSkuPerformance].sort((a, b) => b.basketCount - a.basketCount)[0]
-  const bundleInsight = data.insights.find((insight) => insightType(insight) === 'Bundle' && isActionableInsight(insight, data))
-  const timeInsight = data.insights.find((insight) => insightType(insight) === 'Time' && isActionableInsight(insight, data))
-  const dataInsight = data.insights.find((insight) => insightType(insight) === 'Data')
-  return [
-    category ? { question: 'What appears most often with CCI products?', answer: `${category.category} is the leading companion category at ${decimal.format(category.attachmentRatePercentage)}%.`, evidence: `${integer.format(category.basketCount)} of ${integer.format(data.cciBaskets)} mapped CCI baskets contain this category.`, action: bundleInsight?.recommendedAction || null, filters: 'All imported baskets · All reporting stores · Companion categories', destination: 'explore' } : null,
-    daypart ? { question: 'When is basket activity highest?', answer: `${humanize(daypart.segment)} has the largest observed basket share at ${decimal.format(daypart.sharePercentage)}%.`, evidence: `${integer.format(daypart.basketCount)} of ${integer.format(data.totalBaskets)} validated baskets occurred in this daypart.`, action: timeInsight?.recommendedAction || null, filters: 'All imported baskets · Retailer profile timezone', destination: 'explore' } : null,
-    product ? { question: 'Which CCI product drives the most baskets?', answer: `${product.product} appears in the most baskets among mapped CCI products.`, evidence: `${integer.format(product.basketCount)} baskets · ${decimal.format(product.quantity)} units · ${formatMoney(product.revenue, data.currency)} recorded revenue.`, action: null, filters: 'Mapped CCI products · All imported baskets', destination: 'explore' } : null,
-    store ? { question: 'Which store has the highest CCI penetration?', answer: `${store.storeId} has the highest observed CCI penetration at ${decimal.format(store.cciPenetrationPercentage)}%.`, evidence: `${integer.format(store.cciBasketCount)} of ${integer.format(store.basketCount)} baskets in this store contained a mapped CCI product.`, action: null, filters: 'All reporting stores · All imported baskets', destination: 'stores' } : null,
-    { question: 'Is product mapping sufficient?', answer: `${decimal.format(data.mappedLinePercentage)}% of imported transaction lines are mapped to normalized products.`, evidence: data.mappedLinePercentage >= 90 ? 'Current coverage supports normalized-product analysis.' : 'Unmapped products may understate CCI and companion results.', action: dataInsight?.recommendedAction || null, filters: 'All imported transaction lines', destination: 'home' },
-  ].filter(Boolean)
-}
-
-function AskScan({ data, initialQuery, onNavigate }) {
-  const questions = useMemo(() => buildQuestions(data), [data])
-  const [query, setQuery] = useState(initialQuery || '')
-  const [answer, setAnswer] = useState(() => questions.find((item) => item.question.toLowerCase() === initialQuery?.trim().toLowerCase()) || null)
-  const matches = questions.filter((item) => item.question.toLowerCase().includes(query.toLowerCase()))
-
-  function submit(event) {
-    event.preventDefault()
-    const exact = questions.find((item) => item.question.toLowerCase() === query.trim().toLowerCase())
-    setAnswer(exact || { question: query || 'Question', answer: 'The current data cannot answer this question.', evidence: 'Choose one of the available questions below.', action: null, filters: 'No matching analysis', destination: null })
-  }
-
-  return (
-    <div className="scan-page-stack">
-      <PageIntro eyebrow="Ask SCAN" title="Ask only what the data can answer." description="Answers use the current retailer data and the analysis already available in SCAN." />
-      <section className="scan-ask-shell">
-        <form onSubmit={submit}><ScanIcon name="ask" /><label className="sr-only" htmlFor="scan-question">Question</label><input id="scan-question" onChange={(event) => setQuery(event.target.value)} placeholder="Search available questions…" value={query} /><button className="scan-button scan-button-dark" type="submit">Ask</button></form>
-        <div className="scan-question-list">{matches.map((item) => <button key={item.question} onClick={() => { setQuery(item.question); setAnswer(item) }} type="button"><span>{item.question}</span><ScanIcon name="chevron" size={17} /></button>)}</div>
-      </section>
-      {answer ? (
-        <section className="scan-answer cci-structured-answer" aria-live="polite">
-          <StatusBadge tone="neutral">From current data</StatusBadge>
-          <div className="cci-answer-block"><span>Answer</span><h3>{answer.answer}</h3></div>
-          <div className="cci-answer-grid">
-            <div><span>Evidence</span><p>{answer.evidence}</p></div>
-            <div><span>Recommended action</span><p>{answer.action || 'No action is supported by this response alone.'}</p></div>
-            <div><span>Relevant filters</span><p>{answer.filters}</p></div>
-          </div>
-          {answer.destination ? <button className="scan-button scan-button-dark" onClick={() => onNavigate(answer.destination)} type="button">Open underlying evidence <ScanIcon name="chevron" size={16} /></button> : null}
+      {opportunities.length ? (
+        <section className="scan-page-stack">
+          <header className="scan-subsection-heading"><div><span className="scan-eyebrow">Action-ready</span><h3>Supported by enough evidence</h3></div></header>
+          <div className="scan-opportunity-grid">{opportunities.map((insight, index) => <OpportunityCard evidence={evidenceForInsight(insight, data)} index={index} insight={insight} key={`${insight.fact}-${index}`} />)}</div>
         </section>
       ) : null}
+      {signals.length ? (
+        <section className="scan-page-stack">
+          <header className="scan-subsection-heading"><div><span className="scan-eyebrow">Observed signals</span><h3>Keep watching. Do not act yet.</h3></div><p>These patterns need more evidence or better product mapping.</p></header>
+          <div className="scan-opportunity-grid">{signals.map((insight, index) => <OpportunityCard evidence={evidenceForInsight(insight, data)} index={index} insight={insight} key={`${insight.fact}-${index}`} signal />)}</div>
+        </section>
+      ) : null}
+      {!opportunities.length && !signals.length ? <EmptyState title="No signals yet">More mapped baskets are needed before SCAN can surface a signal.</EmptyState> : null}
     </div>
   )
 }
 
-function DashboardPage({ activePage, askQuestion, data, onAsk, onNavigate }) {
-  if (data.totalBaskets === 0) return <Home data={data} onAsk={onAsk} onNavigate={onNavigate} />
-  if (activePage === 'opportunities') return <Opportunities data={data} />
-  if (activePage === 'explore') return <Explore data={data} />
-  if (activePage === 'stores') return <Stores data={data} />
-  if (activePage === 'ask') return <AskScan data={data} initialQuery={askQuestion} key={askQuestion || 'blank'} onNavigate={onNavigate} />
-  return <Home data={data} onAsk={onAsk} onNavigate={onNavigate} />
+function Network({ data }) {
+  const [tab, setTab] = useState('stores')
+  return (
+    <div className="scan-page-stack">
+      <PageIntro eyebrow="Network" title="Infrastructure and analytical depth." description="Stores reporting, mapping coverage, and the full basket/product/time analysis behind SCAN's findings." aside={<SegmentedControl label="Network views" onChange={setTab} options={NETWORK_TABS} value={tab} />} />
+      {tab === 'basket' ? <NetworkBaskets data={data} /> : tab === 'products' ? <NetworkProducts data={data} /> : tab === 'time' ? <NetworkTime data={data} /> : tab === 'signals' ? <NetworkSignals data={data} /> : <NetworkStores data={data} />}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Shell                                                                */
+/* ------------------------------------------------------------------ */
+
+function DashboardPage({ activePage, data, intelligence, credentials, actions, onNavigate }) {
+  if (data.totalBaskets === 0) {
+    return <section className="scan-panel"><EmptyState title="No transaction data imported yet">Import a validated retailer export for {data.retailerCode}. SCAN will not show derived intelligence until complete receipts are available.</EmptyState></section>
+  }
+  const productOptions = data.cciSkuPerformance.map((item) => item.product)
+
+  if (activePage === 'investigate') {
+    return (
+      <Investigate
+        data={data}
+        fieldTasks={intelligence.fieldTasks}
+        investigations={intelligence.investigations}
+        loadError={intelligence.error}
+        loading={intelligence.loading}
+        onAddNote={actions.addNote}
+        onAskCopilot={actions.askCopilotAboutInvestigation}
+        onBack={() => actions.selectInvestigation(null)}
+        onClose={actions.closeInvestigation}
+        onConfirmHypothesis={actions.confirmHypothesis}
+        onCreateFieldTask={actions.createFieldTask}
+        onRecordFieldTaskResult={actions.recordFieldTaskResult}
+        onRejectHypothesis={actions.rejectHypothesis}
+        onReopen={actions.reopenInvestigation}
+        onSelect={actions.selectInvestigation}
+        onStartGeneral={actions.startGeneralInvestigation}
+        onStartProduct={actions.startProductInvestigation}
+        productOptions={productOptions}
+        selectedInvestigationId={intelligence.selectedInvestigationId}
+      />
+    )
+  }
+  if (activePage === 'activations') return <Activations />
+  if (activePage === 'network') return <Network data={data} />
+  if (activePage === 'copilot') {
+    return (
+      <Copilot
+        context={intelligence.copilotContext}
+        investigations={intelligence.investigations}
+        key={JSON.stringify(intelligence.copilotContext)}
+        onAsk={actions.askCopilot}
+        productOptions={productOptions}
+      />
+    )
+  }
+  return (
+    <MyWork
+      credentials={credentials}
+      fieldTasks={intelligence.fieldTasks}
+      intelligenceError={intelligence.error}
+      intelligenceLoading={intelligence.loading}
+      investigations={intelligence.investigations}
+      movers={intelligence.movers}
+      onAskAbout={actions.askCopilotAboutProduct}
+      onNavigate={onNavigate}
+      onOpenInvestigation={(id) => { actions.selectInvestigation(id); onNavigate('investigate') }}
+      onPrepareBrief={actions.prepareBrief}
+      onStartProductInvestigation={actions.startProductInvestigationFromWork}
+    />
+  )
 }
 
 export default function CciDashboard() {
@@ -556,13 +1080,43 @@ export default function CciDashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [activePage, setActivePage] = useState('home')
-  const [askQuestion, setAskQuestion] = useState('')
+  const [activePage, setActivePage] = useState('my-work')
   const [refreshKey, setRefreshKey] = useState(0)
   const layoutRef = useRef(null)
   const retailerMenuRef = useRef(null)
 
+  const [investigations, setInvestigations] = useState([])
+  const [fieldTasks, setFieldTasks] = useState([])
+  const [movers, setMovers] = useState([])
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false)
+  const [intelligenceError, setIntelligenceError] = useState('')
+  const [selectedInvestigationId, setSelectedInvestigationId] = useState(null)
+  const [copilotContext, setCopilotContext] = useState(null)
+
   usePretextLayout(layoutRef, `${activePage}:${data?.generatedAt || 'login'}`)
+
+  const loadIntelligence = useCallback(async (creds, signal) => {
+    if (!creds) return
+    setIntelligenceLoading(true)
+    setIntelligenceError('')
+    try {
+      const [investigationsResponse, fieldTasksResponse, moversResponse] = await Promise.all([
+        fetchInvestigations({ ...creds, signal }),
+        fetchFieldTasks({ ...creds, signal }),
+        fetchMovers({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, limit: 10, signal }),
+      ])
+      if (signal?.aborted) return
+      setInvestigations(investigationsResponse)
+      setFieldTasks(fieldTasksResponse)
+      setMovers(moversResponse)
+    } catch (requestError) {
+      if (requestError?.name !== 'AbortError') {
+        setIntelligenceError(requestError?.message || 'Unable to load commercial intelligence data.')
+      }
+    } finally {
+      if (!signal?.aborted) setIntelligenceLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!credentials) return undefined
@@ -576,8 +1130,9 @@ export default function CciDashboard() {
         }
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    Promise.resolve().then(() => loadIntelligence(credentials, controller.signal))
     return () => controller.abort()
-  }, [credentials, refreshKey])
+  }, [credentials, refreshKey, loadIntelligence])
 
   function refresh() { setLoading(true); setError(''); setRefreshKey((value) => value + 1) }
   async function signIn(accountCredentials) {
@@ -601,8 +1156,40 @@ export default function CciDashboard() {
     setLoading(true)
     setCredentials((current) => ({ ...current, retailerCode }))
   }
-  function signOut() { setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false); setActivePage('home'); setAskQuestion('') }
-  function openAsk(question) { setAskQuestion(question.trim()); setActivePage('ask') }
+  function signOut() {
+    setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false)
+    setActivePage('my-work'); setInvestigations([]); setFieldTasks([]); setMovers([])
+    setSelectedInvestigationId(null); setCopilotContext(null)
+  }
+
+  async function withReload(promiseFactory) {
+    const result = await promiseFactory()
+    await loadIntelligence(credentials)
+    return result
+  }
+
+  const actions = useMemo(() => ({
+    selectInvestigation: setSelectedInvestigationId,
+    startProductInvestigation: (productName) => withReload(() => openProductInvestigation({ ...credentials, productName, periodDays: DEFAULT_PERIOD_DAYS })),
+    startProductInvestigationFromWork: async (productName) => {
+      const created = await withReload(() => openProductInvestigation({ ...credentials, productName, periodDays: DEFAULT_PERIOD_DAYS }))
+      setSelectedInvestigationId(created.id)
+      setActivePage('investigate')
+    },
+    startGeneralInvestigation: ({ title, question }) => withReload(() => openGeneralInvestigation({ ...credentials, title, question })),
+    addNote: (investigationId, body) => withReload(() => addInvestigationNote({ ...credentials, investigationId, body })),
+    confirmHypothesis: (investigationId, hypothesisId) => withReload(() => confirmHypothesis({ ...credentials, investigationId, hypothesisId })),
+    rejectHypothesis: (investigationId, hypothesisId) => withReload(() => rejectHypothesis({ ...credentials, investigationId, hypothesisId })),
+    closeInvestigation: (investigationId) => withReload(() => closeInvestigation({ ...credentials, investigationId })),
+    reopenInvestigation: (investigationId) => withReload(() => reopenInvestigation({ ...credentials, investigationId })),
+    createFieldTask: (payload) => withReload(() => createFieldTask({ ...credentials, ...payload })),
+    recordFieldTaskResult: (taskId, externalStoreId, result) => withReload(() => recordFieldTaskResult({ ...credentials, taskId, externalStoreId, ...result })),
+    askCopilot: (payload) => askCopilot({ ...credentials, ...payload }),
+    askCopilotAboutProduct: (productName) => { setCopilotContext({ contextType: 'PRODUCT', subjectName: productName }); setActivePage('copilot') },
+    askCopilotAboutInvestigation: (investigationId) => { setCopilotContext({ contextType: 'INVESTIGATION', investigationId }); setActivePage('copilot') },
+    prepareBrief: (template) => fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [credentials])
 
   if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={signIn} />
   if (!data) return <LoadingState title="Reading retailer evidence…" description="Preparing basket and product analysis." />
@@ -639,12 +1226,12 @@ export default function CciDashboard() {
             ) : null}
             <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
             <button className="scan-button scan-button-light cci-refresh-button" disabled={loading} onClick={refresh} type="button"><ScanIcon name="refresh" size={17} /><span>{loading ? 'Refreshing…' : 'Refresh'}</span></button>
-              <details className="cci-user-menu"><summary aria-label="CCI workspace menu">CCI</summary><div><strong>CCI Sales & Marketing</strong><small>Aggregate intelligence workspace</small><button aria-label="Sign out from user menu" onClick={signOut} type="button"><ScanIcon name="signout" size={16} />Sign out</button></div></details>
+              <details className="cci-user-menu"><summary aria-label="CCI workspace menu">CCI</summary><div><strong>CCI Sales & Marketing</strong><small>Commercial intelligence workspace</small><button aria-label="Sign out from user menu" onClick={signOut} type="button"><ScanIcon name="signout" size={16} />Sign out</button></div></details>
           </>
         )}
         eyebrow="CCI commercial intelligence"
         meta={<p>{credentials.retailerCode === 'KAGGLE' ? 'Demo retailer' : data.retailerName} · {data.retailerCode}</p>}
-        title="SCAN intelligence workspace"
+        title="SCAN commercial workspace"
       />
       {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" type="button" onClick={refresh}>Retry</button></div> : null}
     </>
@@ -652,8 +1239,18 @@ export default function CciDashboard() {
 
   return (
     <div ref={layoutRef}>
-      <WorkspaceShell activePage={activePage} accountLabel="CCI Sales & Marketing" accountMeta="Aggregate intelligence" brandSubtitle="CCI Intelligence" disableNavigation={data.totalBaskets === 0} header={header} navItems={NAV_ITEMS} onNavigate={setActivePage} onSignOut={signOut} privacyLabel="No customer or payment identifiers" portal="cci">
-        <DashboardPage activePage={activePage} askQuestion={askQuestion} data={data} onAsk={openAsk} onNavigate={setActivePage} />
+      <WorkspaceShell activePage={activePage} accountLabel="CCI Sales & Marketing" accountMeta="Commercial intelligence" brandSubtitle="CCI Intelligence" disableNavigation={data.totalBaskets === 0} header={header} navItems={NAV_ITEMS} onNavigate={setActivePage} onSignOut={signOut} privacyLabel="No customer or payment identifiers" portal="cci">
+        <DashboardPage
+          activePage={activePage}
+          actions={actions}
+          credentials={credentials}
+          data={data}
+          intelligence={{
+            investigations, fieldTasks, movers, loading: intelligenceLoading, error: intelligenceError,
+            selectedInvestigationId, copilotContext,
+          }}
+          onNavigate={setActivePage}
+        />
       </WorkspaceShell>
     </div>
   )

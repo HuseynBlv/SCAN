@@ -11,6 +11,8 @@ import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerOfferActivationRepository;
 import az.cci.scan.repository.RetailerProductRepository;
+import az.cci.scan.repository.FieldTaskRepository;
+import az.cci.scan.repository.InvestigationRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.ScanAccountRepository;
 import az.cci.scan.repository.StoreRepository;
@@ -49,6 +51,12 @@ class RetailerProductInsightServiceTest {
 
     @Autowired
     private RetailerProductInsightService insightService;
+
+    @Autowired
+    private FieldTaskRepository fieldTaskRepository;
+
+    @Autowired
+    private InvestigationRepository investigationRepository;
 
     @Autowired
     private RetailerRepository retailerRepository;
@@ -99,6 +107,8 @@ class RetailerProductInsightServiceTest {
         importProfileRepository.deleteAll();
         storeRepository.deleteAll();
         canonicalProductRepository.deleteAll();
+        fieldTaskRepository.deleteAll();
+        investigationRepository.deleteAll();
         retailerRepository.deleteAll();
 
         saveCanonical("Fanta Orange 500ml", "5000112611397", "Beverages", true);

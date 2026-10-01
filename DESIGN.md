@@ -106,7 +106,11 @@
 
 ## Product Information Architecture
 
-- **CCI workspace:** Home, Opportunities, Explore, Stores, Ask SCAN.
+- **CCI workspace:** My Work, Investigate, Activations, Network, Copilot. Revised from the
+  original Home/Opportunities/Explore/Stores/Ask SCAN layout as part of the 2026-09-30
+  commercial-workspace redesign: the CCI home page leads with real work items (detected
+  changes, open investigations, field checks awaiting results), not a KPI-cards-first
+  dashboard. See the 2026-09-30 decisions below.
 - **Retailer workspace:** Home, Offers, Actions, Insights, Partner. Revised from the original
   Today/Sales/Products/Alerts analytics-first layout: the retailer home page leads with
   connection status, SCAN benefits, and a recommended commercial offer, not sales charts.
@@ -116,23 +120,31 @@
   retailer-bound administrator surface and is not part of the CCI or retailer information architecture.
 - **Retailer onboarding workspace:** Retailers with a guarded four-step flow: tenant/stores,
   named import format, no-write sample validation, and one-time credential issuance.
-- Basket, product, and time analysis live inside CCI Explore instead of competing with
-  commercial actions in the top-level navigation.
+- Basket, product, and time analysis, plus the former Opportunities/signals view, live inside
+  CCI Network (alongside store reporting and data health) rather than competing with
+  commercial work in the top-level navigation. This preserves the analytical depth of the
+  original Explore/Opportunities pages through progressive disclosure instead of removing it.
 - Retailer synchronization issues and mapping-quality attention items surface on Home and
   Actions rather than a dedicated Alerts page, so shop owners see what requires attention where
   they already are instead of a fifth place to check.
-- Ask SCAN answers only questions that can be resolved from the current normalized analytics
-  response. Unsupported free-form questions receive an explicit unavailable state.
+- Copilot answers only questions it can ground in a real, deterministic tool call
+  (comparePeriods/compareProducts/investigation lookup, etc.) - never a free-form language
+  model. A question it cannot ground in real data receives an explicit "cannot answer
+  reliably" state rather than an invented answer.
 
 ## Home Information Order
 
-### CCI workspace
+### CCI workspace (My Work)
 
 1. Retailer scope, data freshness, and discreet demo-data disclosure.
-2. One dynamic discovery statement with an integrated, constrained Ask SCAN entry point.
-3. No more than three action-ready opportunities, or an explicit no-opportunity state.
-4. Four decision-context metrics: baskets, CCI penetration, average basket, and data health.
-5. Basket DNA co-occurrence evidence with visible support and denominator.
+2. A greeting stating how many real items need attention (or that nothing does) - not a KPI
+   strip.
+3. Needs Attention: detected changes (real recent-vs-prior movers) with no open investigation
+   yet, each with an Investigate and an Ask Copilot action.
+4. In Progress / Waiting on Team: open investigations and open field checks.
+5. Recently Completed: closed investigations and finished field checks.
+6. Meeting prep (Prepare a review) sits at the bottom - available, not competing with the
+   items above for attention.
 6. Recommended actions followed by data health and freshness.
 
 ### Retailer workspace
@@ -277,3 +289,6 @@ decision or help establish data trust.
 | 2026-09-13 | Consolidate the two workspace navigation models | CCI is action-first with analysis under Explore; retailer is glanceable with Today, Sales, Products, and Alerts. |
 | 2026-09-13 | Keep retailer intelligence operational and honest | Today leads with shop performance and actual data issues; stock and prior-period claims remain unavailable until those data contracts exist. |
 | 2026-09-13 | Make data connection capability states explicit | Manual file import and product mapping are working; the folder connector requires installation, CASPOS is provisional, and unimplemented POS integrations remain clearly labeled. |
+| 2026-09-30 | Rebuild CCI navigation as My Work / Investigate / Activations / Network / Copilot | Optimizes for "how much commercial work can someone complete without leaving SCAN," not "how many analytics features can we show" - per explicit user direction. Preserves the old Explore/Opportunities analytical depth under Network rather than deleting it. |
+| 2026-09-30 | Copilot is deterministic tool-calls, not a live LLM | Reconciles the product's own "AI must never invent business data" requirement with the project's $0 budget - every answer traces to a real analytics function (ChangeDetectionService, InvestigationService), never free-form generation. |
+| 2026-09-30 | Omit a "competitive substitution" hypothesis | SCAN has no competitor-product data source anywhere in its schema; a hypothesis claiming competitor behavior would not trace to real evidence, so the investigation engine only generates availability and placement/concentration hypotheses. |
