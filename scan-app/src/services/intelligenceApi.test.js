@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ScanApiError } from './scanApi'
 import {
   askCopilot,
+  createActivation,
   fetchInvestigations,
   fetchMovers,
   followProduct,
@@ -112,5 +113,24 @@ describe('intelligenceApi', () => {
     expect(unfollowUrl).toBe('/api/v1/watchlist/watch-1?retailerCode=DEMO')
     expect(unfollowOptions.method).toBe('DELETE')
     expect(unfollowOptions.body).toBeUndefined()
+  })
+
+  it('sends the full activation payload on create', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, status: 201, body: { id: 'act-1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createActivation({
+      retailerCode: 'DEMO', name: 'Sprite cooler push', objective: 'Increase visibility', hypothesis: 'Placement drives trial',
+      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
+      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'], username: 'cci', password: 'secret',
+    })
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/activations?retailerCode=DEMO')
+    expect(JSON.parse(options.body)).toEqual({
+      name: 'Sprite cooler push', objective: 'Increase visibility', hypothesis: 'Placement drives trial',
+      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
+      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
+    })
   })
 })

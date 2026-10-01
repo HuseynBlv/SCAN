@@ -70,11 +70,14 @@ class IntelligenceQueryRepository {
 
     // Matches by the same coalesced label the dashboard already shows (canonical name first,
     // falling back to the raw source name), so this works for a mapped CCI product or for any
-    // companion product a user might want to compare, not only catalogued SKUs.
+    // companion product a user might want to compare, not only catalogued SKUs. line_total rides
+    // along so a caller can sum real revenue for an arbitrary store subset (activations) without a
+    // second query - basket-presence callers simply ignore it.
     private static final String PRODUCT_STORE_PRESENCE_IN_RANGE_SQL = """
         select
             s.external_store_id as external_store_id,
-            r.id as receipt_id
+            r.id as receipt_id,
+            tl.line_total as line_total
         from receipt r
         join store s on s.id = r.store_id
         join transaction_line tl on tl.receipt_id = r.id
@@ -123,7 +126,8 @@ class IntelligenceQueryRepository {
         return jdbcTemplate.query(PRODUCT_STORE_PRESENCE_IN_RANGE_SQL, (resultSet, rowNumber) ->
             new ProductStorePresenceRow(
                 resultSet.getString("external_store_id"),
-                resultSet.getObject("receipt_id", UUID.class)
+                resultSet.getObject("receipt_id", UUID.class),
+                resultSet.getBigDecimal("line_total")
             ), retailerId, productName, Timestamp.from(start), Timestamp.from(end));
     }
 
@@ -140,6 +144,6 @@ class IntelligenceQueryRepository {
     ) {
     }
 
-    record ProductStorePresenceRow(String externalStoreId, UUID receiptId) {
+    record ProductStorePresenceRow(String externalStoreId, UUID receiptId, BigDecimal lineTotal) {
     }
 }

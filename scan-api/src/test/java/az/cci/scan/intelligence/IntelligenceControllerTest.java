@@ -7,6 +7,7 @@ import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
@@ -62,6 +63,9 @@ class IntelligenceControllerTest {
     private InvestigationRepository investigationRepository;
 
     @Autowired
+    private ActivationRepository cciActivationRepository;
+
+    @Autowired
     private WatchlistItemRepository watchlistItemRepository;
 
     @Autowired
@@ -96,6 +100,7 @@ class IntelligenceControllerTest {
         mockMvc = webAppContextSetup(applicationContext).apply(springSecurity()).build();
 
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
         watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         activationRepository.deleteAll();
@@ -277,6 +282,47 @@ class IntelligenceControllerTest {
                 .with(httpBasic("intel-cci", "intel-cci-password")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void createsAndFetchesAnActivationOverRealHttp() throws Exception {
+        String createResponse = mockMvc.perform(post("/api/v1/activations")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name": "Sprite cooler push",
+                      "objective": "Increase Sprite visibility",
+                      "hypothesis": "Cooler placement drives trial",
+                      "productName": "Sprite 500ml",
+                      "primaryMetric": "BASKET_PENETRATION",
+                      "startDate": "2026-09-01",
+                      "endDate": "2026-09-07",
+                      "testStoreIds": ["STORE-A"],
+                      "controlStoreIds": ["STORE-B"]
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Sprite cooler push"))
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.testStoreIds[0]").value("STORE-A"))
+            .andExpect(jsonPath("$.controlStoreIds[0]").value("STORE-B"))
+            .andExpect(jsonPath("$.performance.keyFinding").exists())
+            .andReturn().getResponse().getContentAsString();
+        String activationId = JsonPath.read(createResponse, "$.id");
+
+        mockMvc.perform(get("/api/v1/activations")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1));
+
+        mockMvc.perform(get("/api/v1/activations/" + activationId)
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(activationId));
     }
 
     @Test

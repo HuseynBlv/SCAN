@@ -155,3 +155,23 @@ export function unfollowProduct({ retailerCode, itemId, username, password }) {
 export function fetchWatchlistChanges({ retailerCode, periodDays, username, password, signal }) {
   return request("GET", `/api/v1/watchlist/changes${query({ retailerCode, periodDays })}`, { username, password, signal });
 }
+
+// --- Activations ---------------------------------------------------
+
+export function fetchActivations({ retailerCode, username, password, signal }) {
+  return request("GET", `/api/v1/activations${query({ retailerCode })}`, { username, password, signal });
+}
+
+export function fetchActivation({ retailerCode, activationId, username, password, signal }) {
+  return request("GET", `/api/v1/activations/${activationId}${query({ retailerCode })}`, { username, password, signal });
+}
+
+export function createActivation({
+  retailerCode, name, objective, hypothesis, productName, primaryMetric, startDate, endDate,
+  testStoreIds, controlStoreIds, username, password,
+}) {
+  return request("POST", `/api/v1/activations${query({ retailerCode })}`, {
+    username, password,
+    body: { name, objective, hypothesis, productName, primaryMetric, startDate, endDate, testStoreIds, controlStoreIds },
+  });
+}

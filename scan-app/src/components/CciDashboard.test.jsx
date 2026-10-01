@@ -5,7 +5,9 @@ import CciDashboard from './CciDashboard'
 import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
 import {
   askCopilot,
+  createActivation,
   createFieldTask,
+  fetchActivations,
   fetchFieldTasks,
   fetchInvestigations,
   fetchMeetingBrief,
@@ -49,6 +51,9 @@ vi.mock('../services/intelligenceApi', () => ({
   followProduct: vi.fn(),
   unfollowProduct: vi.fn(),
   fetchWatchlistChanges: vi.fn(),
+  fetchActivations: vi.fn(),
+  fetchActivation: vi.fn(),
+  createActivation: vi.fn(),
 }))
 
 const overview = {
@@ -145,6 +150,8 @@ function mockIntelligenceDefaults() {
   fetchWatchlistChanges.mockReset().mockResolvedValue([])
   followProduct.mockReset()
   unfollowProduct.mockReset()
+  fetchActivations.mockReset().mockResolvedValue([])
+  createActivation.mockReset()
 }
 
 async function signIn(user) {
@@ -200,7 +207,7 @@ describe('CciDashboard', () => {
 
     const sections = [
       ['Investigate', 'Real questions, with real evidence.'],
-      ['Activations', 'Coming in a future phase.'],
+      ['Activations', 'Real test-vs-control trials.'],
       ['Network', 'Infrastructure and analytical depth.'],
       ['Copilot', 'Ask about a product or an investigation.'],
       ['My Work', 'Everything is caught up'],
@@ -502,5 +509,53 @@ describe('CciDashboard', () => {
 
     expect(unfollowProduct).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'watch-1' }))
     expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
+  })
+
+  it('creates an activation and shows its real test-vs-control performance', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue({
+      ...overview,
+      stores: [
+        { storeId: 'STORE-01', basketCount: 100, cciBasketCount: 10, cciPenetrationPercentage: 10, averageBasketValue: 12 },
+        { storeId: 'STORE-02', basketCount: 100, cciBasketCount: 10, cciPenetrationPercentage: 10, averageBasketValue: 12 },
+      ],
+    })
+    const createdActivation = {
+      id: 'act-1', name: 'Sprite cooler push', objective: 'Increase Sprite visibility', hypothesis: 'Cooler placement drives trial',
+      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
+      status: 'COMPLETED', createdBy: 'scan-demo-cci', createdAt: '2026-09-01T00:00:00Z',
+      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
+      performance: {
+        test: { storeCount: 1, reportingStoreCount: 1, baselineBaskets: 4, baselineMatchingBaskets: 2, baselinePenetrationPct: 50, duringBaskets: 4, duringMatchingBaskets: 4, duringPenetrationPct: 100, baselineRevenue: 5, duringRevenue: 10 },
+        control: { storeCount: 1, reportingStoreCount: 1, baselineBaskets: 4, baselineMatchingBaskets: 2, baselinePenetrationPct: 50, duringBaskets: 4, duringMatchingBaskets: 2, duringPenetrationPct: 50, baselineRevenue: 5, duringRevenue: 5 },
+        testPenetrationPointChange: 50, controlPenetrationPointChange: 0, penetrationDifferenceInDifference: 50,
+        keyFinding: 'Test stores moved 50.0 points more than control stores over the activation window.',
+        limitations: 'Store selection was not randomized, so other factors could explain part of this difference.',
+        recommendation: 'This is a single observational comparison, not a randomized controlled test.',
+      },
+    }
+    createActivation.mockResolvedValue(createdActivation)
+    fetchActivations.mockResolvedValueOnce([]).mockResolvedValue([createdActivation])
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Activations' })[0])
+    await user.click(screen.getByRole('button', { name: 'Create activation' }))
+    await user.type(screen.getByLabelText('Name'), 'Sprite cooler push')
+    await user.type(screen.getByLabelText('Objective'), 'Increase Sprite visibility')
+    await user.type(screen.getByLabelText('Hypothesis'), 'Cooler placement drives trial')
+    await user.type(screen.getByLabelText('Product'), 'Sprite 500ml')
+    await user.type(screen.getByLabelText('Start date'), '2026-09-01')
+    await user.type(screen.getByLabelText('End date'), '2026-09-07')
+    const storeRows = screen.getAllByText(/^STORE-0/).map((span) => span.closest('.cci-store-group-row'))
+    await user.click(within(storeRows[0]).getByLabelText('Test'))
+    await user.click(within(storeRows[1]).getByLabelText('Control'))
+    await user.click(screen.getByRole('button', { name: 'Create activation' }))
+
+    expect(createActivation).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Sprite cooler push', testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
+    }))
+    expect(await screen.findByRole('heading', { name: 'Sprite cooler push' })).toBeInTheDocument()
+    expect(screen.getByText('Test stores moved 50.0 points more than control stores over the activation window.')).toBeInTheDocument()
+    expect(screen.getByText(/50% baseline → 100% during/)).toBeInTheDocument()
   })
 })

@@ -337,6 +337,32 @@
 .cci-hypothesis dd { margin: 0; color: #3d3d3a; font-size: .82rem; line-height: 1.5; }
 
 .cci-create-field-task { display: grid; gap: 14px; margin-top: 14px; padding: 18px; border: 1px solid var(--scan-border); border-radius: 8px; background: var(--scan-subtle); }
+
+.cci-create-activation { display: grid; gap: 14px; }
+.cci-create-activation label { display: grid; gap: 6px; color: #36383e; font-size: .78rem; font-weight: 600; }
+.cci-create-activation input, .cci-create-activation select {
+  min-height: 42px; padding: 9px 12px; border: 1px solid var(--scan-border); border-radius: 6px; background: #fff; color: var(--scan-ink);
+}
+.cci-date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+
+.cci-store-group-picker { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.cci-store-group-picker legend { padding: 0 0 4px; color: #36383e; font-size: .78rem; font-weight: 600; }
+.cci-store-group-row { display: flex; align-items: center; gap: 18px; padding: 8px 0; border-bottom: 1px solid var(--scan-border); font-size: .82rem; }
+.cci-store-group-row > span { flex: 1; font-weight: 580; }
+.cci-store-group-row label { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+
+.cci-activation-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cci-activation-group-card { padding: 18px; border: 1px solid var(--scan-border); border-radius: 8px; background: #fff; }
+.cci-activation-group-card h4 { margin: 0 0 4px; font-size: .95rem; }
+.cci-activation-group-card > small { display: block; margin-bottom: 14px; color: var(--scan-muted); font-size: .7rem; }
+.cci-activation-group-card dl { display: grid; gap: 10px; margin: 0; }
+.cci-activation-group-card dl div { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid var(--scan-border); }
+.cci-activation-group-card dt { color: var(--scan-muted); font-size: .66rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.cci-activation-group-card dd { margin: 0; color: #3d3d3a; font-size: .84rem; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .cci-date-range, .cci-activation-groups { grid-template-columns: 1fr; }
+}
 .cci-store-picker { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
 .cci-store-picker legend { padding: 0 0 4px; color: #36383e; font-size: .78rem; font-weight: 600; }
 .cci-store-checkbox { display: flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 500; }

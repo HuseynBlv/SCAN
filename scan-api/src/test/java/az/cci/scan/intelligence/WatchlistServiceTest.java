@@ -19,6 +19,7 @@ import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.ScanAccountRepository;
 import az.cci.scan.repository.StoreRepository;
+import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.WatchlistItemRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,9 @@ class WatchlistServiceTest {
 
     @Autowired
     private WatchlistService watchlistService;
+
+    @Autowired
+    private ActivationRepository cciActivationRepository;
 
     @Autowired
     private WatchlistItemRepository watchlistItemRepository;
@@ -100,6 +104,7 @@ class WatchlistServiceTest {
 
     @BeforeEach
     void setUp() {
+        cciActivationRepository.deleteAll();
         watchlistItemRepository.deleteAll();
         fieldTaskRepository.deleteAll();
         investigationRepository.deleteAll();

@@ -14,7 +14,9 @@ import {
   askCopilot,
   closeInvestigation,
   confirmHypothesis,
+  createActivation,
   createFieldTask,
+  fetchActivations,
   fetchFieldTasks,
   fetchInvestigations,
   fetchMeetingBrief,
@@ -983,14 +985,189 @@ function Copilot({ context, productOptions, investigations, onAsk }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Activations (Phase 2 placeholder)                                   */
+/* Activations                                                          */
 /* ------------------------------------------------------------------ */
 
-function Activations() {
+const PRIMARY_METRIC_OPTIONS = [
+  { value: 'BASKET_PENETRATION', label: 'Basket penetration' },
+  { value: 'REVENUE', label: 'Revenue' },
+]
+
+function StoreGroupPicker({ stores, assignments, onAssign }) {
+  return (
+    <fieldset className="cci-store-group-picker">
+      <legend>Assign stores to test or control</legend>
+      {stores.length ? stores.map((store) => (
+        <div className="cci-store-group-row" key={store.storeId}>
+          <span>{store.storeId}</span>
+          <label><input checked={assignments[store.storeId] === 'TEST'} name={`cci-activation-group-${store.storeId}`} onChange={() => onAssign(store.storeId, 'TEST')} type="radio" />Test</label>
+          <label><input checked={assignments[store.storeId] === 'CONTROL'} name={`cci-activation-group-${store.storeId}`} onChange={() => onAssign(store.storeId, 'CONTROL')} type="radio" />Control</label>
+          <label><input checked={!assignments[store.storeId]} name={`cci-activation-group-${store.storeId}`} onChange={() => onAssign(store.storeId, null)} type="radio" />Neither</label>
+        </div>
+      )) : <p>No reporting stores are available yet.</p>}
+    </fieldset>
+  )
+}
+
+function CreateActivationForm({ stores, productOptions, onCreate, onCancel }) {
+  const [name, setName] = useState('')
+  const [objective, setObjective] = useState('')
+  const [hypothesis, setHypothesis] = useState('')
+  const [productName, setProductName] = useState('')
+  const [primaryMetric, setPrimaryMetric] = useState('BASKET_PENETRATION')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [assignments, setAssignments] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  function assign(storeId, group) {
+    setAssignments((current) => {
+      const next = { ...current }
+      if (group) next[storeId] = group
+      else delete next[storeId]
+      return next
+    })
+  }
+
+  const testStoreIds = Object.keys(assignments).filter((id) => assignments[id] === 'TEST')
+  const controlStoreIds = Object.keys(assignments).filter((id) => assignments[id] === 'CONTROL')
+
+  async function submit(event) {
+    event.preventDefault()
+    setError('')
+    if (!testStoreIds.length || !controlStoreIds.length) {
+      setError('Assign at least one test store and one control store.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await onCreate({
+        name: name.trim(), objective: objective.trim(), hypothesis: hypothesis.trim(), productName: productName.trim(),
+        primaryMetric, startDate, endDate, testStoreIds, controlStoreIds,
+      })
+    } catch (requestError) {
+      setError(requestError?.message || 'Unable to create this activation.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form className="cci-create-activation" onSubmit={submit}>
+      <label>Name<input onChange={(event) => setName(event.target.value)} placeholder="e.g. Sprite cooler push" required value={name} /></label>
+      <label>Objective<input onChange={(event) => setObjective(event.target.value)} placeholder="What is this trying to achieve?" required value={objective} /></label>
+      <label>Hypothesis<input onChange={(event) => setHypothesis(event.target.value)} placeholder="Why should this work?" required value={hypothesis} /></label>
+      <label>Product
+        <input list="cci-activation-product-options" onChange={(event) => setProductName(event.target.value)} placeholder="e.g. Sprite 500ml" required value={productName} />
+        <datalist id="cci-activation-product-options">{productOptions.map((option) => <option key={option} value={option} />)}</datalist>
+      </label>
+      <label>Primary metric
+        <select onChange={(event) => setPrimaryMetric(event.target.value)} value={primaryMetric}>
+          {PRIMARY_METRIC_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+      <div className="cci-date-range">
+        <label>Start date<input onChange={(event) => setStartDate(event.target.value)} required type="date" value={startDate} /></label>
+        <label>End date<input onChange={(event) => setEndDate(event.target.value)} required type="date" value={endDate} /></label>
+      </div>
+      <StoreGroupPicker assignments={assignments} onAssign={assign} stores={stores} />
+      {error ? <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div> : null}
+      <div className="cci-form-actions">
+        <button className="scan-button scan-button-light" onClick={onCancel} type="button">Cancel</button>
+        <button className="scan-button scan-button-dark" disabled={submitting} type="submit">{submitting ? 'Creating…' : 'Create activation'}</button>
+      </div>
+    </form>
+  )
+}
+
+function GroupPerformanceCard({ title, group, currency }) {
+  return (
+    <div className="cci-activation-group-card">
+      <h4>{title}</h4>
+      <small>{group.storeCount} store(s) · {group.reportingStoreCount} reported activity during the window</small>
+      <dl>
+        <div><dt>Basket penetration</dt><dd>{decimal.format(group.baselinePenetrationPct)}% baseline → {decimal.format(group.duringPenetrationPct)}% during</dd></div>
+        <div><dt>Matching baskets</dt><dd>{integer.format(group.baselineMatchingBaskets)} of {integer.format(group.baselineBaskets)} baseline → {integer.format(group.duringMatchingBaskets)} of {integer.format(group.duringBaskets)} during</dd></div>
+        <div><dt>Revenue</dt><dd>{formatMoney(group.baselineRevenue, currency)} baseline → {formatMoney(group.duringRevenue, currency)} during</dd></div>
+      </dl>
+    </div>
+  )
+}
+
+function ActivationDetail({ activation, currency, onBack }) {
+  const { performance } = activation
   return (
     <div className="scan-page-stack">
-      <PageIntro description="Test stores against control stores, then review results with honest, non-causal language." eyebrow="Activations" title="Coming in a future phase." />
-      <EmptyState title="Activations are not built yet">Trade Marketing and Sales will be able to set up test-vs-control activations here, with a during-activation performance view and a post-completion review. This is intentionally not faked — it will appear once the activation workflow is real.</EmptyState>
+      <button className="scan-text-link cci-back-link" onClick={onBack} type="button"><ScanIcon name="chevron" size={16} />Back to activations</button>
+      <PageIntro
+        aside={<StatusBadge tone={statusTone(activation.status)}>{humanize(activation.status)}</StatusBadge>}
+        description={activation.objective}
+        eyebrow={activation.productName}
+        title={activation.name}
+      />
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Hypothesis</h3></div></header>
+        <p>{activation.hypothesis}</p>
+        <small>{activation.startDate} to {activation.endDate} · Primary metric: {humanize(activation.primaryMetric)}</small>
+      </section>
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Performance</h3><p>Baseline is the period immediately before this activation started, of equal length.</p></div></header>
+        <div className="cci-activation-groups">
+          <GroupPerformanceCard currency={currency} group={performance.test} title="Test stores" />
+          <GroupPerformanceCard currency={currency} group={performance.control} title="Control stores" />
+        </div>
+      </section>
+      <section className="scan-answer cci-structured-answer">
+        <div className="cci-answer-block"><span>Key finding</span><h3>{performance.keyFinding}</h3></div>
+        <div className="cci-answer-block"><span>Limitations</span><p>{performance.limitations}</p></div>
+        {performance.recommendation ? <div className="cci-answer-block"><span>Recommendation</span><p>{performance.recommendation}</p></div> : null}
+      </section>
+    </div>
+  )
+}
+
+function Activations({ activations, data, loading, loadError, selectedActivationId, onSelect, onBack, onCreate }) {
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const selected = activations.find((item) => item.id === selectedActivationId)
+
+  if (selected) {
+    return <ActivationDetail activation={selected} currency={data.currency} onBack={onBack} />
+  }
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro
+        aside={<button className="scan-button scan-button-dark" onClick={() => setShowCreateForm((value) => !value)} type="button">{showCreateForm ? 'Cancel' : 'Create activation'}</button>}
+        description="Test stores against control stores, then review results with honest, non-causal language."
+        eyebrow="Activations"
+        title="Real test-vs-control trials."
+      />
+      {loadError ? <div className="scan-inline-notice scan-inline-error" role="alert">{loadError}</div> : null}
+      {showCreateForm ? (
+        <section className="scan-panel">
+          <CreateActivationForm
+            onCancel={() => setShowCreateForm(false)}
+            onCreate={async (payload) => { const created = await onCreate(payload); setShowCreateForm(false); onSelect(created.id) }}
+            productOptions={data.cciSkuPerformance.map((item) => item.product)}
+            stores={data.stores}
+          />
+        </section>
+      ) : null}
+      {loading ? <p className="cci-work-loading">Loading activations…</p> : activations.length ? (
+        <div className="cci-investigation-list">
+          {activations.map((item) => (
+            <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
+              <div>
+                <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                <strong>{item.name}</strong>
+                <small>{item.productName} · {item.startDate} to {item.endDate}</small>
+              </div>
+              <ScanIcon name="chevron" size={18} />
+            </button>
+          ))}
+        </div>
+      ) : <EmptyState title="No activations yet">Set up a test-vs-control trial to measure a real commercial change with honest, non-causal language.</EmptyState>}
     </div>
   )
 }
@@ -1164,7 +1341,20 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       />
     )
   }
-  if (activePage === 'activations') return <Activations />
+  if (activePage === 'activations') {
+    return (
+      <Activations
+        activations={intelligence.activations}
+        data={data}
+        loadError={intelligence.error}
+        loading={intelligence.loading}
+        onBack={() => actions.selectActivation(null)}
+        onCreate={actions.createActivation}
+        onSelect={actions.selectActivation}
+        selectedActivationId={intelligence.selectedActivationId}
+      />
+    )
+  }
   if (activePage === 'network') return <Network data={data} />
   if (activePage === 'copilot') {
     return (
@@ -1215,9 +1405,11 @@ export default function CciDashboard() {
   const [movers, setMovers] = useState([])
   const [watchlist, setWatchlist] = useState([])
   const [watchlistChanges, setWatchlistChanges] = useState([])
+  const [activations, setActivations] = useState([])
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [intelligenceError, setIntelligenceError] = useState('')
   const [selectedInvestigationId, setSelectedInvestigationId] = useState(null)
+  const [selectedActivationId, setSelectedActivationId] = useState(null)
   const [copilotContext, setCopilotContext] = useState(null)
 
   usePretextLayout(layoutRef, `${activePage}:${data?.generatedAt || 'login'}`)
@@ -1227,17 +1419,19 @@ export default function CciDashboard() {
     setIntelligenceLoading(true)
     setIntelligenceError('')
     try {
-      const [investigationsResponse, fieldTasksResponse, moversResponse, watchlistResponse, watchlistChangesResponse] = await Promise.all([
+      const [investigationsResponse, fieldTasksResponse, moversResponse, watchlistResponse, watchlistChangesResponse, activationsResponse] = await Promise.all([
         fetchInvestigations({ ...creds, signal }),
         fetchFieldTasks({ ...creds, signal }),
         fetchMovers({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, limit: 10, signal }),
         fetchWatchlist({ ...creds, signal }),
         fetchWatchlistChanges({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, signal }),
+        fetchActivations({ ...creds, signal }),
       ])
       if (signal?.aborted) return
       setInvestigations(investigationsResponse)
       setFieldTasks(fieldTasksResponse)
       setMovers(moversResponse)
+      setActivations(activationsResponse)
       setWatchlist(watchlistResponse)
       setWatchlistChanges(watchlistChangesResponse)
     } catch (requestError) {
@@ -1290,8 +1484,8 @@ export default function CciDashboard() {
   function signOut() {
     setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false)
     setActivePage('my-work'); setInvestigations([]); setFieldTasks([]); setMovers([])
-    setWatchlist([]); setWatchlistChanges([])
-    setSelectedInvestigationId(null); setCopilotContext(null)
+    setWatchlist([]); setWatchlistChanges([]); setActivations([])
+    setSelectedInvestigationId(null); setSelectedActivationId(null); setCopilotContext(null)
   }
 
   async function withReload(promiseFactory) {
@@ -1322,6 +1516,8 @@ export default function CciDashboard() {
     prepareBrief: (template) => fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),
     followProduct: (productName) => withReload(() => followProduct({ ...credentials, productName })),
     unfollowProduct: (itemId) => withReload(() => unfollowProduct({ ...credentials, itemId })),
+    selectActivation: setSelectedActivationId,
+    createActivation: (payload) => withReload(() => createActivation({ ...credentials, ...payload })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [credentials])
 
@@ -1380,9 +1576,9 @@ export default function CciDashboard() {
           credentials={credentials}
           data={data}
           intelligence={{
-            investigations, fieldTasks, movers, watchlist, watchlistChanges,
+            investigations, fieldTasks, movers, watchlist, watchlistChanges, activations,
             loading: intelligenceLoading, error: intelligenceError,
-            selectedInvestigationId, copilotContext,
+            selectedInvestigationId, selectedActivationId, copilotContext,
           }}
           onNavigate={setActivePage}
         />

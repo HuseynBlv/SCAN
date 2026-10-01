@@ -12,6 +12,7 @@ import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
@@ -55,6 +56,9 @@ class InvestigationServiceTest {
 
     @Autowired
     private InvestigationRepository investigationRepository;
+
+    @Autowired
+    private ActivationRepository cciActivationRepository;
 
     @Autowired
     private WatchlistItemRepository watchlistItemRepository;
@@ -101,6 +105,7 @@ class InvestigationServiceTest {
     @BeforeEach
     void setUp() {
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
         watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         activationRepository.deleteAll();

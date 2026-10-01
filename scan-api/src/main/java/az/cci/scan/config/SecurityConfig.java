@@ -44,6 +44,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/copilot/**").hasRole("CCI")
                 .requestMatchers("/api/v1/meeting-briefs/**").hasRole("CCI")
                 .requestMatchers("/api/v1/watchlist/**").hasRole("CCI")
+                .requestMatchers("/api/v1/activations/**").hasRole("CCI")
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )

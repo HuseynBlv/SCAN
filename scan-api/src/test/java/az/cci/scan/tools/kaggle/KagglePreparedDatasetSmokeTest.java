@@ -13,6 +13,7 @@ import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
@@ -69,6 +70,9 @@ class KagglePreparedDatasetSmokeTest {
     private InvestigationRepository investigationRepository;
 
     @Autowired
+    private ActivationRepository cciActivationRepository;
+
+    @Autowired
     private WatchlistItemRepository watchlistItemRepository;
 
     @Autowired
@@ -87,6 +91,7 @@ class KagglePreparedDatasetSmokeTest {
         importProfileRepository.deleteAll();
         storeRepository.deleteAll();
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
         watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         retailerRepository.deleteAll();
