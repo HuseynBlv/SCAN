@@ -191,6 +191,36 @@ class InvestigationServiceTest {
         assertThat(investigation.getClosedAt()).isNull();
     }
 
+    @Test
+    void searchFiltersInvestigationsByTitleOrQuestionCaseInsensitively() {
+        investigationService.openGeneral(retailer, "Why is the north region soft?", "What changed in the north region?", "tester@example.com");
+        investigationService.openGeneral(retailer, "Distributor delay resolved", "Why were deliveries late?", "tester@example.com");
+
+        assertThat(investigationService.list(retailer, false, "north region")).hasSize(1);
+        assertThat(investigationService.list(retailer, false, "DISTRIBUTOR")).hasSize(1);
+        assertThat(investigationService.list(retailer, false, "deliveries late")).hasSize(1);
+        assertThat(investigationService.list(retailer, false, "no such thing")).isEmpty();
+        assertThat(investigationService.list(retailer, false, null)).hasSize(2);
+        assertThat(investigationService.list(retailer, false, "  ")).hasSize(2);
+    }
+
+    @Test
+    void findsRealHistoricalCasesSeededByARealProductInvestigation() {
+        importDecliningSpriteFixture();
+        Investigation closedCase = investigationService.openForProduct(retailer, "Sprite 500ml", PERIOD_DAYS, "tester@example.com");
+        investigationService.setHypothesisStatus(
+            retailer, closedCase.getId(), closedCase.getHypotheses().get(0).getId(), InvestigationHypothesis.Status.CONFIRMED
+        );
+        investigationService.close(retailer, closedCase.getId());
+
+        List<Investigation> history = investigationService.findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, "Sprite 500ml");
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).getId()).isEqualTo(closedCase.getId());
+        assertThat(history.get(0).getStatus()).isEqualTo(Investigation.Status.CLOSED);
+        assertThat(history.get(0).getHypotheses()).anyMatch(h -> h.getStatus() == InvestigationHypothesis.Status.CONFIRMED);
+    }
+
     private void importDecliningSpriteFixture() {
         List<LocalDate> priorDates = datesAgo(16, 28);
         List<LocalDate> recentDates = datesAgo(1, 13);

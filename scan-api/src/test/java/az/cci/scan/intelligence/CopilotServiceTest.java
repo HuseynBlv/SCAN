@@ -140,6 +140,22 @@ class CopilotServiceTest {
         assertThat(answer.confidence()).isEqualTo("MEDIUM");
         assertThat(answer.whatWeStillDontKnow()).contains("no direct stock-level or competitor data");
         assertThat(answer.nextSteps()).anyMatch(step -> step.actionType().equals("CREATE_FIELD_CHECK"));
+        assertThat(answer.priorCases()).isEmpty();
+    }
+
+    @Test
+    void surfacesARealPastCaseForTheSameProductAsCommercialMemory() {
+        importDecliningSpriteFixture();
+        Investigation pastCase = investigationService.openForProduct(retailer, "Sprite 500ml", PERIOD_DAYS, "tester@example.com");
+        investigationService.setHypothesisStatus(
+            retailer, pastCase.getId(), pastCase.getHypotheses().get(0).getId(), InvestigationHypothesis.Status.CONFIRMED
+        );
+        investigationService.close(retailer, pastCase.getId());
+
+        CopilotAnswer answer = copilotService.answer(retailer, ContextType.PRODUCT, "Sprite 500ml", null, PERIOD_DAYS);
+
+        assertThat(answer.priorCases()).hasSize(1);
+        assertThat(answer.priorCases().get(0)).contains("closed").contains("confirmed").contains("Availability issue");
     }
 
     @Test

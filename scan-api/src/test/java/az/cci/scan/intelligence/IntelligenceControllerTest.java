@@ -183,6 +183,58 @@ class IntelligenceControllerTest {
     }
 
     @Test
+    void searchesInvestigationsAndLooksUpRealProductHistoryOverRealHttp() throws Exception {
+        mockMvc.perform(post("/api/v1/investigations/general")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title": "Why is the north region soft?", "question": "What changed in the north region?"}
+                    """))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/investigations/general")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title": "Distributor delay resolved", "question": "Why were deliveries late?"}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/investigations")
+                .param("retailerCode", "INTEL")
+                .param("q", "north region")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].title").value("Why is the north region soft?"));
+
+        mockMvc.perform(post("/api/v1/investigations/product")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"productName": "Sprite 500ml", "periodDays": 14}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/investigations/history")
+                .param("retailerCode", "INTEL")
+                .param("productName", "Sprite 500ml")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].subjectName").value("Sprite 500ml"));
+
+        mockMvc.perform(get("/api/v1/investigations/history")
+                .param("retailerCode", "INTEL")
+                .param("productName", "Fanta Orange")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
     void refusesAnAccountWithNoGrantToThisRetailer() throws Exception {
         mockMvc.perform(get("/api/v1/investigations")
                 .param("retailerCode", "INTEL")

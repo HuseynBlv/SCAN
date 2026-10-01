@@ -614,7 +614,7 @@ function FieldTaskStoreRow({ store, onRecord }) {
 }
 
 function InvestigationDetail({
-  investigation, fieldTasks, stores, onBack, onAddNote, onConfirmHypothesis, onRejectHypothesis,
+  investigation, fieldTasks, stores, allInvestigations, onBack, onAddNote, onConfirmHypothesis, onRejectHypothesis,
   onClose, onReopen, onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot,
 }) {
   const [noteBody, setNoteBody] = useState('')
@@ -623,6 +623,12 @@ function InvestigationDetail({
   const systemNotes = investigation.notes.filter((note) => note.system)
   const humanNotes = investigation.notes.filter((note) => !note.system)
   const linkedTasks = fieldTasks.filter((task) => task.investigationId === investigation.id)
+  // SCAN's "have we seen this before" memory - computed from the same stored records the
+  // investigation list already holds, never an invented summary of what probably happened.
+  const priorCases = investigation.subjectType === 'PRODUCT'
+    ? allInvestigations.filter((item) => item.id !== investigation.id
+        && item.subjectType === 'PRODUCT' && item.subjectName === investigation.subjectName)
+    : []
 
   async function submitNote(event) {
     event.preventDefault()
@@ -665,6 +671,23 @@ function InvestigationDetail({
           </div>
         ) : <EmptyState compact title="No hypotheses yet">SCAN did not find a strong enough signal to propose one. Add one manually as evidence comes in.</EmptyState>}
       </section>
+
+      {investigation.subjectType === 'PRODUCT' ? (
+        <section className="scan-panel">
+          <header className="scan-panel-header"><div><h3>Seen before</h3><p>Only real, stored investigations into this product - never a guess about past results.</p></div></header>
+          {priorCases.length ? (
+            <ul className="cci-prior-cases">
+              {priorCases.map((item) => (
+                <li key={item.id}>
+                  <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                  <span>{item.title}</span>
+                  <small>{formatRelativeTime(item.createdAt)}</small>
+                </li>
+              ))}
+            </ul>
+          ) : <EmptyState compact title="No prior cases on record">This is the first time SCAN has investigated this product.</EmptyState>}
+        </section>
+      ) : null}
 
       <section className="scan-panel">
         <header className="scan-panel-header"><div><h3>Field checks</h3></div></header>
@@ -717,11 +740,13 @@ function Investigate({
   onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot, loading, loadError,
 }) {
   const [showStartForm, setShowStartForm] = useState(false)
+  const [searchText, setSearchText] = useState('')
   const selected = investigations.find((item) => item.id === selectedInvestigationId)
 
   if (selected) {
     return (
       <InvestigationDetail
+        allInvestigations={investigations}
         fieldTasks={fieldTasks}
         investigation={selected}
         onAddNote={onAddNote}
@@ -757,19 +782,32 @@ function Investigate({
           />
         </section>
       ) : null}
+      {investigations.length ? (
+        <label className="cci-investigation-search">Search investigations
+          <input onChange={(event) => setSearchText(event.target.value)} placeholder="Search by title or question…" value={searchText} />
+        </label>
+      ) : null}
       {loading ? <p className="cci-work-loading">Loading investigations…</p> : investigations.length ? (
-        <div className="cci-investigation-list">
-          {investigations.map((item) => (
-            <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
-              <div>
-                <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
-                <strong>{item.title}</strong>
-                <small>{item.hypotheses.length} hypothesis(es) · {item.notes.length} note(s) · {formatRelativeTime(item.updatedAt)}</small>
-              </div>
-              <ScanIcon name="chevron" size={18} />
-            </button>
-          ))}
-        </div>
+        (() => {
+          const needle = searchText.trim().toLowerCase()
+          const visible = needle
+            ? investigations.filter((item) => item.title.toLowerCase().includes(needle) || item.question.toLowerCase().includes(needle))
+            : investigations
+          return visible.length ? (
+            <div className="cci-investigation-list">
+              {visible.map((item) => (
+                <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
+                  <div>
+                    <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                    <strong>{item.title}</strong>
+                    <small>{item.hypotheses.length} hypothesis(es) · {item.notes.length} note(s) · {formatRelativeTime(item.updatedAt)}</small>
+                  </div>
+                  <ScanIcon name="chevron" size={18} />
+                </button>
+              ))}
+            </div>
+          ) : <EmptyState compact title="No investigations match that search">Try a different word from the title or question.</EmptyState>
+        })()
       ) : <EmptyState title="No active investigations">Start from a commercial question, or investigate a detected change from My Work.</EmptyState>}
     </div>
   )
@@ -798,6 +836,12 @@ function CopilotAnswerView({ answer }) {
         </div>
       ) : null}
       <div className="cci-answer-block"><span>What we still don't know</span><p>{answer.whatWeStillDontKnow}</p></div>
+      {answer.priorCases?.length ? (
+        <div className="cci-answer-block">
+          <span>Seen before</span>
+          <ul>{answer.priorCases.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        </div>
+      ) : null}
       {answer.nextSteps.length ? (
         <div className="cci-copilot-next-steps">
           {answer.nextSteps.map((step) => <StatusBadge key={step.label} tone="neutral">{step.label}</StatusBadge>)}

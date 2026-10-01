@@ -105,6 +105,23 @@ const openInvestigation = {
   notes: [{ id: 'note-1', authorUsername: 'SCAN', body: 'Sprite 500ml appeared in 6 baskets vs. 12 before.', system: true, createdAt: '2026-08-20T10:00:00Z' }],
 }
 
+const closedPastCase = {
+  id: 'inv-0',
+  title: 'Sprite 500ml is down 40%',
+  question: 'What changed for Sprite 500ml?',
+  subjectType: 'PRODUCT',
+  subjectName: 'Sprite 500ml',
+  periodDays: 14,
+  status: 'CLOSED',
+  ownerLabel: 'Commercial Team',
+  createdBy: 'scan-demo-cci',
+  createdAt: '2026-06-01T10:00:00Z',
+  updatedAt: '2026-06-05T10:00:00Z',
+  closedAt: '2026-06-05T10:00:00Z',
+  hypotheses: [],
+  notes: [],
+}
+
 const mover = { productName: 'Sprite 500ml', category: 'Beverages', recentBaskets: 6, priorBaskets: 12, basketChangePct: -50 }
 
 function mockIntelligenceDefaults() {
@@ -349,6 +366,33 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('button', { name: 'Record result' })).toBeInTheDocument()
   })
 
+  it('shows a real prior case for the same product in the Seen before panel', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
+    await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Seen before' })).toBeInTheDocument()
+    expect(screen.getByText('Sprite 500ml is down 40%')).toBeInTheDocument()
+  })
+
+  it('filters the investigation list by a real search term', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
+    expect(await screen.findByText('Sprite 500ml is down 40%')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Search investigations'), '50%')
+    expect(screen.getByText('Sprite 500ml is down 50%')).toBeInTheDocument()
+    expect(screen.queryByText('Sprite 500ml is down 40%')).not.toBeInTheDocument()
+  })
+
   it('answers a Copilot question about a product using only real tool output', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
@@ -360,6 +404,7 @@ describe('CciDashboard', () => {
       confidence: 'MEDIUM',
       whatWeStillDontKnow: 'SCAN has no direct stock-level or competitor data.',
       nextSteps: [{ label: 'Create a field check', actionType: 'CREATE_FIELD_CHECK', targetId: 'Sprite 500ml' }],
+      priorCases: ['Opened 2026-06-01, closed without a confirmed cause.'],
     })
     await signIn(user)
 
@@ -371,6 +416,7 @@ describe('CciDashboard', () => {
     expect(askCopilot).toHaveBeenCalledWith(expect.objectContaining({ contextType: 'PRODUCT', subjectName: 'Sprite 500ml' }))
     expect(await screen.findByText(/Sprite 500ml appeared in 6 baskets/)).toBeInTheDocument()
     expect(screen.getByText('MEDIUM confidence')).toBeInTheDocument()
+    expect(screen.getByText('Opened 2026-06-01, closed without a confirmed cause.')).toBeInTheDocument()
   })
 
   it('shows exactly one input for Copilot and disables Ask until it is filled', async () => {

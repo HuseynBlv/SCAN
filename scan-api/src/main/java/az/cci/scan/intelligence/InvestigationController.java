@@ -1,6 +1,7 @@
 package az.cci.scan.intelligence;
 
 import az.cci.scan.config.TenantAccessService;
+import az.cci.scan.domain.Investigation;
 import az.cci.scan.domain.InvestigationHypothesis;
 import az.cci.scan.domain.Retailer;
 import jakarta.validation.Valid;
@@ -48,10 +49,27 @@ public class InvestigationController {
     public List<InvestigationResponse> list(
         @RequestParam String retailerCode,
         @RequestParam(defaultValue = "false") boolean openOnly,
+        @RequestParam(required = false) String q,
         Authentication authentication
     ) {
         Retailer retailer = tenantAccess.cciRetailer(authentication, retailerCode);
-        return investigationService.list(retailer, openOnly).stream().map(InvestigationResponse::from).toList();
+        return investigationService.list(retailer, openOnly, q).stream().map(InvestigationResponse::from).toList();
+    }
+
+    /**
+     * SCAN's "have we seen this before" lookup - every past investigation into the same product,
+     * most recent first. Powers both Copilot's product answers and the investigation workspace's
+     * history panel from the exact same stored records.
+     */
+    @GetMapping("/history")
+    public List<InvestigationResponse> history(
+        @RequestParam String retailerCode,
+        @RequestParam String productName,
+        Authentication authentication
+    ) {
+        Retailer retailer = tenantAccess.cciRetailer(authentication, retailerCode);
+        return investigationService.findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, productName)
+            .stream().map(InvestigationResponse::from).toList();
     }
 
     @GetMapping("/{investigationId}")

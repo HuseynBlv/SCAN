@@ -103,9 +103,39 @@ public class InvestigationService {
     }
 
     public List<Investigation> list(Retailer retailer, boolean openOnly) {
-        return openOnly
+        return list(retailer, openOnly, null);
+    }
+
+    /**
+     * {@code searchText}, when present, matches case-insensitively against title or question only -
+     * a simple in-memory filter, not a database LIKE query. Investigation volume for a single
+     * retailer is small enough that this is the honest choice over adding search infrastructure
+     * that isn't needed yet.
+     */
+    public List<Investigation> list(Retailer retailer, boolean openOnly, String searchText) {
+        List<Investigation> investigations = openOnly
             ? investigationRepository.findAllByRetailerAndStatusNotOrderByCreatedAtDesc(retailer, Investigation.Status.CLOSED)
             : investigationRepository.findAllByRetailerOrderByCreatedAtDesc(retailer);
+        if (searchText == null || searchText.isBlank()) {
+            return investigations;
+        }
+        String needle = searchText.trim().toLowerCase(Locale.ROOT);
+        return investigations.stream()
+            .filter(investigation -> investigation.getTitle().toLowerCase(Locale.ROOT).contains(needle)
+                || investigation.getQuestion().toLowerCase(Locale.ROOT).contains(needle))
+            .toList();
+    }
+
+    /**
+     * SCAN's "have we seen this before" memory: every past investigation into the same subject,
+     * most recent first. This is the entire mechanism - it returns stored records, nothing else.
+     * Callers (Copilot, the investigation workspace) must never embellish what comes back here
+     * with an invented outcome for a case that doesn't have one on record.
+     */
+    public List<Investigation> findHistoricalCases(Retailer retailer, Investigation.SubjectType subjectType, String subjectName) {
+        return investigationRepository.findAllByRetailerAndSubjectTypeAndSubjectNameOrderByCreatedAtDesc(
+            retailer, subjectType, subjectName
+        );
     }
 
     @Transactional

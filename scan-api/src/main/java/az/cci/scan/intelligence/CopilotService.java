@@ -94,6 +94,13 @@ public class CopilotService {
 
         String confidence = (change.availabilitySignal() || change.concentrationSignal()) ? "MEDIUM" : "LOW";
 
+        List<String> priorCases = investigationService
+            .findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, productName)
+            .stream()
+            .limit(3)
+            .map(CopilotService::summarizeHistoricalCase)
+            .toList();
+
         return new CopilotAnswer(
             whatScanFound,
             whyThisMatters,
@@ -105,7 +112,8 @@ public class CopilotService {
                 new NextStep("Start an investigation", "START_INVESTIGATION", productName),
                 new NextStep("Create a field check", "CREATE_FIELD_CHECK", productName),
                 new NextStep("Compare stores", "COMPARE_STORES", productName)
-            )
+            ),
+            priorCases
         );
     }
 
@@ -144,6 +152,15 @@ public class CopilotService {
 
         String whatWeStillDontKnow = contradicting != null ? contradicting + " " + EPISTEMIC_NOTE : EPISTEMIC_NOTE;
 
+        List<String> priorCases = investigation.getSubjectType() == Investigation.SubjectType.PRODUCT
+            ? investigationService.findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, investigation.getSubjectName())
+                .stream()
+                .filter(other -> !other.getId().equals(investigation.getId()))
+                .limit(3)
+                .map(CopilotService::summarizeHistoricalCase)
+                .toList()
+            : List.of();
+
         return new CopilotAnswer(
             whatScanFound,
             whyThisMatters,
@@ -154,7 +171,8 @@ public class CopilotService {
             List.of(
                 new NextStep("Create a field check", "CREATE_FIELD_CHECK", investigationId.toString()),
                 new NextStep("Open investigation", "OPEN_INVESTIGATION", investigationId.toString())
-            )
+            ),
+            priorCases
         );
     }
 
@@ -166,7 +184,25 @@ public class CopilotService {
             List.of(),
             "NONE",
             "Ask about a specific product, store, or open investigation, or start a new investigation from a real question.",
-            List.of(new NextStep("Start an investigation", "START_INVESTIGATION", null))
+            List.of(new NextStep("Start an investigation", "START_INVESTIGATION", null)),
+            List.of()
         );
+    }
+
+    /**
+     * One line per past investigation, built only from what is actually stored on it - a
+     * confirmed hypothesis if there is one, otherwise an honest "closed without a confirmed
+     * cause" or "still open". Never a guess about what probably happened.
+     */
+    private static String summarizeHistoricalCase(Investigation investigation) {
+        String when = investigation.getCreatedAt().toString();
+        if (investigation.getStatus() == Investigation.Status.CLOSED) {
+            return investigation.getHypotheses().stream()
+                .filter(h -> h.getStatus() == InvestigationHypothesis.Status.CONFIRMED)
+                .findFirst()
+                .map(h -> "Opened %s, closed, confirmed: %s".formatted(when, h.getStatement()))
+                .orElse("Opened %s, closed without a confirmed cause.".formatted(when));
+        }
+        return "Opened %s, still open (%s).".formatted(when, investigation.getStatus().name().toLowerCase(Locale.ROOT).replace('_', ' '));
     }
 }

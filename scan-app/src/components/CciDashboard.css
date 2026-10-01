@@ -280,7 +280,16 @@
 /* Investigate                                                      */
 /* -------------------------------------------------------------- */
 
+.cci-investigation-search { display: grid; gap: 6px; max-width: 420px; color: #36383e; font-size: .78rem; font-weight: 600; }
+.cci-investigation-search input { min-height: 42px; padding: 9px 12px; border: 1px solid var(--scan-border); border-radius: 6px; font-weight: 400; }
+
 .cci-investigation-list { display: grid; border-top: 1px solid var(--scan-border); }
+
+.cci-prior-cases { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.cci-prior-cases li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--scan-border); }
+.cci-prior-cases li:last-child { border-bottom: 0; }
+.cci-prior-cases li span { flex: 1; font-size: .86rem; font-weight: 550; }
+.cci-prior-cases li small { color: var(--scan-muted); font-size: .7rem; }
 .cci-investigation-row {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 18px 4px; border: 0; border-bottom: 1px solid var(--scan-border); background: transparent; text-align: left;
