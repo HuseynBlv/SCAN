@@ -807,11 +807,13 @@ function CopilotAnswerView({ answer }) {
   )
 }
 
+// Copilot's context (not free text) picks which deterministic tool runs - there is no NLU
+// layer parsing a typed question, so a question box next to the product/investigation picker
+// would be decorative and misleading. Each mode shows exactly one real input.
 function Copilot({ context, productOptions, investigations, onAsk }) {
   const [contextType, setContextType] = useState(context?.contextType || 'GENERAL')
   const [subjectName, setSubjectName] = useState(context?.subjectName || '')
   const [investigationId, setInvestigationId] = useState(context?.investigationId || '')
-  const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -824,13 +826,17 @@ function Copilot({ context, productOptions, investigations, onAsk }) {
         subjectName: contextType === 'PRODUCT' ? subjectName : null,
         investigationId: contextType === 'INVESTIGATION' ? investigationId : null,
         periodDays: DEFAULT_PERIOD_DAYS,
-        question: question.trim() || 'What changed?',
+        question: 'What changed?',
       })
       setAnswer(response)
     } finally {
       setLoading(false)
     }
   }
+
+  const canSubmit = contextType === 'GENERAL'
+    || (contextType === 'PRODUCT' && subjectName.trim())
+    || (contextType === 'INVESTIGATION' && investigationId)
 
   return (
     <div className="scan-page-stack">
@@ -852,9 +858,10 @@ function Copilot({ context, productOptions, investigations, onAsk }) {
               </select>
             </label>
           ) : null}
-          <label className="sr-only" htmlFor="cci-copilot-question">Question</label>
-          <input id="cci-copilot-question" onChange={(event) => setQuestion(event.target.value)} placeholder="What do you want to know?" value={question} />
-          <button className="scan-button scan-button-dark" disabled={loading} type="submit">{loading ? 'Thinking…' : 'Ask'}</button>
+          {contextType === 'GENERAL' ? (
+            <p className="cci-copilot-general-note">General questions aren't grounded in a specific product or investigation, so SCAN will tell you what it needs instead of guessing.</p>
+          ) : null}
+          <button className="scan-button scan-button-dark" disabled={loading || !canSubmit} type="submit">{loading ? 'Thinking…' : 'Ask'}</button>
         </form>
       </section>
       {answer ? <CopilotAnswerView answer={answer} /> : null}

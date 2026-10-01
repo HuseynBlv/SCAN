@@ -352,6 +352,7 @@
 .cci-copilot-form { display: grid; gap: 14px; padding: 16px; }
 .cci-copilot-form label { display: grid; gap: 6px; color: #36383e; font-size: .78rem; font-weight: 600; }
 .cci-copilot-form input, .cci-copilot-form select { min-height: 42px; padding: 9px 12px; border: 1px solid var(--scan-border); border-radius: 6px; }
+.cci-copilot-general-note { margin: 0; color: var(--scan-muted); font-size: .82rem; line-height: 1.5; }
 
 .cci-answer-block { margin-bottom: 16px; }
 .cci-answer-block span { display: block; margin-bottom: 4px; color: var(--scan-muted); font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }

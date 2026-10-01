@@ -373,6 +373,30 @@ describe('CciDashboard', () => {
     expect(screen.getByText('MEDIUM confidence')).toBeInTheDocument()
   })
 
+  it('shows exactly one input for Copilot and disables Ask until it is filled', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    const { container } = render(<CciDashboard />)
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open workspace' }))
+    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+    const formControls = () => container.querySelectorAll('.cci-copilot-form input, .cci-copilot-form select')
+
+    await user.click(screen.getAllByRole('button', { name: 'Copilot' })[0])
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
+    expect(formControls()).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'A product' }))
+    expect(formControls()).toHaveLength(1)
+    expect(screen.getByLabelText('Product')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'An investigation' }))
+    expect(formControls()).toHaveLength(1)
+    expect(screen.getByLabelText('Investigation')).toBeInTheDocument()
+  })
+
   it('prepares a real meeting brief from My Work', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
