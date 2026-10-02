@@ -1502,7 +1502,7 @@ function DetailBackLink({ onBack, label }) {
   return <button className="scan-text-link cci-back-link" onClick={onBack} type="button"><ScanIcon name="chevron" size={16} />{label}</button>
 }
 
-function StoreDetailPage({ detail, loading, error, periodDays, onBack, onOpenStore, onOpenProduct, onInvestigate, onNavigate }) {
+function StoreDetailPage({ detail, loading, error, periodDays, onBack, onOpenStore, onOpenProduct, onInvestigate, onNavigate, onCompare }) {
   const backLink = <DetailBackLink label="Back to stores" onBack={onBack} />
   if (error) {
     return <div className="scan-page-stack">{backLink}<div className="scan-inline-notice scan-inline-error" role="alert">{error}</div></div>
@@ -1596,13 +1596,14 @@ function StoreDetailPage({ detail, loading, error, periodDays, onBack, onOpenSto
 
       <div className="cci-detail-actions">
         {topDecline ? <button className="scan-button scan-button-dark" onClick={() => onInvestigate(topDecline.productName)} type="button">Investigate {topDecline.productName} decline</button> : null}
+        <button className="scan-button scan-button-light" onClick={onCompare} type="button">Compare this store</button>
         <button className="scan-button scan-button-light" onClick={() => onNavigate('products')} type="button">View products →</button>
       </div>
     </div>
   )
 }
 
-function ProductDetailPage({ detail, loading, error, periodDays, onBack, onOpenStore, onInvestigate, onAskAbout }) {
+function ProductDetailPage({ detail, loading, error, periodDays, onBack, onOpenStore, onInvestigate, onAskAbout, onCompare }) {
   const backLink = <DetailBackLink label="Back to products" onBack={onBack} />
   if (error) {
     return <div className="scan-page-stack">{backLink}<div className="scan-inline-notice scan-inline-error" role="alert">{error}</div></div>
@@ -1674,8 +1675,140 @@ function ProductDetailPage({ detail, loading, error, periodDays, onBack, onOpenS
 
       <div className="cci-detail-actions">
         <button className="scan-button scan-button-dark" onClick={() => onInvestigate(detail.product)} type="button">Investigate this product</button>
+        <button className="scan-button scan-button-light" onClick={onCompare} type="button">Compare this product</button>
         <button className="scan-button scan-button-light" onClick={() => onAskAbout(detail.product)} type="button">Ask SCAN about this product</button>
       </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Comparison mode (Store vs Store, Product vs Product)                */
+/* ------------------------------------------------------------------ */
+/* Both reuse the same storeDetail/productDetail fetch the detail pages already use, fetched a
+ * second time for the comparison side - there is no separate "comparison" backend aggregate,
+ * because none is needed: a difference is just arithmetic on two already-real numbers. Region vs
+ * Region and Daypart vs Daypart from the spec are not built here - Store has no region column in
+ * the schema yet, and a real daypart-level network-wide comparison needs more backend work than
+ * fits this slice; neither is faked. */
+
+function diffCell(a, b, unit = '', decimals = true) {
+  const diff = a - b
+  const format = decimals ? decimal : integer
+  if (Math.abs(diff) < (decimals ? 0.05 : 1)) return 'Even'
+  return `${diff > 0 ? '+' : ''}${format.format(diff)}${unit}`
+}
+
+function ComparisonRow({ label, a, b, diff }) {
+  return <tr><td>{label}</td><td>{a}</td><td>{b}</td><td>{diff}</td></tr>
+}
+
+function ComparePicker({ title, description, candidates, renderRow, onPick }) {
+  const [search, setSearch] = useState('')
+  const needle = search.trim().toLowerCase()
+  const filtered = candidates.filter((item) => !needle || renderRow(item).searchText.toLowerCase().includes(needle)).slice(0, 8)
+  return (
+    <section className="scan-panel">
+      <header className="scan-panel-header"><div><h3>{title}</h3><p>{description}</p></div></header>
+      <input aria-label={title} className="cci-compare-search" onChange={(event) => setSearch(event.target.value)} placeholder="Search…" value={search} />
+      {filtered.length ? (
+        <div className="cci-mover-list">
+          {filtered.map((item) => {
+            const row = renderRow(item)
+            return (
+              <button className="cci-mover-row-button" key={row.key} onClick={() => onPick(item)} type="button">
+                <MoverRow changePct={row.changePct} label={row.label} meta={row.meta} />
+              </button>
+            )
+          })}
+        </div>
+      ) : <EmptyState compact title="No matches">Try a different search term.</EmptyState>}
+    </section>
+  )
+}
+
+function StoreComparePage({ baseline, stores, compare, compareLoading, compareError, periodDays, onBack, onPick }) {
+  const backLink = <DetailBackLink label="Back to store" onBack={onBack} />
+  if (!baseline) return <div className="scan-page-stack">{backLink}<p className="cci-work-loading">Loading…</p></div>
+
+  const candidates = stores.filter((store) => !(store.retailerCode === baseline.retailerCode && store.externalStoreId === baseline.externalStoreId))
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro aside={backLink} eyebrow="Compare stores" title={baseline.storeName} />
+      {!compare ? (
+        <ComparePicker
+          candidates={candidates}
+          description="Pick another real store to compare current numbers against."
+          onPick={onPick}
+          renderRow={(store) => ({ key: storeKey(store), label: store.externalStoreId, meta: store.retailerCode, changePct: store.penetrationPointChange, searchText: `${store.externalStoreId} ${store.retailerCode}` })}
+          title="Choose a store"
+        />
+      ) : compareLoading ? <p className="cci-work-loading">Loading comparison…</p> : compareError ? (
+        <div className="scan-inline-notice scan-inline-error" role="alert">{compareError}</div>
+      ) : (
+        <section className="scan-panel">
+          <header className="scan-panel-header">
+            <div><h3>{baseline.storeName} vs. {compare.storeName}</h3><p>Last {periodDays} days, current numbers.</p></div>
+          </header>
+          <div className="scan-table-wrap">
+            <table className="scan-table">
+              <thead><tr><th>Metric</th><th>{baseline.externalStoreId}</th><th>{compare.externalStoreId}</th><th>Difference</th></tr></thead>
+              <tbody>
+                <ComparisonRow a={`${decimal.format(baseline.recentPenetrationPct)}%`} b={`${decimal.format(compare.recentPenetrationPct)}%`} diff={diffCell(baseline.recentPenetrationPct, compare.recentPenetrationPct, 'pp')} label="CCI penetration" />
+                <ComparisonRow a={`${baseline.penetrationPointChange >= 0 ? '+' : ''}${decimal.format(baseline.penetrationPointChange)}pp`} b={`${compare.penetrationPointChange >= 0 ? '+' : ''}${decimal.format(compare.penetrationPointChange)}pp`} diff="—" label="Change vs. prior period" />
+                <ComparisonRow a={integer.format(baseline.recentCciBaskets)} b={integer.format(compare.recentCciBaskets)} diff={diffCell(baseline.recentCciBaskets, compare.recentCciBaskets, '', false)} label="CCI baskets" />
+                <ComparisonRow a={integer.format(baseline.recentBaskets)} b={integer.format(compare.recentBaskets)} diff={diffCell(baseline.recentBaskets, compare.recentBaskets, '', false)} label="Total baskets" />
+                <ComparisonRow a={`${decimal.format(baseline.dataCoveragePct)}%`} b={`${decimal.format(compare.dataCoveragePct)}%`} diff="—" label="Product mapping" />
+              </tbody>
+            </table>
+          </div>
+          <small>Real numbers only - SCAN does not yet generate a written explanation of what drives this difference.</small>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function ProductComparePage({ baseline, products, compare, compareLoading, compareError, periodDays, onBack, onPick }) {
+  const backLink = <DetailBackLink label="Back to product" onBack={onBack} />
+  if (!baseline) return <div className="scan-page-stack">{backLink}<p className="cci-work-loading">Loading…</p></div>
+
+  const candidates = products.filter((product) => product.productName !== baseline.product)
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro aside={backLink} eyebrow="Compare products" title={baseline.product} />
+      {!compare ? (
+        <ComparePicker
+          candidates={candidates}
+          description="Pick another real CCI product to compare current numbers against."
+          onPick={onPick}
+          renderRow={(product) => ({ key: product.productName, label: product.productName, meta: product.category, changePct: product.basketChangePct, searchText: `${product.productName} ${product.category || ''}` })}
+          title="Choose a product"
+        />
+      ) : compareLoading ? <p className="cci-work-loading">Loading comparison…</p> : compareError ? (
+        <div className="scan-inline-notice scan-inline-error" role="alert">{compareError}</div>
+      ) : (
+        <section className="scan-panel">
+          <header className="scan-panel-header">
+            <div><h3>{baseline.product} vs. {compare.product}</h3><p>Last {periodDays} days, current numbers.</p></div>
+          </header>
+          <div className="scan-table-wrap">
+            <table className="scan-table">
+              <thead><tr><th>Metric</th><th>{baseline.product}</th><th>{compare.product}</th><th>Difference</th></tr></thead>
+              <tbody>
+                <ComparisonRow a={integer.format(baseline.recentBaskets)} b={integer.format(compare.recentBaskets)} diff={diffCell(baseline.recentBaskets, compare.recentBaskets, '', false)} label="CCI baskets" />
+                <ComparisonRow a={`${baseline.basketChangePct >= 0 ? '+' : ''}${decimal.format(baseline.basketChangePct)}%`} b={`${compare.basketChangePct >= 0 ? '+' : ''}${decimal.format(compare.basketChangePct)}%`} diff="—" label="Change vs. prior period" />
+                <ComparisonRow a={integer.format(baseline.storeDistribution.length)} b={integer.format(compare.storeDistribution.length)} diff={diffCell(baseline.storeDistribution.length, compare.storeDistribution.length, '', false)} label="Stores reached" />
+                <ComparisonRow a={baseline.strongestDaypart ? humanize(baseline.strongestDaypart) : 'Not enough data'} b={compare.strongestDaypart ? humanize(compare.strongestDaypart) : 'Not enough data'} diff="—" label="Strongest daypart" />
+                <ComparisonRow a={baseline.category || 'Unmapped'} b={compare.category || 'Unmapped'} diff="—" label="Category" />
+              </tbody>
+            </table>
+          </div>
+          <small>Real numbers only - SCAN does not yet generate a written explanation of what drives this difference.</small>
+        </section>
+      )}
     </div>
   )
 }
@@ -1786,6 +1919,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
         error={network.storeDetailError}
         loading={network.storeDetailLoading}
         onBack={() => onNavigate('stores')}
+        onCompare={actions.openStoreCompare}
         onInvestigate={actions.startProductInvestigationFromWork}
         onNavigate={onNavigate}
         onOpenProduct={actions.openProductDetail}
@@ -1802,9 +1936,38 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
         loading={network.productDetailLoading}
         onAskAbout={actions.askCopilotAboutProduct}
         onBack={() => onNavigate('products')}
+        onCompare={actions.openProductCompare}
         onInvestigate={actions.startProductInvestigationFromWork}
         onOpenStore={actions.openStoreDetail}
         periodDays={periodDays}
+      />
+    )
+  }
+  if (activePage === 'compare-stores') {
+    return (
+      <StoreComparePage
+        baseline={network.storeDetail}
+        compare={network.compareStoreDetail}
+        compareError={network.compareStoreError}
+        compareLoading={network.compareStoreLoading}
+        onBack={() => onNavigate('store-detail')}
+        onPick={actions.pickStoreCompare}
+        periodDays={periodDays}
+        stores={network.stores}
+      />
+    )
+  }
+  if (activePage === 'compare-products') {
+    return (
+      <ProductComparePage
+        baseline={network.productDetail}
+        compare={network.compareProductDetail}
+        compareError={network.compareProductError}
+        compareLoading={network.compareProductLoading}
+        onBack={() => onNavigate('product-detail')}
+        onPick={actions.pickProductCompare}
+        periodDays={periodDays}
+        products={network.productMovers}
       />
     )
   }
@@ -1880,6 +2043,15 @@ export default function CciDashboard() {
   const [productDetail, setProductDetail] = useState(null)
   const [productDetailLoading, setProductDetailLoading] = useState(false)
   const [productDetailError, setProductDetailError] = useState('')
+
+  const [compareStore, setCompareStore] = useState(null)
+  const [compareStoreDetail, setCompareStoreDetail] = useState(null)
+  const [compareStoreLoading, setCompareStoreLoading] = useState(false)
+  const [compareStoreError, setCompareStoreError] = useState('')
+  const [compareProductName, setCompareProductName] = useState(null)
+  const [compareProductDetail, setCompareProductDetail] = useState(null)
+  const [compareProductLoading, setCompareProductLoading] = useState(false)
+  const [compareProductError, setCompareProductError] = useState('')
 
   const [investigations, setInvestigations] = useState([])
   const [fieldTasks, setFieldTasks] = useState([])
@@ -2016,6 +2188,45 @@ export default function CciDashboard() {
     return () => controller.abort()
   }, [credentials, selectedProductName, periodDays])
 
+  // Comparison mode's second side reuses the exact same detail fetch as the primary store/product
+  // detail pages - a difference is just arithmetic on two already-real numbers, so there is no
+  // separate comparison endpoint to call.
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.resolve().then(() => {
+      if (!credentials || !compareStore) { setCompareStoreDetail(null); return }
+      setCompareStoreLoading(true)
+      setCompareStoreError('')
+      fetchStoreDetail({ ...credentials, ...compareStore, periodDays, signal: controller.signal })
+        .then((result) => { if (!controller.signal.aborted) setCompareStoreDetail(result) })
+        .catch((requestError) => {
+          if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
+            setCompareStoreError(requestError?.message || 'Unable to load this store.')
+          }
+        })
+        .finally(() => { if (!controller.signal.aborted) setCompareStoreLoading(false) })
+    })
+    return () => controller.abort()
+  }, [credentials, compareStore, periodDays])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.resolve().then(() => {
+      if (!credentials || !compareProductName) { setCompareProductDetail(null); return }
+      setCompareProductLoading(true)
+      setCompareProductError('')
+      fetchProductDetail({ product: compareProductName, periodDays, ...credentials, signal: controller.signal })
+        .then((result) => { if (!controller.signal.aborted) setCompareProductDetail(result) })
+        .catch((requestError) => {
+          if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
+            setCompareProductError(requestError?.message || 'Unable to load this product.')
+          }
+        })
+        .finally(() => { if (!controller.signal.aborted) setCompareProductLoading(false) })
+    })
+    return () => controller.abort()
+  }, [credentials, compareProductName, periodDays])
+
   function refresh() { setLoading(true); setError(''); setRefreshKey((value) => value + 1) }
   async function signIn(accountCredentials) {
     setData(null)
@@ -2041,6 +2252,8 @@ export default function CciDashboard() {
     setPeriodDays(DEFAULT_NETWORK_PERIOD_DAYS)
     setSelectedStore(null); setStoreDetail(null); setStoreDetailError('')
     setSelectedProductName(null); setProductDetail(null); setProductDetailError('')
+    setCompareStore(null); setCompareStoreDetail(null); setCompareStoreError('')
+    setCompareProductName(null); setCompareProductDetail(null); setCompareProductError('')
   }
   async function changeCommercialRole(nextRole) {
     const previous = commercialRole
@@ -2096,6 +2309,10 @@ export default function CciDashboard() {
     },
     openStoreDetail: (store) => { setSelectedStore({ retailerCode: store.retailerCode, externalStoreId: store.externalStoreId }); setActivePage('store-detail') },
     openProductDetail: (productName) => { setSelectedProductName(productName); setActivePage('product-detail') },
+    openStoreCompare: () => { setCompareStore(null); setCompareStoreDetail(null); setActivePage('compare-stores') },
+    openProductCompare: () => { setCompareProductName(null); setCompareProductDetail(null); setActivePage('compare-products') },
+    pickStoreCompare: (store) => setCompareStore({ retailerCode: store.retailerCode, externalStoreId: store.externalStoreId }),
+    pickProductCompare: (product) => setCompareProductName(product.productName),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [credentials])
 
@@ -2157,6 +2374,8 @@ export default function CciDashboard() {
             loading: networkLoading, error: networkError,
             storeDetail, storeDetailLoading, storeDetailError,
             productDetail, productDetailLoading, productDetailError,
+            compareStoreDetail, compareStoreLoading, compareStoreError,
+            compareProductDetail, compareProductLoading, compareProductError,
           }}
           onNavigate={setActivePage}
           onPeriodChange={setPeriodDays}

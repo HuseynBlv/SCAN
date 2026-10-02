@@ -471,6 +471,7 @@
 
 .cci-back-link { margin-bottom: 4px; }
 .cci-detail-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.cci-compare-search { width: 100%; min-height: 42px; margin-bottom: 14px; padding: 9px 12px; border: 1px solid var(--scan-border); border-radius: 6px; background: #fff; color: var(--scan-ink); font-size: .82rem; }
 
 @media (max-width: 900px) {
   .cci-table-filters { flex-direction: column; }

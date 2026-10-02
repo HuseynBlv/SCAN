@@ -288,6 +288,43 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'Every store in the network, ranked.' })).toBeInTheDocument()
   })
 
+  it('compares two real stores side by side', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchNetworkStores.mockResolvedValue([
+      { retailerCode: 'DEMO', externalStoreId: 'STORE-01', recentBaskets: 50, recentCciBaskets: 10, recentPenetrationPct: 20, priorBaskets: 50, priorCciBaskets: 15, priorPenetrationPct: 30, penetrationPointChange: -10, status: 'NEEDS_ATTENTION' },
+      { retailerCode: 'DEMO', externalStoreId: 'STORE-02', recentBaskets: 40, recentCciBaskets: 16, recentPenetrationPct: 40, priorBaskets: 40, priorCciBaskets: 12, priorPenetrationPct: 30, penetrationPointChange: 10, status: 'IMPROVING' },
+    ])
+    const storeDetails = {
+      'STORE-01': {
+        retailerCode: 'DEMO', externalStoreId: 'STORE-01', storeName: 'Corner Market', periodDays: 30,
+        recentBaskets: 50, recentCciBaskets: 10, recentPenetrationPct: 20, priorBaskets: 50, priorCciBaskets: 15,
+        priorPenetrationPct: 30, penetrationPointChange: -10, status: 'NEEDS_ATTENTION',
+        topProducts: [], biggestChanges: [], topCompanionCategories: [], dataCoveragePct: 95, similarStores: [],
+      },
+      'STORE-02': {
+        retailerCode: 'DEMO', externalStoreId: 'STORE-02', storeName: 'Riverside Shop', periodDays: 30,
+        recentBaskets: 40, recentCciBaskets: 16, recentPenetrationPct: 40, priorBaskets: 40, priorCciBaskets: 12,
+        priorPenetrationPct: 30, penetrationPointChange: 10, status: 'IMPROVING',
+        topProducts: [], biggestChanges: [], topCompanionCategories: [], dataCoveragePct: 90, similarStores: [],
+      },
+    }
+    fetchStoreDetail.mockImplementation(({ externalStoreId }) => Promise.resolve(storeDetails[externalStoreId]))
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Stores' })[0])
+    await user.click(await screen.findByRole('button', { name: 'STORE-01' }))
+    await screen.findByRole('heading', { name: 'Corner Market' })
+
+    await user.click(screen.getByRole('button', { name: 'Compare this store' }))
+    expect(await screen.findByRole('heading', { name: 'Choose a store' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: /STORE-02/ }))
+
+    expect(fetchStoreDetail).toHaveBeenCalledWith(expect.objectContaining({ externalStoreId: 'STORE-02' }))
+    expect(await screen.findByRole('heading', { name: 'Corner Market vs. Riverside Shop' })).toBeInTheDocument()
+    expect(screen.getByText('-20pp')).toBeInTheDocument()
+  })
+
   it('drills from the Products list into a real product detail with store distribution', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
