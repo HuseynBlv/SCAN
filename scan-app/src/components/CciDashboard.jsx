@@ -1858,7 +1858,6 @@ export default function CciDashboard() {
           </>
         )}
         eyebrow="CCI commercial intelligence"
-        meta={<p>{credentials.retailerCode === 'KAGGLE' ? 'Demo retailer' : data.retailerName} · {data.retailerCode}</p>}
         title="SCAN commercial workspace"
       />
       {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" type="button" onClick={refresh}>Retry</button></div> : null}
