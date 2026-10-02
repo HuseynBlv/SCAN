@@ -126,6 +126,15 @@ export function askCopilot({
   });
 }
 
+// Product and general questions only - aggregated across every retailer this account can see,
+// with no retailerCode parameter. An investigation belongs to one retailer, so investigation
+// questions still go through askCopilot above.
+export function askNetworkCopilot({ contextType, subjectName, periodDays, question, username, password }) {
+  return request("POST", "/api/v1/network/copilot/ask", {
+    username, password, body: { contextType, subjectName, periodDays, question },
+  });
+}
+
 // --- Meeting briefs ---------------------------------------------------
 
 export function fetchMeetingBrief({ retailerCode, template, periodDays, username, password, signal }) {

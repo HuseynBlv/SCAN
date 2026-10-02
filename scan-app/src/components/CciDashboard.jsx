@@ -3,6 +3,7 @@ import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole a
 import {
   addInvestigationNote,
   askCopilot,
+  askNetworkCopilot,
   closeInvestigation,
   confirmHypothesis,
   createActivation,
@@ -2287,7 +2288,12 @@ export default function CciDashboard() {
     reopenInvestigation: (investigationId) => withReload(() => reopenInvestigation({ ...credentials, investigationId })),
     createFieldTask: (payload) => withReload(() => createFieldTask({ ...credentials, ...payload })),
     recordFieldTaskResult: (taskId, externalStoreId, result) => withReload(() => recordFieldTaskResult({ ...credentials, taskId, externalStoreId, ...result })),
-    askCopilot: (payload) => askCopilot({ ...credentials, ...payload }),
+    // An investigation belongs to one retailer, so that question still goes through the
+    // per-retailer endpoint; a product or general question is answered network-wide instead,
+    // using whichever retailer's workspace is currently open only to authenticate the request.
+    askCopilot: (payload) => (payload.contextType === 'INVESTIGATION'
+      ? askCopilot({ ...credentials, ...payload })
+      : askNetworkCopilot({ ...credentials, ...payload })),
     askCopilotAboutProduct: (productName) => { setCopilotContext({ contextType: 'PRODUCT', subjectName: productName }); setActivePage('copilot') },
     askCopilotAboutInvestigation: (investigationId) => { setCopilotContext({ contextType: 'INVESTIGATION', investigationId }); setActivePage('copilot') },
     prepareBrief: (template) => fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),

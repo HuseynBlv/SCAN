@@ -214,6 +214,33 @@ class NetworkAnalyticsServiceTest {
     }
 
     @Test
+    void computesANetworkWideProductChangeWithRealAvailabilityAndConcentrationSignals() {
+        importDecliningSpriteAcrossTwoRetailers();
+
+        var change = networkAnalyticsService.productChange(List.of(retailerA, retailerB), "Sprite 500ml", PERIOD_DAYS);
+
+        assertThat(change.recentBaskets()).isEqualTo(6);
+        assertThat(change.priorBaskets()).isEqualTo(12);
+        assertThat(change.basketChangePct()).isEqualTo(-50.0);
+
+        // Store A (NET-A/A-STORE-1) dropped from 6 Sprite baskets to 0 while its total basket
+        // volume held steady - a real availability signal, not a store that simply closed.
+        assertThat(change.availabilitySignal()).isTrue();
+        assertThat(change.availabilityEvidence()).contains("NET-A/A-STORE-1");
+        // The entire decline is concentrated in that one store.
+        assertThat(change.concentrationSignal()).isTrue();
+        assertThat(change.concentrationEvidence()).contains("NET-A/A-STORE-1");
+
+        var storeA = change.storeContributions().stream()
+            .filter(c -> c.externalStoreId().equals("NET-A/A-STORE-1")).findFirst().orElseThrow();
+        assertThat(storeA.recentPenetrationPct()).isEqualTo(0.0);
+        assertThat(storeA.priorPenetrationPct()).isEqualTo(60.0);
+        var storeB = change.storeContributions().stream()
+            .filter(c -> c.externalStoreId().equals("NET-B/B-STORE-1")).findFirst().orElseThrow();
+        assertThat(storeB.basketDelta()).isEqualTo(0);
+    }
+
+    @Test
     void buildsAStoreDetailFromTheSameRealNumbersTheRankingUses() {
         importDecliningSpriteAcrossTwoRetailers();
 
