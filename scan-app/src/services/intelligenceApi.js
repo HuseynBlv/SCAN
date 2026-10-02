@@ -197,3 +197,11 @@ export function fetchNetworkCategoryMovers({ periodDays, limit, username, passwo
 export function fetchNetworkBrief({ periodDays, username, password, signal }) {
   return request("GET", `/api/v1/network/brief${query({ periodDays })}`, { username, password, signal });
 }
+
+export function fetchStoreDetail({ retailerCode, externalStoreId, periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/network/stores/detail${query({ retailerCode, externalStoreId, periodDays })}`, { username, password, signal });
+}
+
+export function fetchProductDetail({ product, periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/network/products/detail${query({ product, periodDays })}`, { username, password, signal });
+}

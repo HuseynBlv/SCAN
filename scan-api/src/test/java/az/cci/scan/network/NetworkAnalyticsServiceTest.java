@@ -8,6 +8,8 @@ import az.cci.scan.intelligence.ChangeDetectionDtos.ProductMover;
 import az.cci.scan.network.NetworkDtos.BriefItem;
 import az.cci.scan.network.NetworkDtos.CategoryMover;
 import az.cci.scan.network.NetworkDtos.NetworkOverview;
+import az.cci.scan.network.NetworkDtos.ProductDetail;
+import az.cci.scan.network.NetworkDtos.StoreDetail;
 import az.cci.scan.network.NetworkDtos.StoreRanking;
 import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.CanonicalProductRepository;
@@ -209,6 +211,75 @@ class NetworkAnalyticsServiceTest {
         BriefItem decline = brief.stream().filter(item -> "IMPORTANT".equals(item.type())).findFirst().orElseThrow();
         assertThat(decline.description()).contains("50%").contains("1 stores");
         assertThat(decline.actionTarget()).isEqualTo("Sprite 500ml");
+    }
+
+    @Test
+    void buildsAStoreDetailFromTheSameRealNumbersTheRankingUses() {
+        importDecliningSpriteAcrossTwoRetailers();
+
+        StoreDetail detail = networkAnalyticsService.storeDetail(
+            List.of(retailerA, retailerB), retailerA, "A-STORE-1", PERIOD_DAYS
+        );
+
+        assertThat(detail.retailerCode()).isEqualTo("NET-A");
+        assertThat(detail.externalStoreId()).isEqualTo("A-STORE-1");
+        assertThat(detail.recentBaskets()).isEqualTo(10);
+        assertThat(detail.recentCciBaskets()).isEqualTo(0);
+        assertThat(detail.recentPenetrationPct()).isEqualTo(0.0);
+        assertThat(detail.priorBaskets()).isEqualTo(10);
+        assertThat(detail.priorCciBaskets()).isEqualTo(6);
+        assertThat(detail.priorPenetrationPct()).isEqualTo(60.0);
+        assertThat(detail.penetrationPointChange()).isEqualTo(-60.0);
+        assertThat(detail.status()).isEqualTo("NEEDS_ATTENTION");
+
+        // Recent window has zero Sprite baskets at this store, so there is no current CCI product
+        // to rank - the real biggest change is Sprite going from 6 prior baskets to 0.
+        assertThat(detail.topProducts()).isEmpty();
+        assertThat(detail.biggestChanges()).hasSize(1);
+        assertThat(detail.biggestChanges().get(0).productName()).isEqualTo("Sprite 500ml");
+        assertThat(detail.biggestChanges().get(0).basketChangePct()).isEqualTo(-100.0);
+
+        // Only one other store exists in this account's network (NET-B), so it is the one and only
+        // "similar store" - a real comparison, not a padded list.
+        assertThat(detail.similarStores()).hasSize(1);
+        assertThat(detail.similarStores().get(0).retailerCode()).isEqualTo("NET-B");
+    }
+
+    @Test
+    void buildsAProductDetailAcrossBothRetailersWithPerStoreDistributionAndDaypart() {
+        importDecliningSpriteAcrossTwoRetailers();
+
+        ProductDetail detail = networkAnalyticsService.productDetail(
+            List.of(retailerA, retailerB), "Sprite 500ml", PERIOD_DAYS
+        );
+
+        assertThat(detail.recentBaskets()).isEqualTo(6);
+        assertThat(detail.priorBaskets()).isEqualTo(12);
+        assertThat(detail.basketChangePct()).isEqualTo(-50.0);
+        assertThat(detail.category()).isEqualTo("Beverages");
+
+        assertThat(detail.storeDistribution()).hasSize(2);
+        var storeB = detail.storeDistribution().stream()
+            .filter(row -> row.retailerCode().equals("NET-B")).findFirst().orElseThrow();
+        assertThat(storeB.recentBaskets()).isEqualTo(6);
+        assertThat(storeB.priorBaskets()).isEqualTo(6);
+        assertThat(storeB.basketChangePct()).isEqualTo(0.0);
+        var storeA = detail.storeDistribution().stream()
+            .filter(row -> row.retailerCode().equals("NET-A")).findFirst().orElseThrow();
+        assertThat(storeA.recentBaskets()).isEqualTo(0);
+        assertThat(storeA.priorBaskets()).isEqualTo(6);
+        assertThat(storeA.basketChangePct()).isEqualTo(-100.0);
+        // Sorted by current basket volume - the store that still sells it leads.
+        assertThat(detail.storeDistribution().get(0).retailerCode()).isEqualTo("NET-B");
+
+        // Every Sprite receipt in this fixture has exactly one line, so no real companion exists.
+        assertThat(detail.companionProducts()).isEmpty();
+        assertThat(detail.companionCategories()).isEmpty();
+
+        // All 6 recent-window Sprite receipts happen at noon, well past the 5-receipt support
+        // floor, so a real strongest daypart is named rather than left null.
+        assertThat(detail.strongestDaypart()).isEqualTo("MIDDAY");
+        assertThat(detail.strongestDaypartSharePct()).isEqualTo(100.0);
     }
 
     /**

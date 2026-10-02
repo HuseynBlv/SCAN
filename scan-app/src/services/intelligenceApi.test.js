@@ -8,6 +8,8 @@ import {
   fetchNetworkBrief,
   fetchNetworkOverview,
   fetchNetworkStores,
+  fetchProductDetail,
+  fetchStoreDetail,
   followProduct,
   openProductInvestigation,
   recordFieldTaskResult,
@@ -149,5 +151,16 @@ describe('intelligenceApi', () => {
 
     await fetchNetworkBrief({ periodDays: 7, username: 'cci', password: 'secret' })
     expect(fetchMock.mock.calls[2][0]).toBe('/api/v1/network/brief?periodDays=7')
+  })
+
+  it('fetches store and product detail with the drill-down identifiers as query params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, status: 200, body: {} }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchStoreDetail({ retailerCode: 'DEMO', externalStoreId: 'STORE 01/A', periodDays: 30, username: 'cci', password: 'secret' })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/network/stores/detail?retailerCode=DEMO&externalStoreId=STORE+01%2FA&periodDays=30')
+
+    await fetchProductDetail({ product: 'Sprite 500ml', periodDays: 30, username: 'cci', password: 'secret' })
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/network/products/detail?product=Sprite+500ml&periodDays=30')
   })
 })

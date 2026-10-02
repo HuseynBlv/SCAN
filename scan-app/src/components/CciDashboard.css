@@ -469,6 +469,9 @@
 .cci-insight-card p { margin: 0; color: var(--scan-muted); font-size: .84rem; line-height: 1.55; }
 .cci-insight-card button { justify-self: flex-start; }
 
+.cci-back-link { margin-bottom: 4px; }
+.cci-detail-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
 @media (max-width: 900px) {
   .cci-table-filters { flex-direction: column; }
   .cci-table-filters input { min-width: 0; }
