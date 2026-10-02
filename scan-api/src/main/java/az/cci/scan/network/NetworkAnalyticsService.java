@@ -1,18 +1,28 @@
 package az.cci.scan.network;
 
 import az.cci.scan.domain.Retailer;
+import az.cci.scan.domain.Store;
 import az.cci.scan.intelligence.ChangeDetectionDtos.ProductMover;
 import az.cci.scan.network.NetworkDtos.BriefItem;
 import az.cci.scan.network.NetworkDtos.CategoryMover;
+import az.cci.scan.network.NetworkDtos.NamedBasketCount;
 import az.cci.scan.network.NetworkDtos.NetworkOverview;
+import az.cci.scan.network.NetworkDtos.ProductDetail;
+import az.cci.scan.network.NetworkDtos.ProductStoreDistribution;
+import az.cci.scan.network.NetworkDtos.StoreDetail;
+import az.cci.scan.network.NetworkDtos.StoreProduct;
 import az.cci.scan.network.NetworkDtos.StoreRanking;
 import az.cci.scan.network.NetworkQueryRepository.NetworkBasketRow;
 import az.cci.scan.network.NetworkQueryRepository.NetworkProductPresenceRow;
 import az.cci.scan.network.NetworkQueryRepository.NetworkProductRow;
+import az.cci.scan.network.NetworkQueryRepository.ProductReceiptRow;
+import az.cci.scan.repository.StoreRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,9 +54,11 @@ public class NetworkAnalyticsService {
     private static final int STORE_CONCENTRATION_LIMIT = 3;
 
     private final NetworkQueryRepository queryRepository;
+    private final StoreRepository storeRepository;
 
-    NetworkAnalyticsService(NetworkQueryRepository queryRepository) {
+    NetworkAnalyticsService(NetworkQueryRepository queryRepository, StoreRepository storeRepository) {
         this.queryRepository = queryRepository;
+        this.storeRepository = storeRepository;
     }
 
     public NetworkOverview overview(List<Retailer> retailers, int periodDays) {
@@ -145,6 +157,177 @@ public class NetworkAnalyticsService {
         }
         movers.sort(Comparator.comparingDouble((CategoryMover m) -> Math.abs(m.basketChangePct())).reversed());
         return movers.stream().limit(limit).toList();
+    }
+
+    /**
+     * One store's full real picture: its own penetration/trend (from the same basket rows
+     * {@link #storeRanking} uses, filtered to this one store), what it sells, what moved, whether
+     * its data can be trusted, and a few real stores with the closest current penetration for
+     * "compare with similar stores" - never a fabricated "similar" claim.
+     */
+    public StoreDetail storeDetail(List<Retailer> retailers, Retailer targetRetailer, String externalStoreId, int periodDays) {
+        List<UUID> retailerIds = ids(retailers);
+        Window window = resolveWindow(retailerIds, periodDays);
+        UUID retailerId = targetRetailer.getId();
+        String retailerCode = targetRetailer.getCode();
+
+        List<NetworkBasketRow> recentBaskets = queryRepository
+            .basketsInRange(List.of(retailerId), window.recentStart(), window.recentEnd()).stream()
+            .filter(row -> row.externalStoreId().equals(externalStoreId)).toList();
+        List<NetworkBasketRow> priorBaskets = queryRepository
+            .basketsInRange(List.of(retailerId), window.priorStart(), window.priorEnd()).stream()
+            .filter(row -> row.externalStoreId().equals(externalStoreId)).toList();
+
+        long recentTotal = recentBaskets.size();
+        long recentCci = recentBaskets.stream().filter(NetworkBasketRow::containsCci).count();
+        long priorTotal = priorBaskets.size();
+        long priorCci = priorBaskets.stream().filter(NetworkBasketRow::containsCci).count();
+        double recentPct = pct(recentCci, recentTotal);
+        double priorPct = pct(priorCci, priorTotal);
+        double change = recentPct - priorPct;
+        String status = recentTotal == 0 ? "NOT_REPORTING"
+            : change <= STORE_NEEDS_ATTENTION_POINTS ? "NEEDS_ATTENTION"
+            : change >= STORE_IMPROVING_POINTS ? "IMPROVING"
+            : "STABLE";
+
+        List<NetworkProductRow> recentProducts = queryRepository.cciProductMetricsForStoreInRange(
+            retailerId, externalStoreId, window.recentStart(), window.recentEnd());
+        List<NetworkProductRow> priorProducts = queryRepository.cciProductMetricsForStoreInRange(
+            retailerId, externalStoreId, window.priorStart(), window.priorEnd());
+
+        List<StoreProduct> topProducts = recentProducts.stream()
+            .map(row -> new StoreProduct(row.product(), row.category(), row.basketCount(), row.quantity(), row.revenue()))
+            .toList();
+
+        Map<String, NetworkProductRow> recentByName = recentProducts.stream()
+            .collect(Collectors.toMap(NetworkProductRow::product, row -> row, (a, b) -> a));
+        List<ProductMover> biggestChanges = new ArrayList<>();
+        for (NetworkProductRow prior : priorProducts) {
+            if (prior.basketCount() < MIN_SAMPLE_FOR_TREND) continue;
+            NetworkProductRow recent = recentByName.get(prior.product());
+            long recentCount = recent == null ? 0 : recent.basketCount();
+            BigDecimal recentRevenue = recent == null ? BigDecimal.ZERO : recent.revenue();
+            double changePct = 100.0 * (recentCount - prior.basketCount()) / (double) prior.basketCount();
+            biggestChanges.add(new ProductMover(prior.product(), prior.category(), recentCount, prior.basketCount(), recentRevenue, prior.revenue(), changePct));
+        }
+        biggestChanges.sort(Comparator.comparingDouble((ProductMover mover) -> Math.abs(mover.basketChangePct())).reversed());
+
+        List<NamedBasketCount> topCompanionCategories = queryRepository
+            .companionCategoriesForStoreInRange(retailerId, externalStoreId, window.recentStart(), window.recentEnd())
+            .stream()
+            .map(row -> new NamedBasketCount(row.label(), row.basketCount()))
+            .toList();
+
+        var lineStats = queryRepository.lineStatsForStore(retailerId, externalStoreId);
+        double dataCoverage = pct(lineStats.mappedLines(), lineStats.totalLines());
+
+        List<StoreRanking> similarStores = storeRanking(retailers, periodDays).stream()
+            .filter(row -> !(row.retailerCode().equals(retailerCode) && row.externalStoreId().equals(externalStoreId)))
+            .sorted(Comparator.comparingDouble(row -> Math.abs(row.recentPenetrationPct() - recentPct)))
+            .limit(3)
+            .toList();
+
+        String storeName = storeRepository.findByRetailerAndExternalStoreId(targetRetailer, externalStoreId)
+            .map(Store::getName)
+            .orElse(externalStoreId);
+
+        return new StoreDetail(
+            retailerCode, externalStoreId, storeName, periodDays,
+            recentTotal, recentCci, recentPct, priorTotal, priorCci, priorPct, change, status,
+            topProducts, biggestChanges, topCompanionCategories, dataCoverage, similarStores
+        );
+    }
+
+    /**
+     * One CCI product's full real picture across the whole network: its trend, every store that
+     * carries it (the frontend sorts this one list two ways for "best"/"weakest", rather than this
+     * method prescribing an order), what it's bought alongside, and - only when the sample
+     * actually supports a claim - its strongest daypart.
+     */
+    public ProductDetail productDetail(List<Retailer> retailers, String productName, int periodDays) {
+        List<UUID> retailerIds = ids(retailers);
+        Window window = resolveWindow(retailerIds, periodDays);
+
+        List<NetworkProductRow> recentAll = queryRepository.cciProductMetricsInRange(retailerIds, window.recentStart(), window.recentEnd());
+        List<NetworkProductRow> priorAll = queryRepository.cciProductMetricsInRange(retailerIds, window.priorStart(), window.priorEnd());
+        NetworkProductRow recent = recentAll.stream().filter(row -> row.product().equals(productName)).findFirst().orElse(null);
+        NetworkProductRow prior = priorAll.stream().filter(row -> row.product().equals(productName)).findFirst().orElse(null);
+
+        long recentBaskets = recent == null ? 0 : recent.basketCount();
+        long priorBaskets = prior == null ? 0 : prior.basketCount();
+        BigDecimal recentRevenue = recent == null ? BigDecimal.ZERO : recent.revenue();
+        BigDecimal priorRevenue = prior == null ? BigDecimal.ZERO : prior.revenue();
+        double changePct = priorBaskets == 0 ? 0.0 : 100.0 * (recentBaskets - priorBaskets) / (double) priorBaskets;
+        String category = recent != null ? recent.category() : prior != null ? prior.category() : "Unmapped";
+        String brand = recent != null ? recent.brand() : prior != null ? prior.brand() : "Unbranded";
+
+        List<NetworkProductPresenceRow> recentPresence = queryRepository.productStorePresenceInRange(
+            retailerIds, productName, window.recentStart(), window.recentEnd());
+        List<NetworkProductPresenceRow> priorPresence = queryRepository.productStorePresenceInRange(
+            retailerIds, productName, window.priorStart(), window.priorEnd());
+        Map<String, Long> recentByStore = groupDistinctReceipts(recentPresence);
+        Map<String, Long> priorByStore = groupDistinctReceipts(priorPresence);
+        java.util.Set<String> storeKeys = new java.util.LinkedHashSet<>();
+        storeKeys.addAll(recentByStore.keySet());
+        storeKeys.addAll(priorByStore.keySet());
+        List<ProductStoreDistribution> storeDistribution = storeKeys.stream()
+            .map(key -> {
+                String[] parts = key.split("/", 2);
+                long r = recentByStore.getOrDefault(key, 0L);
+                long p = priorByStore.getOrDefault(key, 0L);
+                double storeChangePct = p == 0 ? 0.0 : 100.0 * (r - p) / (double) p;
+                return new ProductStoreDistribution(parts[0], parts[1], r, p, storeChangePct);
+            })
+            .sorted(Comparator.comparingLong(ProductStoreDistribution::recentBaskets).reversed())
+            .toList();
+
+        List<NamedBasketCount> companionProducts = queryRepository
+            .companionProductsForProductInRange(retailerIds, productName, window.recentStart(), window.recentEnd())
+            .stream().map(row -> new NamedBasketCount(row.label(), row.basketCount())).toList();
+        List<NamedBasketCount> companionCategories = queryRepository
+            .companionCategoriesForProductInRange(retailerIds, productName, window.recentStart(), window.recentEnd())
+            .stream().map(row -> new NamedBasketCount(row.label(), row.basketCount())).toList();
+
+        Daypart strongestDaypart = strongestDaypart(retailerIds, productName, window);
+
+        return new ProductDetail(
+            productName, category, brand, periodDays,
+            recentBaskets, priorBaskets, changePct, recentRevenue, priorRevenue,
+            storeDistribution, companionProducts, companionCategories,
+            strongestDaypart == null ? null : strongestDaypart.name(),
+            strongestDaypart == null ? 0.0 : strongestDaypart.sharePct()
+        );
+    }
+
+    /** Only claims a daypart when there are enough distinct receipts to support it - otherwise
+     * returns null rather than naming a daypart off a handful of receipts. */
+    private Daypart strongestDaypart(List<UUID> retailerIds, String productName, Window window) {
+        List<ProductReceiptRow> rows = queryRepository.productReceiptTimestampsInRange(
+            retailerIds, productName, window.recentStart(), window.recentEnd());
+        if (rows.size() < MIN_SAMPLE_FOR_TREND) return null;
+        Map<String, Long> counts = new HashMap<>();
+        for (ProductReceiptRow row : rows) {
+            ZoneId zone = ZoneId.of(row.zoneId());
+            ZonedDateTime local = row.transactionTimestamp().atZone(zone);
+            counts.merge(daypart(local), 1L, Long::sum);
+        }
+        return counts.entrySet().stream()
+            .max(Map.Entry.comparingByValue())
+            .map(entry -> new Daypart(entry.getKey(), pct(entry.getValue(), rows.size())))
+            .orElse(null);
+    }
+
+    // Same hour buckets AnalyticsService already uses for the single-retailer daypart view.
+    private static String daypart(ZonedDateTime timestamp) {
+        int hour = timestamp.getHour();
+        if (hour >= 6 && hour < 11) return "MORNING";
+        if (hour >= 11 && hour < 15) return "MIDDAY";
+        if (hour >= 15 && hour < 18) return "AFTERNOON";
+        if (hour >= 18 && hour < 22) return "EVENING";
+        return "NIGHT";
+    }
+
+    private record Daypart(String name, double sharePct) {
     }
 
     /**

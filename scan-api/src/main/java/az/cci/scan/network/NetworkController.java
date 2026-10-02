@@ -6,6 +6,8 @@ import az.cci.scan.intelligence.ChangeDetectionDtos.ProductMover;
 import az.cci.scan.network.NetworkDtos.BriefItem;
 import az.cci.scan.network.NetworkDtos.CategoryMover;
 import az.cci.scan.network.NetworkDtos.NetworkOverview;
+import az.cci.scan.network.NetworkDtos.ProductDetail;
+import az.cci.scan.network.NetworkDtos.StoreDetail;
 import az.cci.scan.network.NetworkDtos.StoreRanking;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -78,6 +80,30 @@ public class NetworkController {
         Authentication authentication
     ) {
         return networkAnalyticsService.commercialBrief(retailers(authentication), periodDays);
+    }
+
+    // retailerCode + externalStoreId are query params, not path segments: an external store id can
+    // legitimately contain a "/" (seen in real retailer exports), which would otherwise break path
+    // matching or require fragile encoding on the frontend.
+    @GetMapping("/stores/detail")
+    public StoreDetail storeDetail(
+        @RequestParam String retailerCode,
+        @RequestParam String externalStoreId,
+        @RequestParam(defaultValue = "" + DEFAULT_PERIOD_DAYS) int periodDays,
+        Authentication authentication
+    ) {
+        List<Retailer> retailers = retailers(authentication);
+        Retailer target = tenantAccess.cciRetailer(authentication, retailerCode);
+        return networkAnalyticsService.storeDetail(retailers, target, externalStoreId, periodDays);
+    }
+
+    @GetMapping("/products/detail")
+    public ProductDetail productDetail(
+        @RequestParam String product,
+        @RequestParam(defaultValue = "" + DEFAULT_PERIOD_DAYS) int periodDays,
+        Authentication authentication
+    ) {
+        return networkAnalyticsService.productDetail(retailers(authentication), product, periodDays);
     }
 
     private List<Retailer> retailers(Authentication authentication) {

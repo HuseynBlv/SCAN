@@ -17,6 +17,8 @@ import {
   fetchNetworkOverview,
   fetchNetworkProductMovers,
   fetchNetworkStores,
+  fetchProductDetail,
+  fetchStoreDetail,
   fetchWatchlist,
   fetchWatchlistChanges,
   followProduct,
@@ -1223,7 +1225,7 @@ function BiggestMovers({ productMovers, storeMovers, categoryMovers, onOpenProdu
   )
 }
 
-function StorePerformancePreview({ stores, onNavigate }) {
+function StorePerformancePreview({ stores, onNavigate, onOpenStore }) {
   const top = stores.slice(0, 5)
   return (
     <ChartPanel action={<button className="scan-link-button" onClick={() => onNavigate('stores')} type="button">View all stores →</button>} description="Ranked by CCI penetration across the network." title="Store performance">
@@ -1233,7 +1235,7 @@ function StorePerformancePreview({ stores, onNavigate }) {
             <thead><tr><th>Store</th><th>CCI penetration</th><th>Change</th><th>CCI baskets</th><th>Status</th></tr></thead>
             <tbody>
               {top.map((store) => (
-                <tr key={storeKey(store)}>
+                <tr className="cci-clickable-row" key={storeKey(store)} onClick={() => onOpenStore(store)}>
                   <td>{store.externalStoreId} <small>{store.retailerCode}</small></td>
                   <td>{decimal.format(store.recentPenetrationPct)}%</td>
                   <td className={store.penetrationPointChange >= 0 ? 'is-up' : 'is-down'}>{store.penetrationPointChange >= 0 ? '+' : ''}{decimal.format(store.penetrationPointChange)}pp</td>
@@ -1275,7 +1277,7 @@ function ProductPerformancePreview({ products, onNavigate, onOpenProduct }) {
 
 function OverviewPage({
   overview, stores, productMovers, categoryMovers, brief, loading, error,
-  periodDays, onPeriodChange, onNavigate, onBriefAction, onAskAboutProduct, myWork,
+  periodDays, onPeriodChange, onNavigate, onBriefAction, onAskAboutProduct, onOpenStore, onOpenProduct, myWork,
 }) {
   const storeMovers = useMemo(
     () => [...stores].sort((a, b) => Math.abs(b.penetrationPointChange) - Math.abs(a.penetrationPointChange)),
@@ -1300,8 +1302,8 @@ function OverviewPage({
         <BiggestMovers categoryMovers={categoryMovers} onOpenProduct={onAskAboutProduct} productMovers={productMovers} storeMovers={storeMovers} />
       </div>
 
-      <StorePerformancePreview onNavigate={onNavigate} stores={stores} />
-      <ProductPerformancePreview onNavigate={onNavigate} onOpenProduct={onAskAboutProduct} products={productMovers} />
+      <StorePerformancePreview onNavigate={onNavigate} onOpenStore={onOpenStore} stores={stores} />
+      <ProductPerformancePreview onNavigate={onNavigate} onOpenProduct={onOpenProduct} products={productMovers} />
 
       {myWork}
     </div>
@@ -1352,7 +1354,7 @@ function sortStores(stores, sortBy) {
   return copy
 }
 
-function StoresPage({ stores, overview, loading, error, periodDays, onPeriodChange }) {
+function StoresPage({ stores, overview, loading, error, periodDays, onPeriodChange, onOpenStore }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [sortBy, setSortBy] = useState('penetration')
@@ -1397,8 +1399,8 @@ function StoresPage({ stores, overview, loading, error, periodDays, onPeriodChan
             <thead><tr><th>Store</th><th>Retailer</th><th>CCI penetration</th><th>Change</th><th>CCI / total baskets</th><th>Status</th></tr></thead>
             <tbody>
               {sorted.map((store) => (
-                <tr key={storeKey(store)}>
-                  <td>{store.externalStoreId}</td>
+                <tr className="cci-clickable-row" key={storeKey(store)} onClick={() => onOpenStore(store)}>
+                  <td><button className="scan-link-button" onClick={(event) => { event.stopPropagation(); onOpenStore(store) }} type="button">{store.externalStoreId}</button></td>
                   <td>{store.retailerCode}</td>
                   <td>{decimal.format(store.recentPenetrationPct)}%</td>
                   <td className={store.penetrationPointChange >= 0 ? 'is-up' : 'is-down'}>{store.penetrationPointChange >= 0 ? '+' : ''}{decimal.format(store.penetrationPointChange)}pp</td>
@@ -1432,7 +1434,7 @@ function sortProducts(products, sortBy) {
   return copy
 }
 
-function ProductsPage({ products, loading, error, periodDays, onPeriodChange, onAskAbout, onInvestigate }) {
+function ProductsPage({ products, loading, error, periodDays, onPeriodChange, onAskAbout, onInvestigate, onOpenProduct }) {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('baskets')
   const [busyProduct, setBusyProduct] = useState(null)
@@ -1474,7 +1476,7 @@ function ProductsPage({ products, loading, error, periodDays, onPeriodChange, on
             <tbody>
               {sorted.map((product) => (
                 <tr key={product.productName}>
-                  <td>{product.productName}</td>
+                  <td><button className="scan-link-button" onClick={() => onOpenProduct(product.productName)} type="button">{product.productName}</button></td>
                   <td>{product.category || 'Uncategorized'}</td>
                   <td>{integer.format(product.recentBaskets)}</td>
                   <td className={product.basketChangePct >= 0 ? 'is-up' : 'is-down'}>{product.basketChangePct >= 0 ? '+' : ''}{decimal.format(product.basketChangePct)}%</td>
@@ -1488,6 +1490,192 @@ function ProductsPage({ products, loading, error, periodDays, onPeriodChange, on
           </table>
         </div>
       ) : <EmptyState title="No products match">Try a different search, or widen the period.</EmptyState>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Store detail / Product detail (drill-down from Stores/Products/Overview) */
+/* ------------------------------------------------------------------ */
+
+function DetailBackLink({ onBack, label }) {
+  return <button className="scan-text-link cci-back-link" onClick={onBack} type="button"><ScanIcon name="chevron" size={16} />{label}</button>
+}
+
+function StoreDetailPage({ detail, loading, error, periodDays, onBack, onOpenStore, onOpenProduct, onInvestigate, onNavigate }) {
+  const backLink = <DetailBackLink label="Back to stores" onBack={onBack} />
+  if (error) {
+    return <div className="scan-page-stack">{backLink}<div className="scan-inline-notice scan-inline-error" role="alert">{error}</div></div>
+  }
+  if (loading || !detail) {
+    return <div className="scan-page-stack">{backLink}<p className="cci-work-loading">Loading store…</p></div>
+  }
+
+  const items = [
+    { label: 'CCI penetration', value: `${decimal.format(detail.recentPenetrationPct)}%`, note: changeNote(detail.penetrationPointChange, 'pp') },
+    { label: 'CCI baskets', value: integer.format(detail.recentCciBaskets), note: `${integer.format(detail.recentBaskets)} total baskets` },
+    { label: 'Status', value: storeStatusLabel(detail.status), note: `Last ${periodDays} days` },
+    { label: 'Product mapping', value: `${decimal.format(detail.dataCoveragePct)}%`, note: detail.dataCoveragePct < 90 ? 'Interpret companion insights cautiously' : 'Coverage supports analysis' },
+  ]
+  const topDecline = detail.biggestChanges.find((mover) => mover.basketChangePct < 0)
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro aside={backLink} eyebrow={detail.retailerCode} title={detail.storeName} />
+      <MetricStrip items={items} label="Store KPIs" />
+
+      <div className="scan-two-column">
+        <ChartPanel description="Ranked by current basket volume at this store." title="Top CCI products">
+          {detail.topProducts.length ? (
+            <div className="scan-table-wrap">
+              <table className="scan-table">
+                <thead><tr><th>Product</th><th>Baskets</th><th>Quantity</th></tr></thead>
+                <tbody>
+                  {detail.topProducts.map((product) => (
+                    <tr key={product.product}>
+                      <td><button className="scan-link-button" onClick={() => onOpenProduct(product.product)} type="button">{product.product}</button></td>
+                      <td>{integer.format(product.basketCount)}</td>
+                      <td>{decimal.format(product.quantity)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <EmptyState compact title="No CCI products sold here recently">No CCI product appeared in this store&rsquo;s baskets in the last {periodDays} days.</EmptyState>}
+        </ChartPanel>
+        <ChartPanel description="Real product-level moves at this store vs. the previous period." title="Biggest changes">
+          {detail.biggestChanges.length ? (
+            <div className="scan-table-wrap">
+              <table className="scan-table">
+                <thead><tr><th>Product</th><th>Change</th><th /></tr></thead>
+                <tbody>
+                  {detail.biggestChanges.map((mover) => (
+                    <tr key={mover.productName}>
+                      <td><button className="scan-link-button" onClick={() => onOpenProduct(mover.productName)} type="button">{mover.productName}</button></td>
+                      <td className={mover.basketChangePct >= 0 ? 'is-up' : 'is-down'}>{mover.basketChangePct >= 0 ? '+' : ''}{decimal.format(mover.basketChangePct)}%</td>
+                      <td className="cci-table-actions"><button className="scan-button scan-button-light" onClick={() => onInvestigate(mover.productName)} type="button">Investigate</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <EmptyState compact title="No significant changes">No CCI product moved enough at this store to flag.</EmptyState>}
+        </ChartPanel>
+      </div>
+
+      <ChartPanel description="Non-CCI categories most often bought alongside CCI products here." title="Top companion categories">
+        {detail.topCompanionCategories.length ? (
+          <div className="cci-mover-list">
+            {detail.topCompanionCategories.map((category) => (
+              <div className="cci-mover-row" key={category.label}><div><strong>{category.label}</strong></div><span>{integer.format(category.basketCount)} baskets</span></div>
+            ))}
+          </div>
+        ) : <EmptyState compact title="Insufficient companion data">Mapped CCI and non-CCI products must occur in the same basket.</EmptyState>}
+      </ChartPanel>
+
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Compare with similar stores</h3><p>Other real stores with the closest current CCI penetration.</p></div></header>
+        {detail.similarStores.length ? (
+          <div className="scan-table-wrap">
+            <table className="scan-table">
+              <thead><tr><th>Store</th><th>Retailer</th><th>CCI penetration</th><th>Change</th></tr></thead>
+              <tbody>
+                {detail.similarStores.map((store) => (
+                  <tr className="cci-clickable-row" key={storeKey(store)} onClick={() => onOpenStore(store)}>
+                    <td>{store.externalStoreId}</td>
+                    <td>{store.retailerCode}</td>
+                    <td>{decimal.format(store.recentPenetrationPct)}%</td>
+                    <td className={store.penetrationPointChange >= 0 ? 'is-up' : 'is-down'}>{store.penetrationPointChange >= 0 ? '+' : ''}{decimal.format(store.penetrationPointChange)}pp</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyState compact title="No comparable stores yet">At least one other store is needed for a real comparison.</EmptyState>}
+      </section>
+
+      <div className="cci-detail-actions">
+        {topDecline ? <button className="scan-button scan-button-dark" onClick={() => onInvestigate(topDecline.productName)} type="button">Investigate {topDecline.productName} decline</button> : null}
+        <button className="scan-button scan-button-light" onClick={() => onNavigate('products')} type="button">View products →</button>
+      </div>
+    </div>
+  )
+}
+
+function ProductDetailPage({ detail, loading, error, periodDays, onBack, onOpenStore, onInvestigate, onAskAbout }) {
+  const backLink = <DetailBackLink label="Back to products" onBack={onBack} />
+  if (error) {
+    return <div className="scan-page-stack">{backLink}<div className="scan-inline-notice scan-inline-error" role="alert">{error}</div></div>
+  }
+  if (loading || !detail) {
+    return <div className="scan-page-stack">{backLink}<p className="cci-work-loading">Loading product…</p></div>
+  }
+
+  const items = [
+    { label: 'CCI baskets', value: integer.format(detail.recentBaskets), note: changeNote(detail.basketChangePct, '%') },
+    { label: 'Prior baskets', value: integer.format(detail.priorBaskets), note: `Last ${periodDays} days vs. previous` },
+    { label: 'Category', value: detail.category || 'Unmapped', note: detail.brand },
+    {
+      label: 'Strongest daypart',
+      value: detail.strongestDaypart ? humanize(detail.strongestDaypart) : 'Not enough data',
+      note: detail.strongestDaypart ? `${decimal.format(detail.strongestDaypartSharePct)}% of recent baskets` : 'Fewer than 5 receipts in this period',
+    },
+  ]
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro aside={backLink} eyebrow={detail.category || 'Unmapped'} title={detail.product} />
+      <MetricStrip items={items} label="Product KPIs" />
+
+      <section className="scan-panel">
+        <header className="scan-panel-header">
+          <div><h3>Store distribution</h3><p>Every store this product reaches, ranked by current basket volume.</p></div>
+        </header>
+        {detail.storeDistribution.length ? (
+          <div className="scan-table-wrap">
+            <table className="scan-table">
+              <thead><tr><th>Store</th><th>Retailer</th><th>Recent baskets</th><th>Prior baskets</th><th>Change</th></tr></thead>
+              <tbody>
+                {detail.storeDistribution.map((store) => (
+                  <tr className="cci-clickable-row" key={storeKey(store)} onClick={() => onOpenStore(store)}>
+                    <td>{store.externalStoreId}</td>
+                    <td>{store.retailerCode}</td>
+                    <td>{integer.format(store.recentBaskets)}</td>
+                    <td>{integer.format(store.priorBaskets)}</td>
+                    <td className={store.basketChangePct >= 0 ? 'is-up' : 'is-down'}>{store.basketChangePct >= 0 ? '+' : ''}{decimal.format(store.basketChangePct)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyState compact title="No store data yet">This product has not appeared in any store&rsquo;s baskets in either window.</EmptyState>}
+      </section>
+
+      <div className="scan-two-column">
+        <ChartPanel description="Other products bought in the same basket as this one." title="Companion products">
+          {detail.companionProducts.length ? (
+            <div className="cci-mover-list">
+              {detail.companionProducts.map((item) => (
+                <div className="cci-mover-row" key={item.label}><div><strong>{item.label}</strong></div><span>{integer.format(item.basketCount)} baskets</span></div>
+              ))}
+            </div>
+          ) : <EmptyState compact title="No real companion yet">Each basket containing this product only ever has this one line.</EmptyState>}
+        </ChartPanel>
+        <ChartPanel description="Non-CCI categories most often bought alongside this product." title="Companion categories">
+          {detail.companionCategories.length ? (
+            <div className="cci-mover-list">
+              {detail.companionCategories.map((item) => (
+                <div className="cci-mover-row" key={item.label}><div><strong>{item.label}</strong></div><span>{integer.format(item.basketCount)} baskets</span></div>
+              ))}
+            </div>
+          ) : <EmptyState compact title="No real companion yet">Each basket containing this product only ever has this one line.</EmptyState>}
+        </ChartPanel>
+      </div>
+
+      <div className="cci-detail-actions">
+        <button className="scan-button scan-button-dark" onClick={() => onInvestigate(detail.product)} type="button">Investigate this product</button>
+        <button className="scan-button scan-button-light" onClick={() => onAskAbout(detail.product)} type="button">Ask SCAN about this product</button>
+      </div>
     </div>
   )
 }
@@ -1569,6 +1757,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       <StoresPage
         error={network.error}
         loading={network.loading}
+        onOpenStore={actions.openStoreDetail}
         onPeriodChange={onPeriodChange}
         overview={network.overview}
         periodDays={periodDays}
@@ -1583,9 +1772,39 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
         loading={network.loading}
         onAskAbout={actions.askCopilotAboutProduct}
         onInvestigate={actions.startProductInvestigationFromWork}
+        onOpenProduct={actions.openProductDetail}
         onPeriodChange={onPeriodChange}
         periodDays={periodDays}
         products={network.productMovers}
+      />
+    )
+  }
+  if (activePage === 'store-detail') {
+    return (
+      <StoreDetailPage
+        detail={network.storeDetail}
+        error={network.storeDetailError}
+        loading={network.storeDetailLoading}
+        onBack={() => onNavigate('stores')}
+        onInvestigate={actions.startProductInvestigationFromWork}
+        onNavigate={onNavigate}
+        onOpenProduct={actions.openProductDetail}
+        onOpenStore={actions.openStoreDetail}
+        periodDays={periodDays}
+      />
+    )
+  }
+  if (activePage === 'product-detail') {
+    return (
+      <ProductDetailPage
+        detail={network.productDetail}
+        error={network.productDetailError}
+        loading={network.productDetailLoading}
+        onAskAbout={actions.askCopilotAboutProduct}
+        onBack={() => onNavigate('products')}
+        onInvestigate={actions.startProductInvestigationFromWork}
+        onOpenStore={actions.openStoreDetail}
+        periodDays={periodDays}
       />
     )
   }
@@ -1623,6 +1842,8 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       onAskAboutProduct={actions.askCopilotAboutProduct}
       onBriefAction={actions.handleBriefAction}
       onNavigate={onNavigate}
+      onOpenProduct={actions.openProductDetail}
+      onOpenStore={actions.openStoreDetail}
       onPeriodChange={onPeriodChange}
       overview={network.overview}
       periodDays={periodDays}
@@ -1650,6 +1871,15 @@ export default function CciDashboard() {
   const [networkBrief, setNetworkBrief] = useState([])
   const [networkLoading, setNetworkLoading] = useState(false)
   const [networkError, setNetworkError] = useState('')
+
+  const [selectedStore, setSelectedStore] = useState(null)
+  const [storeDetail, setStoreDetail] = useState(null)
+  const [storeDetailLoading, setStoreDetailLoading] = useState(false)
+  const [storeDetailError, setStoreDetailError] = useState('')
+  const [selectedProductName, setSelectedProductName] = useState(null)
+  const [productDetail, setProductDetail] = useState(null)
+  const [productDetailLoading, setProductDetailLoading] = useState(false)
+  const [productDetailError, setProductDetailError] = useState('')
 
   const [investigations, setInvestigations] = useState([])
   const [fieldTasks, setFieldTasks] = useState([])
@@ -1747,6 +1977,45 @@ export default function CciDashboard() {
     return () => controller.abort()
   }, [credentials, periodDays, refreshKey, loadNetwork])
 
+  // Store/product detail are fetched on demand (not part of the list payloads above) - only while
+  // a row is actually open, and aborted/discarded if the user picks a different one before it
+  // resolves or signs out.
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.resolve().then(() => {
+      if (!credentials || !selectedStore) { setStoreDetail(null); return }
+      setStoreDetailLoading(true)
+      setStoreDetailError('')
+      fetchStoreDetail({ ...credentials, ...selectedStore, periodDays, signal: controller.signal })
+        .then((result) => { if (!controller.signal.aborted) setStoreDetail(result) })
+        .catch((requestError) => {
+          if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
+            setStoreDetailError(requestError?.message || 'Unable to load this store.')
+          }
+        })
+        .finally(() => { if (!controller.signal.aborted) setStoreDetailLoading(false) })
+    })
+    return () => controller.abort()
+  }, [credentials, selectedStore, periodDays])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.resolve().then(() => {
+      if (!credentials || !selectedProductName) { setProductDetail(null); return }
+      setProductDetailLoading(true)
+      setProductDetailError('')
+      fetchProductDetail({ product: selectedProductName, periodDays, ...credentials, signal: controller.signal })
+        .then((result) => { if (!controller.signal.aborted) setProductDetail(result) })
+        .catch((requestError) => {
+          if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
+            setProductDetailError(requestError?.message || 'Unable to load this product.')
+          }
+        })
+        .finally(() => { if (!controller.signal.aborted) setProductDetailLoading(false) })
+    })
+    return () => controller.abort()
+  }, [credentials, selectedProductName, periodDays])
+
   function refresh() { setLoading(true); setError(''); setRefreshKey((value) => value + 1) }
   async function signIn(accountCredentials) {
     setData(null)
@@ -1770,6 +2039,8 @@ export default function CciDashboard() {
     setNetworkOverview(null); setNetworkStores([]); setNetworkProductMovers([])
     setNetworkCategoryMovers([]); setNetworkBrief([]); setNetworkError('')
     setPeriodDays(DEFAULT_NETWORK_PERIOD_DAYS)
+    setSelectedStore(null); setStoreDetail(null); setStoreDetailError('')
+    setSelectedProductName(null); setProductDetail(null); setProductDetailError('')
   }
   async function changeCommercialRole(nextRole) {
     const previous = commercialRole
@@ -1823,6 +2094,8 @@ export default function CciDashboard() {
         setActivePage('investigate')
       }
     },
+    openStoreDetail: (store) => { setSelectedStore({ retailerCode: store.retailerCode, externalStoreId: store.externalStoreId }); setActivePage('store-detail') },
+    openProductDetail: (productName) => { setSelectedProductName(productName); setActivePage('product-detail') },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [credentials])
 
@@ -1882,6 +2155,8 @@ export default function CciDashboard() {
             overview: networkOverview, stores: networkStores, productMovers: networkProductMovers,
             categoryMovers: networkCategoryMovers, brief: networkBrief,
             loading: networkLoading, error: networkError,
+            storeDetail, storeDetailLoading, storeDetailError,
+            productDetail, productDetailLoading, productDetailError,
           }}
           onNavigate={setActivePage}
           onPeriodChange={setPeriodDays}

@@ -17,6 +17,8 @@ import {
   fetchNetworkOverview,
   fetchNetworkProductMovers,
   fetchNetworkStores,
+  fetchProductDetail,
+  fetchStoreDetail,
   fetchWatchlist,
   fetchWatchlistChanges,
   followProduct,
@@ -65,6 +67,8 @@ vi.mock('../services/intelligenceApi', () => ({
   fetchNetworkProductMovers: vi.fn(),
   fetchNetworkCategoryMovers: vi.fn(),
   fetchNetworkBrief: vi.fn(),
+  fetchStoreDetail: vi.fn(),
+  fetchProductDetail: vi.fn(),
 }))
 
 const overview = {
@@ -160,6 +164,8 @@ function mockIntelligenceDefaults() {
   fetchNetworkProductMovers.mockReset().mockResolvedValue([])
   fetchNetworkCategoryMovers.mockReset().mockResolvedValue([])
   fetchNetworkBrief.mockReset().mockResolvedValue([])
+  fetchStoreDetail.mockReset()
+  fetchProductDetail.mockReset()
 }
 
 async function signIn(user) {
@@ -251,6 +257,64 @@ describe('CciDashboard', () => {
       'The username or password is incorrect.',
     )
     expect(screen.getByLabelText('Password')).toHaveValue('')
+  })
+
+  it('drills from the Stores list into a real store detail and back', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchNetworkStores.mockResolvedValue([
+      { retailerCode: 'DEMO', externalStoreId: 'STORE-01', recentBaskets: 50, recentCciBaskets: 10, recentPenetrationPct: 20, priorBaskets: 50, priorCciBaskets: 15, priorPenetrationPct: 30, penetrationPointChange: -10, status: 'NEEDS_ATTENTION' },
+    ])
+    fetchStoreDetail.mockResolvedValue({
+      retailerCode: 'DEMO', externalStoreId: 'STORE-01', storeName: 'Corner Market', periodDays: 30,
+      recentBaskets: 50, recentCciBaskets: 10, recentPenetrationPct: 20, priorBaskets: 50, priorCciBaskets: 15,
+      priorPenetrationPct: 30, penetrationPointChange: -10, status: 'NEEDS_ATTENTION',
+      topProducts: [{ product: 'Sprite 500ml', category: 'Beverages', basketCount: 8, quantity: 8, revenue: 20 }],
+      biggestChanges: [{ productName: 'Sprite 500ml', category: 'Beverages', recentBaskets: 8, priorBaskets: 15, basketChangePct: -46.7 }],
+      topCompanionCategories: [{ label: 'Snacks', basketCount: 5 }],
+      dataCoveragePct: 95, similarStores: [],
+    })
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Stores' })[0])
+    await user.click(await screen.findByRole('button', { name: 'STORE-01' }))
+
+    expect(fetchStoreDetail).toHaveBeenCalledWith(expect.objectContaining({ retailerCode: 'DEMO', externalStoreId: 'STORE-01' }))
+    expect(await screen.findByRole('heading', { name: 'Corner Market' })).toBeInTheDocument()
+    expect(screen.getAllByText('Sprite 500ml').length).toBeGreaterThan(0)
+    expect(screen.getByText('Snacks')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Back to stores' }))
+    expect(await screen.findByRole('heading', { name: 'Every store in the network, ranked.' })).toBeInTheDocument()
+  })
+
+  it('drills from the Products list into a real product detail with store distribution', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchNetworkProductMovers.mockResolvedValue([
+      { productName: 'Sprite 500ml', category: 'Beverages', recentBaskets: 20, priorBaskets: 30, basketChangePct: -33.3 },
+    ])
+    fetchProductDetail.mockResolvedValue({
+      product: 'Sprite 500ml', category: 'Beverages', brand: 'The Coca-Cola Company', periodDays: 30,
+      recentBaskets: 20, priorBaskets: 30, basketChangePct: -33.3, recentRevenue: 50, priorRevenue: 75,
+      storeDistribution: [
+        { retailerCode: 'DEMO', externalStoreId: 'STORE-01', recentBaskets: 20, priorBaskets: 30, basketChangePct: -33.3 },
+      ],
+      companionProducts: [], companionCategories: [],
+      strongestDaypart: 'EVENING', strongestDaypartSharePct: 62.5,
+    })
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Products' })[0])
+    await user.click(await screen.findByRole('button', { name: 'Sprite 500ml' }))
+
+    expect(fetchProductDetail).toHaveBeenCalledWith(expect.objectContaining({ product: 'Sprite 500ml' }))
+    expect(await screen.findByRole('heading', { name: 'Sprite 500ml' })).toBeInTheDocument()
+    expect(screen.getByText('Evening')).toBeInTheDocument()
+    expect(screen.getByText('STORE-01')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Back to products' }))
+    expect(await screen.findByRole('heading', { name: 'CCI product performance across the network.' })).toBeInTheDocument()
   })
 
   // The product redesign removes manual retailer switching entirely: the default experience
