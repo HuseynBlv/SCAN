@@ -451,7 +451,8 @@
 .cci-brief-footer { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--scan-border); }
 
 .cci-biggest-movers { min-width: 0; }
-.cci-biggest-movers .scan-panel-header { flex-wrap: wrap; gap: 12px; }
+.cci-biggest-movers .scan-panel-header,
+.scan-chart-panel .scan-panel-header { flex-wrap: wrap; gap: 12px; }
 .cci-mover-list { display: grid; }
 .cci-mover-row, .cci-mover-row-button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 0; border-bottom: 1px solid var(--scan-border); }
 .cci-mover-row-button { border: 0; background: transparent; text-align: left; cursor: pointer; }

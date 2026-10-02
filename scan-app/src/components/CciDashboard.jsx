@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole as putCommercialRole } from '../services/scanApi'
 import {
   addInvestigationNote,
@@ -18,6 +27,7 @@ import {
   fetchNetworkOverview,
   fetchNetworkProductMovers,
   fetchNetworkStores,
+  fetchNetworkTrend,
   fetchProductDetail,
   fetchStoreDetail,
   fetchWatchlist,
@@ -1276,8 +1286,50 @@ function ProductPerformancePreview({ products, onNavigate, onOpenProduct }) {
   )
 }
 
+const TREND_METRICS = [
+  { value: 'penetration', label: 'Penetration' },
+  { value: 'baskets', label: 'CCI baskets' },
+]
+
+// Penetration and CCI baskets only, deliberately: Units/Average basket/Revenue from the spec are
+// currency- or catalog-denominated, and this network can span retailers on different currencies -
+// adding them here would mean silently summing across currencies, the same reason network-wide
+// revenue is never shown as a single money figure. A day with zero baskets simply has no point
+// rather than a fabricated 0%.
+function TrendChart({ trend, loading, error }) {
+  const [metric, setMetric] = useState('penetration')
+  const dataKey = metric === 'penetration' ? 'penetration' : 'baskets'
+  const formatValue = metric === 'penetration' ? (value) => `${decimal.format(value)}%` : (value) => integer.format(value)
+  const data = trend.map((point) => ({ date: point.date, penetration: point.cciPenetrationPct, baskets: point.cciBaskets }))
+  const accessibleSummary = data.slice(-8).map((point) => `${point.date}: ${formatValue(point[dataKey])}`).join('; ')
+
+  return (
+    <ChartPanel
+      action={<SegmentedControl label="Trend metric" onChange={setMetric} options={TREND_METRICS} value={metric} />}
+      description="Real daily numbers across the network for the selected period."
+      title="CCI Performance"
+    >
+      {loading ? <p className="cci-work-loading">Loading trend…</p> : error ? (
+        <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div>
+      ) : data.length ? (
+        <div aria-label={`CCI ${metric} trend. ${accessibleSummary}`} className="scan-chart" role="img">
+          <ResponsiveContainer height="100%" initialDimension={{ width: 600, height: 300 }} minHeight={260} minWidth={0} width="100%">
+            <LineChart data={data} margin={{ top: 10, right: 20, bottom: 8, left: 4 }}>
+              <CartesianGrid stroke="#e4e2dd" vertical={false} />
+              <XAxis axisLine={false} dataKey="date" tickFormatter={(value) => `${value}`.slice(5)} tickLine={false} />
+              <YAxis axisLine={false} tickFormatter={formatValue} tickLine={false} width={54} />
+              <Tooltip formatter={(value) => formatValue(value)} />
+              <Line dataKey={dataKey} dot={data.length < 20} isAnimationActive stroke="#e41e2b" strokeWidth={2.5} type="monotone" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : <EmptyState compact title="Not enough data for a trend">No baskets were recorded in this period.</EmptyState>}
+    </ChartPanel>
+  )
+}
+
 function OverviewPage({
-  overview, stores, productMovers, categoryMovers, brief, loading, error,
+  overview, stores, productMovers, categoryMovers, brief, trend, trendLoading, trendError, loading, error,
   periodDays, onPeriodChange, onNavigate, onBriefAction, onAskAboutProduct, onOpenStore, onOpenProduct, myWork,
 }) {
   const storeMovers = useMemo(
@@ -1297,6 +1349,8 @@ function OverviewPage({
       {error ? <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div> : null}
 
       <NetworkKpiRow overview={overview} />
+
+      <TrendChart error={trendError} loading={trendLoading} trend={trend} />
 
       <div className="scan-two-column cci-overview-columns">
         <CommercialBrief brief={brief} loading={loading} onAction={onBriefAction} />
@@ -2013,6 +2067,9 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       periodDays={periodDays}
       productMovers={network.productMovers}
       stores={network.stores}
+      trend={network.trend}
+      trendError={network.trendError}
+      trendLoading={network.trendLoading}
     />
   )
 }
@@ -2033,8 +2090,11 @@ export default function CciDashboard() {
   const [networkProductMovers, setNetworkProductMovers] = useState([])
   const [networkCategoryMovers, setNetworkCategoryMovers] = useState([])
   const [networkBrief, setNetworkBrief] = useState([])
+  const [networkTrend, setNetworkTrend] = useState([])
   const [networkLoading, setNetworkLoading] = useState(false)
   const [networkError, setNetworkError] = useState('')
+  const [networkTrendLoading, setNetworkTrendLoading] = useState(false)
+  const [networkTrendError, setNetworkTrendError] = useState('')
 
   const [selectedStore, setSelectedStore] = useState(null)
   const [storeDetail, setStoreDetail] = useState(null)
@@ -2104,13 +2164,16 @@ export default function CciDashboard() {
     if (!creds) return
     setNetworkLoading(true)
     setNetworkError('')
+    setNetworkTrendLoading(true)
+    setNetworkTrendError('')
     try {
-      const [overviewResponse, storesResponse, productMoversResponse, categoryMoversResponse, briefResponse] = await Promise.all([
+      const [overviewResponse, storesResponse, productMoversResponse, categoryMoversResponse, briefResponse, trendResponse] = await Promise.all([
         fetchNetworkOverview({ periodDays: days, ...creds, signal }),
         fetchNetworkStores({ periodDays: days, ...creds, signal }),
         fetchNetworkProductMovers({ periodDays: days, limit: 200, ...creds, signal }),
         fetchNetworkCategoryMovers({ periodDays: days, limit: 20, ...creds, signal }),
         fetchNetworkBrief({ periodDays: days, ...creds, signal }),
+        fetchNetworkTrend({ periodDays: days, ...creds, signal }),
       ])
       if (signal?.aborted) return
       setNetworkOverview(overviewResponse)
@@ -2118,12 +2181,17 @@ export default function CciDashboard() {
       setNetworkProductMovers(productMoversResponse)
       setNetworkCategoryMovers(categoryMoversResponse)
       setNetworkBrief(briefResponse)
+      setNetworkTrend(trendResponse)
     } catch (requestError) {
       if (requestError?.name !== 'AbortError') {
         setNetworkError(requestError?.message || 'Unable to load network intelligence.')
+        setNetworkTrendError(requestError?.message || 'Unable to load the trend.')
       }
     } finally {
-      if (!signal?.aborted) setNetworkLoading(false)
+      if (!signal?.aborted) {
+        setNetworkLoading(false)
+        setNetworkTrendLoading(false)
+      }
     }
   }, [])
 
@@ -2250,6 +2318,7 @@ export default function CciDashboard() {
     setSelectedInvestigationId(null); setSelectedActivationId(null); setCopilotContext(null)
     setNetworkOverview(null); setNetworkStores([]); setNetworkProductMovers([])
     setNetworkCategoryMovers([]); setNetworkBrief([]); setNetworkError('')
+    setNetworkTrend([]); setNetworkTrendError('')
     setPeriodDays(DEFAULT_NETWORK_PERIOD_DAYS)
     setSelectedStore(null); setStoreDetail(null); setStoreDetailError('')
     setSelectedProductName(null); setProductDetail(null); setProductDetailError('')
@@ -2376,8 +2445,9 @@ export default function CciDashboard() {
           }}
           network={{
             overview: networkOverview, stores: networkStores, productMovers: networkProductMovers,
-            categoryMovers: networkCategoryMovers, brief: networkBrief,
+            categoryMovers: networkCategoryMovers, brief: networkBrief, trend: networkTrend,
             loading: networkLoading, error: networkError,
+            trendLoading: networkTrendLoading, trendError: networkTrendError,
             storeDetail, storeDetailLoading, storeDetailError,
             productDetail, productDetailLoading, productDetailError,
             compareStoreDetail, compareStoreLoading, compareStoreError,

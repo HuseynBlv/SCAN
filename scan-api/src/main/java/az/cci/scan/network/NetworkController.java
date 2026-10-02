@@ -12,6 +12,7 @@ import az.cci.scan.network.NetworkDtos.NetworkOverview;
 import az.cci.scan.network.NetworkDtos.ProductDetail;
 import az.cci.scan.network.NetworkDtos.StoreDetail;
 import az.cci.scan.network.NetworkDtos.StoreRanking;
+import az.cci.scan.network.NetworkDtos.TrendPoint;
 import jakarta.validation.Valid;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -65,6 +66,14 @@ public class NetworkController {
         Authentication authentication
     ) {
         return networkAnalyticsService.storeRanking(retailers(authentication), periodDays);
+    }
+
+    @GetMapping("/trend")
+    public List<TrendPoint> trend(
+        @RequestParam(defaultValue = "" + DEFAULT_PERIOD_DAYS) int periodDays,
+        Authentication authentication
+    ) {
+        return networkAnalyticsService.trend(retailers(authentication), periodDays);
     }
 
     @GetMapping("/movers/products")

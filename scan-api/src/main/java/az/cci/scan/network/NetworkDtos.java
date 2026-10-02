@@ -4,6 +4,7 @@ import az.cci.scan.intelligence.ChangeDetectionDtos.ProductMover;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -114,5 +115,14 @@ final class NetworkDtos {
         String strongestDaypart,
         double strongestDaypartSharePct
     ) {
+    }
+
+    /**
+     * One real day in the primary trend chart - only emitted for a day that actually had at
+     * least one basket, never a fabricated zero-value point for a day with no data. Day
+     * boundaries are UTC, a deliberate simplification for a network that can span retailers in
+     * different timezones; see the 2026-10-02 decision log in DESIGN.md.
+     */
+    record TrendPoint(LocalDate date, long totalBaskets, long cciBaskets, double cciPenetrationPct) {
     }
 }

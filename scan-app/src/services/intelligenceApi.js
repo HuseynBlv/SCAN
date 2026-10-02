@@ -195,6 +195,10 @@ export function fetchNetworkStores({ periodDays, username, password, signal }) {
   return request("GET", `/api/v1/network/stores${query({ periodDays })}`, { username, password, signal });
 }
 
+export function fetchNetworkTrend({ periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/network/trend${query({ periodDays })}`, { username, password, signal });
+}
+
 export function fetchNetworkProductMovers({ periodDays, limit, username, password, signal }) {
   return request("GET", `/api/v1/network/movers/products${query({ periodDays, limit })}`, { username, password, signal });
 }

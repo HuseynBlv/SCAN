@@ -11,6 +11,7 @@ import az.cci.scan.network.NetworkDtos.NetworkOverview;
 import az.cci.scan.network.NetworkDtos.ProductDetail;
 import az.cci.scan.network.NetworkDtos.StoreDetail;
 import az.cci.scan.network.NetworkDtos.StoreRanking;
+import az.cci.scan.network.NetworkDtos.TrendPoint;
 import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.CanonicalProductRepository;
 import az.cci.scan.repository.FieldTaskRepository;
@@ -238,6 +239,31 @@ class NetworkAnalyticsServiceTest {
         var storeB = change.storeContributions().stream()
             .filter(c -> c.externalStoreId().equals("NET-B/B-STORE-1")).findFirst().orElseThrow();
         assertThat(storeB.basketDelta()).isEqualTo(0);
+    }
+
+    @Test
+    void computesARealDailyTrendAcrossBothRetailers() {
+        importDecliningSpriteAcrossTwoRetailers();
+
+        List<TrendPoint> trend = networkAnalyticsService.trend(List.of(retailerA, retailerB), PERIOD_DAYS);
+
+        // One real point per day that actually had a basket - the 10 recent-window days (the
+        // prior-window days sit outside this 14-day lookback from the latest transaction).
+        assertThat(trend).hasSize(10);
+        assertThat(trend).isSortedAccordingTo(java.util.Comparator.comparing(TrendPoint::date));
+
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        // Store B still sold Sprite on this day (i=0 of the recent loop) - 1 CCI basket of 2 total.
+        TrendPoint cciDay = trend.stream().filter(p -> p.date().equals(today.minusDays(1))).findFirst().orElseThrow();
+        assertThat(cciDay.totalBaskets()).isEqualTo(2);
+        assertThat(cciDay.cciBaskets()).isEqualTo(1);
+        assertThat(cciDay.cciPenetrationPct()).isEqualTo(50.0);
+
+        // By this day (i=9) both stores are filler-only - a real zero, not a missing point.
+        TrendPoint nonCciDay = trend.stream().filter(p -> p.date().equals(today.minusDays(10))).findFirst().orElseThrow();
+        assertThat(nonCciDay.totalBaskets()).isEqualTo(2);
+        assertThat(nonCciDay.cciBaskets()).isEqualTo(0);
+        assertThat(nonCciDay.cciPenetrationPct()).isEqualTo(0.0);
     }
 
     @Test
