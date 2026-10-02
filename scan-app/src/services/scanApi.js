@@ -221,7 +221,29 @@ export async function fetchAnalyticsContext({ username, password, signal }) {
   if (!retailers.length) {
     throw new ScanApiError("This account has no retailer analytics assigned.", 403);
   }
-  return { retailers };
+  const commercialRole = data?.commercialRole === "FIELD_SALES" ? "FIELD_SALES" : "COMMERCIAL";
+  return { retailers, commercialRole };
+}
+
+export async function setCommercialRole({ commercialRole, username, password }) {
+  let response;
+  try {
+    response = await fetch(apiUrl("/api/v1/analytics/context/commercial-role"), {
+      method: "PUT",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: basicAuthorization(username, password),
+      },
+      body: JSON.stringify({ commercialRole }),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError" || error instanceof ScanApiError) throw error;
+    throw new ScanApiError("Cannot reach the SCAN API. Check your connection and try again.");
+  }
+  if (!response.ok) throw new ScanApiError(await errorMessage(response), response.status);
+  const data = await response.json();
+  return data?.commercialRole === "FIELD_SALES" ? "FIELD_SALES" : "COMMERCIAL";
 }
 
 export async function fetchOverview({ retailerCode, username, password, signal }) {

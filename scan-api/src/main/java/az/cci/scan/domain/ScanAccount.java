@@ -32,6 +32,17 @@ public class ScanAccount {
         RETAILER
     }
 
+    /**
+     * A self-service UI preference for a CCI account, not an access boundary - it only changes
+     * what My Work shows first (field checks ahead of everything else for Field Sales). Tenant and
+     * retailer access are governed entirely by {@code retailerAccess} and TenantAccessService,
+     * never by this.
+     */
+    public enum CommercialRole {
+        COMMERCIAL,
+        FIELD_SALES
+    }
+
     @Id
     @UuidGenerator
     private UUID id;
@@ -61,6 +72,10 @@ public class ScanAccount {
         inverseJoinColumns = @JoinColumn(name = "retailer_id")
     )
     private Set<Retailer> retailerAccess = new LinkedHashSet<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "commercial_role", nullable = false, length = 32)
+    private CommercialRole commercialRole = CommercialRole.COMMERCIAL;
 
     @Column(nullable = false)
     private boolean enabled = true;
@@ -128,6 +143,11 @@ public class ScanAccount {
         }
     }
 
+    public void setCommercialRole(CommercialRole newCommercialRole) {
+        this.commercialRole = Objects.requireNonNull(newCommercialRole);
+        this.updatedAt = Instant.now();
+    }
+
     public UUID getId() {
         return id;
     }
@@ -154,6 +174,10 @@ public class ScanAccount {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public CommercialRole getCommercialRole() {
+        return commercialRole;
     }
 
     public Instant getCreatedAt() { return createdAt; }

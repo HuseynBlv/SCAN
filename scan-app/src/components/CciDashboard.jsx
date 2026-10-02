@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole as putCommercialRole } from '../services/scanApi'
 import {
   addInvestigationNote,
   askCopilot,
@@ -400,12 +400,26 @@ function WatchingSection({ watchlist, watchlistChanges, productOptions, onFollow
   )
 }
 
+function FieldChecksList({ openTasks, onNavigate }) {
+  return openTasks.length ? (
+    <div className="cci-work-list">
+      {openTasks.map((item) => {
+        const done = item.stores.filter((store) => store.completed).length
+        return (
+          <WorkListCard badgeLabel={`${done}/${item.stores.length} done`} badgeTone="warning" key={item.id} meta={`Assigned to ${item.assignedTo}`} onOpen={() => onNavigate('investigate')} title={item.title} />
+        )
+      })}
+    </div>
+  ) : <EmptyState compact title="No field checks waiting">Create one from an investigation when you need real-world confirmation.</EmptyState>
+}
+
 function MyWork({
   credentials, movers, investigations, fieldTasks, watchlist, watchlistChanges, productOptions,
   intelligenceLoading, intelligenceError, onOpenInvestigation, onStartProductInvestigation,
-  onAskAbout, onNavigate, onPrepareBrief, onFollow, onUnfollow,
+  onAskAbout, onNavigate, onPrepareBrief, onFollow, onUnfollow, commercialRole,
 }) {
   const [busyProduct, setBusyProduct] = useState(null)
+  const isFieldSales = commercialRole === 'FIELD_SALES'
   const inProgress = investigations.filter((item) => item.status === 'IN_PROGRESS')
   const openTasks = fieldTasks.filter((item) => item.status === 'OPEN')
   const recentlyClosedInvestigations = investigations
@@ -443,6 +457,13 @@ function MyWork({
 
       {intelligenceError ? <div className="scan-inline-notice scan-inline-error" role="alert">{intelligenceError}</div> : null}
 
+      {isFieldSales ? (
+        <section className="cci-home-section">
+          <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Assigned to you</span><h2>Field checks waiting on you</h2></div></header>
+          <FieldChecksList onNavigate={onNavigate} openTasks={openTasks} />
+        </section>
+      ) : null}
+
       <section className="cci-home-section">
         <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Detected changes</span><h2>Needs attention</h2></div></header>
         {intelligenceLoading ? <p className="cci-work-loading">Scanning for real changes…</p> : needsAttention.length ? (
@@ -456,7 +477,7 @@ function MyWork({
 
       <WatchingSection onFollow={onFollow} onUnfollow={onUnfollow} productOptions={productOptions} watchlist={watchlist} watchlistChanges={watchlistChanges} />
 
-      <div className="scan-two-column cci-my-work-columns">
+      <div className={isFieldSales ? 'cci-my-work-columns' : 'scan-two-column cci-my-work-columns'}>
         <section className="cci-home-section">
           <header className="cci-home-section-heading"><div><h3>In progress</h3></div></header>
           {inProgress.length ? (
@@ -467,19 +488,12 @@ function MyWork({
             </div>
           ) : <EmptyState compact title="Nothing in progress">Open an investigation to start one.</EmptyState>}
         </section>
-        <section className="cci-home-section">
-          <header className="cci-home-section-heading"><div><h3>Waiting on team</h3></div></header>
-          {openTasks.length ? (
-            <div className="cci-work-list">
-              {openTasks.map((item) => {
-                const done = item.stores.filter((store) => store.completed).length
-                return (
-                  <WorkListCard badgeLabel={`${done}/${item.stores.length} done`} badgeTone="warning" key={item.id} meta={`Assigned to ${item.assignedTo}`} onOpen={() => onNavigate('investigate')} title={item.title} />
-                )
-              })}
-            </div>
-          ) : <EmptyState compact title="No field checks waiting">Create one from an investigation when you need real-world confirmation.</EmptyState>}
-        </section>
+        {isFieldSales ? null : (
+          <section className="cci-home-section">
+            <header className="cci-home-section-heading"><div><h3>Waiting on team</h3></div></header>
+            <FieldChecksList onNavigate={onNavigate} openTasks={openTasks} />
+          </section>
+        )}
       </div>
 
       <section className="cci-home-section">
@@ -1310,7 +1324,7 @@ function Network({ data }) {
 /* Shell                                                                */
 /* ------------------------------------------------------------------ */
 
-function DashboardPage({ activePage, data, intelligence, credentials, actions, onNavigate }) {
+function DashboardPage({ activePage, data, intelligence, credentials, actions, onNavigate, commercialRole }) {
   if (data.totalBaskets === 0) {
     return <section className="scan-panel"><EmptyState title="No transaction data imported yet">Import a validated retailer export for {data.retailerCode}. SCAN will not show derived intelligence until complete receipts are available.</EmptyState></section>
   }
@@ -1369,6 +1383,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
   }
   return (
     <MyWork
+      commercialRole={commercialRole}
       credentials={credentials}
       fieldTasks={intelligence.fieldTasks}
       intelligenceError={intelligence.error}
@@ -1392,6 +1407,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
 export default function CciDashboard() {
   const [credentials, setCredentials] = useState(null)
   const [retailerOptions, setRetailerOptions] = useState([])
+  const [commercialRole, setCommercialRole] = useState('COMMERCIAL')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1467,6 +1483,7 @@ export default function CciDashboard() {
     try {
       const access = await fetchAnalyticsContext(accountCredentials)
       setRetailerOptions(access.retailers)
+      setCommercialRole(access.commercialRole === 'FIELD_SALES' ? 'FIELD_SALES' : 'COMMERCIAL')
       setCredentials({ ...accountCredentials, retailerCode: access.retailers[0].code })
       setRefreshKey((value) => value + 1)
     } catch (requestError) {
@@ -1484,8 +1501,17 @@ export default function CciDashboard() {
   function signOut() {
     setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false)
     setActivePage('my-work'); setInvestigations([]); setFieldTasks([]); setMovers([])
-    setWatchlist([]); setWatchlistChanges([]); setActivations([])
+    setWatchlist([]); setWatchlistChanges([]); setActivations([]); setCommercialRole('COMMERCIAL')
     setSelectedInvestigationId(null); setSelectedActivationId(null); setCopilotContext(null)
+  }
+  async function changeCommercialRole(nextRole) {
+    const previous = commercialRole
+    setCommercialRole(nextRole)
+    try {
+      await putCommercialRole({ ...credentials, commercialRole: nextRole })
+    } catch {
+      setCommercialRole(previous)
+    }
   }
 
   async function withReload(promiseFactory) {
@@ -1556,7 +1582,19 @@ export default function CciDashboard() {
             ) : null}
             <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
             <button className="scan-button scan-button-light cci-refresh-button" disabled={loading} onClick={refresh} type="button"><ScanIcon name="refresh" size={17} /><span>{loading ? 'Refreshing…' : 'Refresh'}</span></button>
-              <details className="cci-user-menu"><summary aria-label="CCI workspace menu">CCI</summary><div><strong>CCI Sales & Marketing</strong><small>Commercial intelligence workspace</small><button aria-label="Sign out from user menu" onClick={signOut} type="button"><ScanIcon name="signout" size={16} />Sign out</button></div></details>
+              <details className="cci-user-menu">
+                <summary aria-label="CCI workspace menu">CCI</summary>
+                <div>
+                  <strong>CCI Sales & Marketing</strong>
+                  <small>Commercial intelligence workspace</small>
+                  <label className="cci-role-switch" htmlFor="cci-role-select">I am</label>
+                  <select id="cci-role-select" onChange={(event) => changeCommercialRole(event.target.value)} value={commercialRole}>
+                    <option value="COMMERCIAL">Commercial team</option>
+                    <option value="FIELD_SALES">Field Sales</option>
+                  </select>
+                  <button aria-label="Sign out from user menu" onClick={signOut} type="button"><ScanIcon name="signout" size={16} />Sign out</button>
+                </div>
+              </details>
           </>
         )}
         eyebrow="CCI commercial intelligence"
@@ -1573,6 +1611,7 @@ export default function CciDashboard() {
         <DashboardPage
           activePage={activePage}
           actions={actions}
+          commercialRole={commercialRole}
           credentials={credentials}
           data={data}
           intelligence={{

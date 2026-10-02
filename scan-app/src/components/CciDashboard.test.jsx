@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CciDashboard from './CciDashboard'
-import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole } from '../services/scanApi'
 import {
   askCopilot,
   createActivation,
@@ -26,6 +26,7 @@ vi.mock('../services/scanApi', async (importOriginal) => {
     ...actual,
     fetchAnalyticsContext: vi.fn(),
     fetchOverview: vi.fn(),
+    setCommercialRole: vi.fn(),
   }
 })
 
@@ -166,8 +167,10 @@ describe('CciDashboard', () => {
   beforeEach(() => {
     fetchAnalyticsContext.mockReset().mockResolvedValue({
       retailers: [{ code: 'KAGGLE', name: 'Kaggle Demo Retailer', demoData: true }],
+      commercialRole: 'COMMERCIAL',
     })
     fetchOverview.mockReset()
+    setCommercialRole.mockReset().mockResolvedValue('FIELD_SALES')
     mockIntelligenceDefaults()
   })
 
@@ -557,5 +560,31 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'Sprite cooler push' })).toBeInTheDocument()
     expect(screen.getByText('Test stores moved 50.0 points more than control stores over the activation window.')).toBeInTheDocument()
     expect(screen.getByText(/50% baseline → 100% during/)).toBeInTheDocument()
+  })
+
+  it('reorders My Work to show field checks first after switching to the Field Sales role', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    const openTask = {
+      id: 'task-1', investigationId: null, title: 'Check Sprite availability', reason: 'Basket presence dropped',
+      assignedTo: 'Field Sales Team', dueAt: null, status: 'OPEN', createdBy: 'scan-demo-cci',
+      createdAt: '2026-08-24T10:00:00Z', updatedAt: '2026-08-24T10:00:00Z',
+      stores: [{ id: 's1', externalStoreId: 'STORE-01', completed: false }],
+    }
+    fetchFieldTasks.mockResolvedValue([openTask])
+    const { container } = render(<CciDashboard />)
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open workspace' }))
+    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+
+    expect(screen.queryByRole('heading', { name: 'Field checks waiting on you' })).not.toBeInTheDocument()
+
+    act(() => { container.querySelector('.cci-user-menu').open = true })
+    await user.selectOptions(screen.getByLabelText('I am'), 'FIELD_SALES')
+
+    expect(setCommercialRole).toHaveBeenCalledWith(expect.objectContaining({ commercialRole: 'FIELD_SALES' }))
+    const heading = await screen.findByRole('heading', { name: 'Field checks waiting on you' })
+    expect(heading.compareDocumentPosition(screen.getByRole('heading', { name: 'Needs attention' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
