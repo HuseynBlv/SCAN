@@ -2,7 +2,10 @@ package az.cci.scan.network;
 
 import az.cci.scan.domain.Retailer;
 import az.cci.scan.domain.Store;
+import az.cci.scan.intelligence.ChangeDetectionDtos.PeriodComparison;
+import az.cci.scan.intelligence.ChangeDetectionDtos.ProductChange;
 import az.cci.scan.intelligence.ChangeDetectionDtos.ProductMover;
+import az.cci.scan.intelligence.ChangeDetectionDtos.StoreContribution;
 import az.cci.scan.network.NetworkDtos.BriefItem;
 import az.cci.scan.network.NetworkDtos.CategoryMover;
 import az.cci.scan.network.NetworkDtos.NamedBasketCount;
@@ -52,6 +55,12 @@ public class NetworkAnalyticsService {
     private static final double STORE_IMPROVING_POINTS = 5.0;
     private static final double HEALTHY_MAPPING_PCT = 90.0;
     private static final int STORE_CONCENTRATION_LIMIT = 3;
+
+    // Same thresholds ChangeDetectionService uses for its single-retailer availability and
+    // concentration signals - productChange() is the network-wide version of that same logic.
+    private static final double CONCENTRATION_SHARE_THRESHOLD = 0.6;
+    private static final double AVAILABILITY_NEAR_ZERO_PCT = 1.0;
+    private static final int STORE_CONTRIBUTIONS_LIMIT = 8;
 
     private final NetworkQueryRepository queryRepository;
     private final StoreRepository storeRepository;
@@ -297,6 +306,115 @@ public class NetworkAnalyticsService {
             strongestDaypart == null ? null : strongestDaypart.name(),
             strongestDaypart == null ? 0.0 : strongestDaypart.sharePct()
         );
+    }
+
+    /**
+     * The network-wide equivalent of {@code ChangeDetectionService.compareProduct} - same
+     * availability/concentration signal logic (a store that used to carry the product now shows
+     * it in essentially none of its baskets; the decline is concentrated in a small number of
+     * stores), just measured across every retailer the account can see instead of one. Reuses
+     * {@code ChangeDetectionDtos.ProductChange}/{@code StoreContribution} directly rather than a
+     * parallel DTO - a store's identity here is the same "retailerCode/externalStoreId" composite
+     * used everywhere else in this package, so a real Copilot answer can be built from it with no
+     * new types and no duplicated template logic.
+     */
+    public ProductChange productChange(List<Retailer> retailers, String productName, int periodDays) {
+        List<UUID> retailerIds = ids(retailers);
+        Window window = resolveWindow(retailerIds, periodDays);
+
+        List<NetworkProductPresenceRow> recentPresence = queryRepository.productStorePresenceInRange(
+            retailerIds, productName, window.recentStart(), window.recentEnd());
+        List<NetworkProductPresenceRow> priorPresence = queryRepository.productStorePresenceInRange(
+            retailerIds, productName, window.priorStart(), window.priorEnd());
+        List<NetworkBasketRow> recentBasketRows = queryRepository.basketsInRange(retailerIds, window.recentStart(), window.recentEnd());
+        List<NetworkBasketRow> priorBasketRows = queryRepository.basketsInRange(retailerIds, window.priorStart(), window.priorEnd());
+        List<NetworkProductRow> recentProductMetrics = queryRepository.cciProductMetricsInRange(retailerIds, window.recentStart(), window.recentEnd());
+        List<NetworkProductRow> priorProductMetrics = queryRepository.cciProductMetricsInRange(retailerIds, window.priorStart(), window.priorEnd());
+
+        Map<String, Long> recentReceiptCounts = groupDistinctReceipts(recentPresence);
+        Map<String, Long> priorReceiptCounts = groupDistinctReceipts(priorPresence);
+        Map<String, Long> recentStoreTotals = groupStoreCounts(recentBasketRows).entrySet().stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue()[0]));
+        Map<String, Long> priorStoreTotals = groupStoreCounts(priorBasketRows).entrySet().stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue()[0]));
+
+        java.util.Set<String> storeKeys = new java.util.LinkedHashSet<>();
+        storeKeys.addAll(recentReceiptCounts.keySet());
+        storeKeys.addAll(priorReceiptCounts.keySet());
+        storeKeys.addAll(recentStoreTotals.keySet());
+        storeKeys.addAll(priorStoreTotals.keySet());
+
+        long priorTotalAcrossStores = priorPresence.stream().map(NetworkProductPresenceRow::receiptId).distinct().count();
+        long priorBasketsAllStores = priorBasketRows.size();
+        double networkPriorPenetration = pct(priorTotalAcrossStores, priorBasketsAllStores);
+
+        List<StoreContribution> contributions = new ArrayList<>();
+        for (String key : storeKeys) {
+            long recentProductBaskets = recentReceiptCounts.getOrDefault(key, 0L);
+            long priorProductBaskets = priorReceiptCounts.getOrDefault(key, 0L);
+            long recentStoreBaskets = recentStoreTotals.getOrDefault(key, 0L);
+            long priorStoreBaskets = priorStoreTotals.getOrDefault(key, 0L);
+            contributions.add(new StoreContribution(
+                key, recentProductBaskets, priorProductBaskets, recentStoreBaskets, priorStoreBaskets,
+                pct(recentProductBaskets, recentStoreBaskets), pct(priorProductBaskets, priorStoreBaskets),
+                recentProductBaskets - priorProductBaskets
+            ));
+        }
+        contributions.sort(Comparator.comparingLong(StoreContribution::basketDelta));
+
+        long recentTotal = recentPresence.stream().map(NetworkProductPresenceRow::receiptId).distinct().count();
+        long priorTotal = priorTotalAcrossStores;
+        double basketChangePct = priorTotal == 0 ? (recentTotal == 0 ? 0.0 : 100.0) : 100.0 * (recentTotal - priorTotal) / (double) priorTotal;
+
+        BigDecimal recentRevenue = findRevenue(recentProductMetrics, productName);
+        BigDecimal priorRevenue = findRevenue(priorProductMetrics, productName);
+
+        boolean availabilitySignal = false;
+        String availabilityEvidence = null;
+        List<String> droppedStores = contributions.stream()
+            .filter(c -> c.priorPenetrationPct() >= Math.max(networkPriorPenetration * 0.5, 5.0))
+            .filter(c -> c.recentPenetrationPct() <= AVAILABILITY_NEAR_ZERO_PCT)
+            .map(StoreContribution::externalStoreId)
+            .toList();
+        if (!droppedStores.isEmpty() && recentTotal < priorTotal) {
+            availabilitySignal = true;
+            availabilityEvidence = "%d store(s) that regularly carried this product in baskets now show it in essentially none: %s."
+                .formatted(droppedStores.size(), String.join(", ", droppedStores.stream().limit(5).toList()));
+        }
+
+        boolean concentrationSignal = false;
+        String concentrationEvidence = null;
+        long totalDecline = contributions.stream().mapToLong(StoreContribution::basketDelta).filter(delta -> delta < 0).sum();
+        if (totalDecline <= -MIN_SAMPLE_FOR_TREND) {
+            List<StoreContribution> decliningStores = contributions.stream().filter(c -> c.basketDelta() < 0).toList();
+            long topDecline = decliningStores.stream().limit(STORE_CONCENTRATION_LIMIT).mapToLong(StoreContribution::basketDelta).sum();
+            double declineShare = Math.abs(topDecline) / (double) Math.abs(totalDecline);
+            if (declineShare >= CONCENTRATION_SHARE_THRESHOLD) {
+                List<String> topStores = decliningStores.stream().limit(STORE_CONCENTRATION_LIMIT).map(StoreContribution::externalStoreId).toList();
+                concentrationSignal = true;
+                concentrationEvidence = "%.0f%% of the decline is concentrated in %d store(s): %s."
+                    .formatted(declineShare * 100.0, topStores.size(), String.join(", ", topStores));
+            }
+        }
+
+        List<StoreContribution> limitedContributions = contributions.stream().limit(STORE_CONTRIBUTIONS_LIMIT).toList();
+        PeriodComparison period = new PeriodComparison(
+            new az.cci.scan.intelligence.ChangeDetectionDtos.Window(window.recentStart(), window.recentEnd()),
+            new az.cci.scan.intelligence.ChangeDetectionDtos.Window(window.priorStart(), window.priorEnd())
+        );
+
+        return new ProductChange(
+            productName, period, recentTotal, priorTotal, recentRevenue, priorRevenue, basketChangePct,
+            limitedContributions, availabilitySignal, availabilityEvidence, concentrationSignal, concentrationEvidence
+        );
+    }
+
+    private static BigDecimal findRevenue(List<NetworkProductRow> rows, String productName) {
+        return rows.stream()
+            .filter(row -> row.product().equals(productName))
+            .map(NetworkProductRow::revenue)
+            .findFirst()
+            .orElse(BigDecimal.ZERO);
     }
 
     /** Only claims a daypart when there are enough distinct receipts to support it - otherwise

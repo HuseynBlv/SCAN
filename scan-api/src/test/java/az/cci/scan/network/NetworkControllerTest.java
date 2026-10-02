@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,6 +38,7 @@ import java.time.format.DateTimeFormatter;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
@@ -231,6 +233,38 @@ class NetworkControllerTest {
             .andExpect(jsonPath("$.product").value("Sprite 500ml"))
             .andExpect(jsonPath("$.recentBaskets").value(2))
             .andExpect(jsonPath("$.storeDistribution.length()").value(2));
+    }
+
+    @Test
+    void answersANetworkWideCopilotProductQuestionWithNoRetailerCodeParameter() throws Exception {
+        canonicalProductRepository.save(new CanonicalProduct(
+            "Sprite 500ml", "5449000015101", "The Coca-Cola Company", "The Coca-Cola Company", "Beverages", null, null, null, true
+        ));
+        Retailer retailerA = retailerRepository.save(new Retailer("NETC-CA", "Network Controller Copilot Test A", "Asia/Baku", true));
+        Retailer retailerB = retailerRepository.save(new Retailer("NETC-CB", "Network Controller Copilot Test B", "Asia/Baku", true));
+        importProfileRepository.save(new ImportProfile(retailerA, "CANONICAL", "synthetic-canonical-v1", "yyyy-MM-dd'T'HH:mm:ss", "Asia/Baku", "AZN"));
+        importProfileRepository.save(new ImportProfile(retailerB, "CANONICAL", "synthetic-canonical-v1", "yyyy-MM-dd'T'HH:mm:ss", "Asia/Baku", "AZN"));
+
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        importCsv(retailerA, header() + spriteRow("CA-1", today.minusDays(1).atTime(12, 0)));
+        importCsv(retailerB, header() + spriteRow("CB-1", today.minusDays(1).atTime(12, 0)));
+
+        ScanAccount account = accountRepository.save(new ScanAccount(
+            "netc-copilot", passwordEncoder.encode("netc-copilot-password"), ScanAccount.Role.CCI, null, null
+        ));
+        account.grantRetailerAccess(retailerA);
+        account.grantRetailerAccess(retailerB);
+        accountRepository.save(account);
+
+        mockMvc.perform(post("/api/v1/network/copilot/ask")
+                .with(httpBasic("netc-copilot", "netc-copilot-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"contextType": "PRODUCT", "subjectName": "Sprite 500ml", "periodDays": 14, "question": "What changed?"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.whatScanFound", org.hamcrest.Matchers.containsString("Sprite 500ml")))
+            .andExpect(jsonPath("$.whatScanFound", org.hamcrest.Matchers.containsString("2 baskets")));
     }
 
     @Test

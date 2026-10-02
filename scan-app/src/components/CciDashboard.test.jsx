@@ -5,6 +5,7 @@ import CciDashboard from './CciDashboard'
 import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole } from '../services/scanApi'
 import {
   askCopilot,
+  askNetworkCopilot,
   createActivation,
   createFieldTask,
   fetchActivations,
@@ -55,6 +56,7 @@ vi.mock('../services/intelligenceApi', () => ({
   createFieldTask: vi.fn(),
   recordFieldTaskResult: vi.fn(),
   askCopilot: vi.fn(),
+  askNetworkCopilot: vi.fn(),
   fetchWatchlist: vi.fn(),
   followProduct: vi.fn(),
   unfollowProduct: vi.fn(),
@@ -153,6 +155,7 @@ function mockIntelligenceDefaults() {
   createFieldTask.mockReset()
   recordFieldTaskResult.mockReset()
   askCopilot.mockReset()
+  askNetworkCopilot.mockReset()
   fetchWatchlist.mockReset().mockResolvedValue([])
   fetchWatchlistChanges.mockReset().mockResolvedValue([])
   followProduct.mockReset()
@@ -496,18 +499,18 @@ describe('CciDashboard', () => {
     expect(screen.queryByText('Sprite 500ml is down 40%')).not.toBeInTheDocument()
   })
 
-  it('answers a Copilot question about a product using only real tool output', async () => {
+  it('answers a Copilot question about a product network-wide, using only real tool output', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
-    askCopilot.mockResolvedValue({
+    askNetworkCopilot.mockResolvedValue({
       whatScanFound: 'Sprite 500ml appeared in 6 baskets over the last 14 days, vs. 12 in the prior 14 days (50% decline).',
       whyThisMatters: 'This is a real, measured drop in basket presence.',
       possibleExplanations: ['Availability issue: this product may not be consistently in stock.'],
-      evidence: ['2 store(s) that regularly carried this product now show it in essentially none: STORE-01.'],
+      evidence: ['2 store(s) that regularly carried this product now show it in essentially none: DEMO/STORE-01.'],
       confidence: 'MEDIUM',
       whatWeStillDontKnow: 'SCAN has no direct stock-level or competitor data.',
       nextSteps: [{ label: 'Create a field check', actionType: 'CREATE_FIELD_CHECK', targetId: 'Sprite 500ml' }],
-      priorCases: ['Opened 2026-06-01, closed without a confirmed cause.'],
+      priorCases: [],
     })
     await signIn(user)
 
@@ -516,10 +519,13 @@ describe('CciDashboard', () => {
     await user.type(screen.getByLabelText('Product'), 'Sprite 500ml')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
 
-    expect(askCopilot).toHaveBeenCalledWith(expect.objectContaining({ contextType: 'PRODUCT', subjectName: 'Sprite 500ml' }))
+    expect(askNetworkCopilot).toHaveBeenCalledWith(expect.objectContaining({ contextType: 'PRODUCT', subjectName: 'Sprite 500ml' }))
+    expect(askCopilot).not.toHaveBeenCalled()
     expect(await screen.findByText(/Sprite 500ml appeared in 6 baskets/)).toBeInTheDocument()
     expect(screen.getByText('MEDIUM confidence')).toBeInTheDocument()
-    expect(screen.getByText('Opened 2026-06-01, closed without a confirmed cause.')).toBeInTheDocument()
+    // Investigation history is not yet searchable network-wide, so a product-wide answer
+    // honestly has no "Seen before" section rather than one scoped to a single retailer.
+    expect(screen.queryByRole('heading', { name: 'Seen before' })).not.toBeInTheDocument()
   })
 
   it('shows exactly one input for Copilot and disables Ask until it is filled', async () => {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ScanApiError } from './scanApi'
 import {
   askCopilot,
+  askNetworkCopilot,
   createActivation,
   fetchInvestigations,
   fetchMovers,
@@ -162,5 +163,17 @@ describe('intelligenceApi', () => {
 
     await fetchProductDetail({ product: 'Sprite 500ml', periodDays: 30, username: 'cci', password: 'secret' })
     expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/network/products/detail?product=Sprite+500ml&periodDays=30')
+  })
+
+  it('asks the network-wide Copilot endpoint with no retailerCode parameter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, status: 200, body: {} }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await askNetworkCopilot({ contextType: 'PRODUCT', subjectName: 'Sprite 500ml', periodDays: 14, question: 'What changed?', username: 'cci', password: 'secret' })
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/network/copilot/ask')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body)).toEqual({ contextType: 'PRODUCT', subjectName: 'Sprite 500ml', periodDays: 14, question: 'What changed?' })
   })
 })

@@ -56,6 +56,27 @@ public class CopilotService {
 
     private CopilotAnswer answerForProduct(Retailer retailer, String productName, int periodDays) {
         ProductChange change = changeDetectionService.compareProduct(retailer, productName, periodDays);
+        List<String> priorCases = investigationService
+            .findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, productName)
+            .stream()
+            .limit(3)
+            .map(CopilotService::summarizeHistoricalCase)
+            .toList();
+        return buildProductAnswer(change, productName, priorCases);
+    }
+
+    /**
+     * The template half of a product answer - USER -&gt; INTENT -&gt; ANALYTICS TOOL -&gt;
+     * STRUCTURED RESULT -&gt; INTERPRETATION, minus the "ANALYTICS TOOL" step, which the caller
+     * already did (single-retailer via {@link ChangeDetectionService#compareProduct}, or
+     * network-wide via {@code NetworkAnalyticsService#productChange}). Public and static
+     * precisely so the network package can reuse this exact wording instead of duplicating it -
+     * a store identifier in {@code change} is whatever the caller's analytics tool produced
+     * (an external store id for one retailer, a "retailerCode/externalStoreId" composite for the
+     * whole network), and this method never needs to know which.
+     */
+    public static CopilotAnswer buildProductAnswer(ProductChange change, String productName, List<String> priorCases) {
+        int periodDays = (int) java.time.temporal.ChronoUnit.DAYS.between(change.period().recent().start(), change.period().recent().end());
         boolean declined = change.basketChangePct() < 0;
 
         String whatScanFound = String.format(Locale.ROOT,
@@ -93,13 +114,6 @@ public class CopilotService {
         }
 
         String confidence = (change.availabilitySignal() || change.concentrationSignal()) ? "MEDIUM" : "LOW";
-
-        List<String> priorCases = investigationService
-            .findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, productName)
-            .stream()
-            .limit(3)
-            .map(CopilotService::summarizeHistoricalCase)
-            .toList();
 
         return new CopilotAnswer(
             whatScanFound,
@@ -176,7 +190,7 @@ public class CopilotService {
         );
     }
 
-    private CopilotAnswer fallback() {
+    public static CopilotAnswer fallback() {
         return new CopilotAnswer(
             "The current SCAN data cannot answer this reliably.",
             "Answering this would require guessing rather than using real, computed evidence.",
