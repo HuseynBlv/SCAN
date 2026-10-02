@@ -5,6 +5,9 @@ import {
   createActivation,
   fetchInvestigations,
   fetchMovers,
+  fetchNetworkBrief,
+  fetchNetworkOverview,
+  fetchNetworkStores,
   followProduct,
   openProductInvestigation,
   recordFieldTaskResult,
@@ -132,5 +135,19 @@ describe('intelligenceApi', () => {
       productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
       testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
     })
+  })
+
+  it('fetches network overview and stores with no retailerCode parameter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, status: 200, body: {} }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchNetworkOverview({ periodDays: 30, username: 'cci', password: 'secret' })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/network/overview?periodDays=30')
+
+    await fetchNetworkStores({ periodDays: 30, username: 'cci', password: 'secret' })
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/network/stores?periodDays=30')
+
+    await fetchNetworkBrief({ periodDays: 7, username: 'cci', password: 'secret' })
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/v1/network/brief?periodDays=7')
   })
 })

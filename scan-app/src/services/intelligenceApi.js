@@ -175,3 +175,25 @@ export function createActivation({
     body: { name, objective, hypothesis, productName, primaryMetric, startDate, endDate, testStoreIds, controlStoreIds },
   });
 }
+
+// --- Network (all stores, aggregated across every retailer this account can see) ---------------------------------------------------
+
+export function fetchNetworkOverview({ periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/network/overview${query({ periodDays })}`, { username, password, signal });
+}
+
+export function fetchNetworkStores({ periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/network/stores${query({ periodDays })}`, { username, password, signal });
+}
+
+export function fetchNetworkProductMovers({ periodDays, limit, username, password, signal }) {
+  return request("GET", `/api/v1/network/movers/products${query({ periodDays, limit })}`, { username, password, signal });
+}
+
+export function fetchNetworkCategoryMovers({ periodDays, limit, username, password, signal }) {
+  return request("GET", `/api/v1/network/movers/categories${query({ periodDays, limit })}`, { username, password, signal });
+}
+
+export function fetchNetworkBrief({ periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/network/brief${query({ periodDays })}`, { username, password, signal });
+}
