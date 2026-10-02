@@ -12,6 +12,8 @@ import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
+import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerOfferActivationRepository;
@@ -56,6 +58,12 @@ class InvestigationServiceTest {
     private InvestigationRepository investigationRepository;
 
     @Autowired
+    private ActivationRepository cciActivationRepository;
+
+    @Autowired
+    private WatchlistItemRepository watchlistItemRepository;
+
+    @Autowired
     private FieldTaskRepository fieldTaskRepository;
 
     @Autowired
@@ -97,6 +105,8 @@ class InvestigationServiceTest {
     @BeforeEach
     void setUp() {
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
+        watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         activationRepository.deleteAll();
         auditEventRepository.deleteAll();
@@ -189,6 +199,36 @@ class InvestigationServiceTest {
         investigation = investigationService.reopen(retailer, investigation.getId());
         assertThat(investigation.getStatus()).isEqualTo(Investigation.Status.IN_PROGRESS);
         assertThat(investigation.getClosedAt()).isNull();
+    }
+
+    @Test
+    void searchFiltersInvestigationsByTitleOrQuestionCaseInsensitively() {
+        investigationService.openGeneral(retailer, "Why is the north region soft?", "What changed in the north region?", "tester@example.com");
+        investigationService.openGeneral(retailer, "Distributor delay resolved", "Why were deliveries late?", "tester@example.com");
+
+        assertThat(investigationService.list(retailer, false, "north region")).hasSize(1);
+        assertThat(investigationService.list(retailer, false, "DISTRIBUTOR")).hasSize(1);
+        assertThat(investigationService.list(retailer, false, "deliveries late")).hasSize(1);
+        assertThat(investigationService.list(retailer, false, "no such thing")).isEmpty();
+        assertThat(investigationService.list(retailer, false, null)).hasSize(2);
+        assertThat(investigationService.list(retailer, false, "  ")).hasSize(2);
+    }
+
+    @Test
+    void findsRealHistoricalCasesSeededByARealProductInvestigation() {
+        importDecliningSpriteFixture();
+        Investigation closedCase = investigationService.openForProduct(retailer, "Sprite 500ml", PERIOD_DAYS, "tester@example.com");
+        investigationService.setHypothesisStatus(
+            retailer, closedCase.getId(), closedCase.getHypotheses().get(0).getId(), InvestigationHypothesis.Status.CONFIRMED
+        );
+        investigationService.close(retailer, closedCase.getId());
+
+        List<Investigation> history = investigationService.findHistoricalCases(retailer, Investigation.SubjectType.PRODUCT, "Sprite 500ml");
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).getId()).isEqualTo(closedCase.getId());
+        assertThat(history.get(0).getStatus()).isEqualTo(Investigation.Status.CLOSED);
+        assertThat(history.get(0).getHypotheses()).anyMatch(h -> h.getStatus() == InvestigationHypothesis.Status.CONFIRMED);
     }
 
     private void importDecliningSpriteFixture() {

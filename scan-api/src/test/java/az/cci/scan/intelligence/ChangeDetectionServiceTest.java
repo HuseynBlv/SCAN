@@ -13,6 +13,8 @@ import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
+import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerOfferActivationRepository;
@@ -63,6 +65,12 @@ class ChangeDetectionServiceTest {
     private InvestigationRepository investigationRepository;
 
     @Autowired
+    private ActivationRepository cciActivationRepository;
+
+    @Autowired
+    private WatchlistItemRepository watchlistItemRepository;
+
+    @Autowired
     private RetailerOfferActivationRepository activationRepository;
 
     @Autowired
@@ -101,6 +109,8 @@ class ChangeDetectionServiceTest {
     @BeforeEach
     void setUp() {
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
+        watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         activationRepository.deleteAll();
         auditEventRepository.deleteAll();

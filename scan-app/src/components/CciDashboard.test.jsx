@@ -2,16 +2,22 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CciDashboard from './CciDashboard'
-import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole } from '../services/scanApi'
 import {
   askCopilot,
+  createActivation,
   createFieldTask,
+  fetchActivations,
   fetchFieldTasks,
   fetchInvestigations,
   fetchMeetingBrief,
   fetchMovers,
+  fetchWatchlist,
+  fetchWatchlistChanges,
+  followProduct,
   openProductInvestigation,
   recordFieldTaskResult,
+  unfollowProduct,
 } from '../services/intelligenceApi'
 
 vi.mock('../services/scanApi', async (importOriginal) => {
@@ -20,6 +26,7 @@ vi.mock('../services/scanApi', async (importOriginal) => {
     ...actual,
     fetchAnalyticsContext: vi.fn(),
     fetchOverview: vi.fn(),
+    setCommercialRole: vi.fn(),
   }
 })
 
@@ -41,6 +48,13 @@ vi.mock('../services/intelligenceApi', () => ({
   createFieldTask: vi.fn(),
   recordFieldTaskResult: vi.fn(),
   askCopilot: vi.fn(),
+  fetchWatchlist: vi.fn(),
+  followProduct: vi.fn(),
+  unfollowProduct: vi.fn(),
+  fetchWatchlistChanges: vi.fn(),
+  fetchActivations: vi.fn(),
+  fetchActivation: vi.fn(),
+  createActivation: vi.fn(),
 }))
 
 const overview = {
@@ -105,6 +119,23 @@ const openInvestigation = {
   notes: [{ id: 'note-1', authorUsername: 'SCAN', body: 'Sprite 500ml appeared in 6 baskets vs. 12 before.', system: true, createdAt: '2026-08-20T10:00:00Z' }],
 }
 
+const closedPastCase = {
+  id: 'inv-0',
+  title: 'Sprite 500ml is down 40%',
+  question: 'What changed for Sprite 500ml?',
+  subjectType: 'PRODUCT',
+  subjectName: 'Sprite 500ml',
+  periodDays: 14,
+  status: 'CLOSED',
+  ownerLabel: 'Commercial Team',
+  createdBy: 'scan-demo-cci',
+  createdAt: '2026-06-01T10:00:00Z',
+  updatedAt: '2026-06-05T10:00:00Z',
+  closedAt: '2026-06-05T10:00:00Z',
+  hypotheses: [],
+  notes: [],
+}
+
 const mover = { productName: 'Sprite 500ml', category: 'Beverages', recentBaskets: 6, priorBaskets: 12, basketChangePct: -50 }
 
 function mockIntelligenceDefaults() {
@@ -116,6 +147,12 @@ function mockIntelligenceDefaults() {
   createFieldTask.mockReset()
   recordFieldTaskResult.mockReset()
   askCopilot.mockReset()
+  fetchWatchlist.mockReset().mockResolvedValue([])
+  fetchWatchlistChanges.mockReset().mockResolvedValue([])
+  followProduct.mockReset()
+  unfollowProduct.mockReset()
+  fetchActivations.mockReset().mockResolvedValue([])
+  createActivation.mockReset()
 }
 
 async function signIn(user) {
@@ -130,8 +167,10 @@ describe('CciDashboard', () => {
   beforeEach(() => {
     fetchAnalyticsContext.mockReset().mockResolvedValue({
       retailers: [{ code: 'KAGGLE', name: 'Kaggle Demo Retailer', demoData: true }],
+      commercialRole: 'COMMERCIAL',
     })
     fetchOverview.mockReset()
+    setCommercialRole.mockReset().mockResolvedValue('FIELD_SALES')
     mockIntelligenceDefaults()
   })
 
@@ -171,7 +210,7 @@ describe('CciDashboard', () => {
 
     const sections = [
       ['Investigate', 'Real questions, with real evidence.'],
-      ['Activations', 'Coming in a future phase.'],
+      ['Activations', 'Real test-vs-control trials.'],
       ['Network', 'Infrastructure and analytical depth.'],
       ['Copilot', 'Ask about a product or an investigation.'],
       ['My Work', 'Everything is caught up'],
@@ -349,6 +388,33 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('button', { name: 'Record result' })).toBeInTheDocument()
   })
 
+  it('shows a real prior case for the same product in the Seen before panel', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
+    await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Seen before' })).toBeInTheDocument()
+    expect(screen.getByText('Sprite 500ml is down 40%')).toBeInTheDocument()
+  })
+
+  it('filters the investigation list by a real search term', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
+    expect(await screen.findByText('Sprite 500ml is down 40%')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Search investigations'), '50%')
+    expect(screen.getByText('Sprite 500ml is down 50%')).toBeInTheDocument()
+    expect(screen.queryByText('Sprite 500ml is down 40%')).not.toBeInTheDocument()
+  })
+
   it('answers a Copilot question about a product using only real tool output', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
@@ -360,6 +426,7 @@ describe('CciDashboard', () => {
       confidence: 'MEDIUM',
       whatWeStillDontKnow: 'SCAN has no direct stock-level or competitor data.',
       nextSteps: [{ label: 'Create a field check', actionType: 'CREATE_FIELD_CHECK', targetId: 'Sprite 500ml' }],
+      priorCases: ['Opened 2026-06-01, closed without a confirmed cause.'],
     })
     await signIn(user)
 
@@ -371,6 +438,31 @@ describe('CciDashboard', () => {
     expect(askCopilot).toHaveBeenCalledWith(expect.objectContaining({ contextType: 'PRODUCT', subjectName: 'Sprite 500ml' }))
     expect(await screen.findByText(/Sprite 500ml appeared in 6 baskets/)).toBeInTheDocument()
     expect(screen.getByText('MEDIUM confidence')).toBeInTheDocument()
+    expect(screen.getByText('Opened 2026-06-01, closed without a confirmed cause.')).toBeInTheDocument()
+  })
+
+  it('shows exactly one input for Copilot and disables Ask until it is filled', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    const { container } = render(<CciDashboard />)
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open workspace' }))
+    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+    const formControls = () => container.querySelectorAll('.cci-copilot-form input, .cci-copilot-form select')
+
+    await user.click(screen.getAllByRole('button', { name: 'Copilot' })[0])
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
+    expect(formControls()).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'A product' }))
+    expect(formControls()).toHaveLength(1)
+    expect(screen.getByLabelText('Product')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'An investigation' }))
+    expect(formControls()).toHaveLength(1)
+    expect(screen.getByLabelText('Investigation')).toBeInTheDocument()
   })
 
   it('prepares a real meeting brief from My Work', async () => {
@@ -393,5 +485,106 @@ describe('CciDashboard', () => {
 
     expect(fetchMeetingBrief).toHaveBeenCalledWith(expect.objectContaining({ template: 'WEEKLY_SALES_REVIEW' }))
     expect(await screen.findByText(/CCI products appeared in 2.1% of baskets/)).toBeInTheDocument()
+  })
+
+  it('follows a product from My Work and shows its real current numbers, regardless of size', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    const watched = { id: 'watch-1', productName: 'Sprite 500ml', addedBy: 'scan-demo-cci', createdAt: '2026-08-20T10:00:00Z' }
+    followProduct.mockResolvedValue(watched)
+    fetchWatchlist.mockResolvedValueOnce([]).mockResolvedValue([watched])
+    fetchWatchlistChanges.mockResolvedValueOnce([]).mockResolvedValue([
+      { productName: 'Sprite 500ml', category: null, recentBaskets: 1, priorBaskets: 2, basketChangePct: -50 },
+    ])
+    await signIn(user)
+
+    expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Follow a product'), 'Sprite 500ml')
+    await user.click(screen.getByRole('button', { name: 'Follow' }))
+
+    expect(followProduct).toHaveBeenCalledWith(expect.objectContaining({ productName: 'Sprite 500ml' }))
+    expect(await screen.findByText(/1 baskets recently vs\. 2 before/)).toBeInTheDocument()
+
+    unfollowProduct.mockResolvedValue(null)
+    fetchWatchlist.mockResolvedValue([])
+    fetchWatchlistChanges.mockResolvedValue([])
+    await user.click(screen.getByRole('button', { name: 'Unfollow' }))
+
+    expect(unfollowProduct).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'watch-1' }))
+    expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
+  })
+
+  it('creates an activation and shows its real test-vs-control performance', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue({
+      ...overview,
+      stores: [
+        { storeId: 'STORE-01', basketCount: 100, cciBasketCount: 10, cciPenetrationPercentage: 10, averageBasketValue: 12 },
+        { storeId: 'STORE-02', basketCount: 100, cciBasketCount: 10, cciPenetrationPercentage: 10, averageBasketValue: 12 },
+      ],
+    })
+    const createdActivation = {
+      id: 'act-1', name: 'Sprite cooler push', objective: 'Increase Sprite visibility', hypothesis: 'Cooler placement drives trial',
+      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
+      status: 'COMPLETED', createdBy: 'scan-demo-cci', createdAt: '2026-09-01T00:00:00Z',
+      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
+      performance: {
+        test: { storeCount: 1, reportingStoreCount: 1, baselineBaskets: 4, baselineMatchingBaskets: 2, baselinePenetrationPct: 50, duringBaskets: 4, duringMatchingBaskets: 4, duringPenetrationPct: 100, baselineRevenue: 5, duringRevenue: 10 },
+        control: { storeCount: 1, reportingStoreCount: 1, baselineBaskets: 4, baselineMatchingBaskets: 2, baselinePenetrationPct: 50, duringBaskets: 4, duringMatchingBaskets: 2, duringPenetrationPct: 50, baselineRevenue: 5, duringRevenue: 5 },
+        testPenetrationPointChange: 50, controlPenetrationPointChange: 0, penetrationDifferenceInDifference: 50,
+        keyFinding: 'Test stores moved 50.0 points more than control stores over the activation window.',
+        limitations: 'Store selection was not randomized, so other factors could explain part of this difference.',
+        recommendation: 'This is a single observational comparison, not a randomized controlled test.',
+      },
+    }
+    createActivation.mockResolvedValue(createdActivation)
+    fetchActivations.mockResolvedValueOnce([]).mockResolvedValue([createdActivation])
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Activations' })[0])
+    await user.click(screen.getByRole('button', { name: 'Create activation' }))
+    await user.type(screen.getByLabelText('Name'), 'Sprite cooler push')
+    await user.type(screen.getByLabelText('Objective'), 'Increase Sprite visibility')
+    await user.type(screen.getByLabelText('Hypothesis'), 'Cooler placement drives trial')
+    await user.type(screen.getByLabelText('Product'), 'Sprite 500ml')
+    await user.type(screen.getByLabelText('Start date'), '2026-09-01')
+    await user.type(screen.getByLabelText('End date'), '2026-09-07')
+    const storeRows = screen.getAllByText(/^STORE-0/).map((span) => span.closest('.cci-store-group-row'))
+    await user.click(within(storeRows[0]).getByLabelText('Test'))
+    await user.click(within(storeRows[1]).getByLabelText('Control'))
+    await user.click(screen.getByRole('button', { name: 'Create activation' }))
+
+    expect(createActivation).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Sprite cooler push', testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
+    }))
+    expect(await screen.findByRole('heading', { name: 'Sprite cooler push' })).toBeInTheDocument()
+    expect(screen.getByText('Test stores moved 50.0 points more than control stores over the activation window.')).toBeInTheDocument()
+    expect(screen.getByText(/50% baseline → 100% during/)).toBeInTheDocument()
+  })
+
+  it('reorders My Work to show field checks first after switching to the Field Sales role', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    const openTask = {
+      id: 'task-1', investigationId: null, title: 'Check Sprite availability', reason: 'Basket presence dropped',
+      assignedTo: 'Field Sales Team', dueAt: null, status: 'OPEN', createdBy: 'scan-demo-cci',
+      createdAt: '2026-08-24T10:00:00Z', updatedAt: '2026-08-24T10:00:00Z',
+      stores: [{ id: 's1', externalStoreId: 'STORE-01', completed: false }],
+    }
+    fetchFieldTasks.mockResolvedValue([openTask])
+    const { container } = render(<CciDashboard />)
+    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
+    await user.type(screen.getByLabelText('Password'), 'demo-secret')
+    await user.click(screen.getByRole('button', { name: 'Open workspace' }))
+    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+
+    expect(screen.queryByRole('heading', { name: 'Field checks waiting on you' })).not.toBeInTheDocument()
+
+    act(() => { container.querySelector('.cci-user-menu').open = true })
+    await user.selectOptions(screen.getByLabelText('I am'), 'FIELD_SALES')
+
+    expect(setCommercialRole).toHaveBeenCalledWith(expect.objectContaining({ commercialRole: 'FIELD_SALES' }))
+    const heading = await screen.findByRole('heading', { name: 'Field checks waiting on you' })
+    expect(heading.compareDocumentPosition(screen.getByRole('heading', { name: 'Needs attention' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

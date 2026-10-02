@@ -42,7 +42,8 @@ final class CopilotDtos {
         List<String> evidence,
         String confidence,
         String whatWeStillDontKnow,
-        List<NextStep> nextSteps
+        List<NextStep> nextSteps,
+        List<String> priorCases
     ) {
     }
 }

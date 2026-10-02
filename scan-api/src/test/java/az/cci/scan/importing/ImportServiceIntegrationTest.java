@@ -21,6 +21,8 @@ import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
+import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.StoreRepository;
 import az.cci.scan.repository.ScanAccountRepository;
@@ -97,6 +99,12 @@ class ImportServiceIntegrationTest {
     private InvestigationRepository investigationRepository;
 
     @Autowired
+    private ActivationRepository cciActivationRepository;
+
+    @Autowired
+    private WatchlistItemRepository watchlistItemRepository;
+
+    @Autowired
     private RetailerRepository retailerRepository;
 
     @Autowired
@@ -117,6 +125,8 @@ class ImportServiceIntegrationTest {
         importProfileRepository.deleteAll();
         storeRepository.deleteAll();
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
+        watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         retailerRepository.deleteAll();
 

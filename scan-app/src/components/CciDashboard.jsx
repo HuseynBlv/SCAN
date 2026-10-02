@@ -8,22 +8,28 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ScanApiError, fetchAnalyticsContext, fetchOverview } from '../services/scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole as putCommercialRole } from '../services/scanApi'
 import {
   addInvestigationNote,
   askCopilot,
   closeInvestigation,
   confirmHypothesis,
+  createActivation,
   createFieldTask,
+  fetchActivations,
   fetchFieldTasks,
   fetchInvestigations,
   fetchMeetingBrief,
   fetchMovers,
+  fetchWatchlist,
+  fetchWatchlistChanges,
+  followProduct,
   openGeneralInvestigation,
   openProductInvestigation,
   recordFieldTaskResult,
   rejectHypothesis,
   reopenInvestigation,
+  unfollowProduct,
 } from '../services/intelligenceApi'
 import { compactChartLabel } from './chartLabels'
 import ScanBrand from './ScanBrand'
@@ -332,11 +338,88 @@ function MeetingBriefPanel({ onPrepare }) {
   )
 }
 
+// Unlike auto-detected movers (which only surface once a change clears a support/magnitude
+// floor), a followed product's real current comparison always shows here - the team asked for it
+// specifically, so there's no threshold to clear. See WatchlistService on the backend.
+function WatchingSection({ watchlist, watchlistChanges, productOptions, onFollow, onUnfollow }) {
+  const [productName, setProductName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [busyItemId, setBusyItemId] = useState(null)
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!productName.trim()) return
+    setSubmitting(true)
+    try {
+      await onFollow(productName.trim())
+      setProductName('')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleUnfollow(itemId) {
+    setBusyItemId(itemId)
+    try {
+      await onUnfollow(itemId)
+    } finally {
+      setBusyItemId(null)
+    }
+  }
+
+  return (
+    <section className="cci-home-section">
+      <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Explicitly followed</span><h2>Watching</h2></div></header>
+      <form className="cci-watch-form" onSubmit={submit}>
+        <label className="sr-only" htmlFor="cci-watch-product">Follow a product</label>
+        <input id="cci-watch-product" list="cci-watch-product-options" onChange={(event) => setProductName(event.target.value)} placeholder="Follow a product…" value={productName} />
+        <datalist id="cci-watch-product-options">{productOptions.map((name) => <option key={name} value={name} />)}</datalist>
+        <button className="scan-button scan-button-dark" disabled={submitting || !productName.trim()} type="submit">Follow</button>
+      </form>
+      {watchlist.length ? (
+        <div className="cci-watch-list">
+          {watchlist.map((item) => {
+            const change = watchlistChanges.find((entry) => entry.productName === item.productName)
+            return (
+              <div className="cci-watch-row" key={item.id}>
+                <div>
+                  <strong>{item.productName}</strong>
+                  <small>
+                    {change
+                      ? `${integer.format(change.recentBaskets)} baskets recently vs. ${integer.format(change.priorBaskets)} before (${change.basketChangePct >= 0 ? '+' : ''}${decimal.format(change.basketChangePct)}%)`
+                      : 'No comparison data yet'}
+                  </small>
+                </div>
+                <button className="scan-button scan-button-light" disabled={busyItemId === item.id} onClick={() => handleUnfollow(item.id)} type="button">Unfollow</button>
+              </div>
+            )
+          })}
+        </div>
+      ) : <EmptyState compact title="Not watching anything yet">Follow a product to always see its real current numbers here, regardless of size.</EmptyState>}
+    </section>
+  )
+}
+
+function FieldChecksList({ openTasks, onNavigate }) {
+  return openTasks.length ? (
+    <div className="cci-work-list">
+      {openTasks.map((item) => {
+        const done = item.stores.filter((store) => store.completed).length
+        return (
+          <WorkListCard badgeLabel={`${done}/${item.stores.length} done`} badgeTone="warning" key={item.id} meta={`Assigned to ${item.assignedTo}`} onOpen={() => onNavigate('investigate')} title={item.title} />
+        )
+      })}
+    </div>
+  ) : <EmptyState compact title="No field checks waiting">Create one from an investigation when you need real-world confirmation.</EmptyState>
+}
+
 function MyWork({
-  credentials, movers, investigations, fieldTasks, intelligenceLoading, intelligenceError,
-  onOpenInvestigation, onStartProductInvestigation, onAskAbout, onNavigate, onPrepareBrief,
+  credentials, movers, investigations, fieldTasks, watchlist, watchlistChanges, productOptions,
+  intelligenceLoading, intelligenceError, onOpenInvestigation, onStartProductInvestigation,
+  onAskAbout, onNavigate, onPrepareBrief, onFollow, onUnfollow, commercialRole,
 }) {
   const [busyProduct, setBusyProduct] = useState(null)
+  const isFieldSales = commercialRole === 'FIELD_SALES'
   const inProgress = investigations.filter((item) => item.status === 'IN_PROGRESS')
   const openTasks = fieldTasks.filter((item) => item.status === 'OPEN')
   const recentlyClosedInvestigations = investigations
@@ -374,6 +457,13 @@ function MyWork({
 
       {intelligenceError ? <div className="scan-inline-notice scan-inline-error" role="alert">{intelligenceError}</div> : null}
 
+      {isFieldSales ? (
+        <section className="cci-home-section">
+          <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Assigned to you</span><h2>Field checks waiting on you</h2></div></header>
+          <FieldChecksList onNavigate={onNavigate} openTasks={openTasks} />
+        </section>
+      ) : null}
+
       <section className="cci-home-section">
         <header className="cci-home-section-heading"><div><span className="scan-eyebrow">Detected changes</span><h2>Needs attention</h2></div></header>
         {intelligenceLoading ? <p className="cci-work-loading">Scanning for real changes…</p> : needsAttention.length ? (
@@ -385,7 +475,9 @@ function MyWork({
         ) : <EmptyState compact title="No new changes detected">No CCI product moved enough in the last {DEFAULT_PERIOD_DAYS} days to flag, or every real decline already has an open investigation.</EmptyState>}
       </section>
 
-      <div className="scan-two-column cci-my-work-columns">
+      <WatchingSection onFollow={onFollow} onUnfollow={onUnfollow} productOptions={productOptions} watchlist={watchlist} watchlistChanges={watchlistChanges} />
+
+      <div className={isFieldSales ? 'cci-my-work-columns' : 'scan-two-column cci-my-work-columns'}>
         <section className="cci-home-section">
           <header className="cci-home-section-heading"><div><h3>In progress</h3></div></header>
           {inProgress.length ? (
@@ -396,19 +488,12 @@ function MyWork({
             </div>
           ) : <EmptyState compact title="Nothing in progress">Open an investigation to start one.</EmptyState>}
         </section>
-        <section className="cci-home-section">
-          <header className="cci-home-section-heading"><div><h3>Waiting on team</h3></div></header>
-          {openTasks.length ? (
-            <div className="cci-work-list">
-              {openTasks.map((item) => {
-                const done = item.stores.filter((store) => store.completed).length
-                return (
-                  <WorkListCard badgeLabel={`${done}/${item.stores.length} done`} badgeTone="warning" key={item.id} meta={`Assigned to ${item.assignedTo}`} onOpen={() => onNavigate('investigate')} title={item.title} />
-                )
-              })}
-            </div>
-          ) : <EmptyState compact title="No field checks waiting">Create one from an investigation when you need real-world confirmation.</EmptyState>}
-        </section>
+        {isFieldSales ? null : (
+          <section className="cci-home-section">
+            <header className="cci-home-section-heading"><div><h3>Waiting on team</h3></div></header>
+            <FieldChecksList onNavigate={onNavigate} openTasks={openTasks} />
+          </section>
+        )}
       </div>
 
       <section className="cci-home-section">
@@ -614,7 +699,7 @@ function FieldTaskStoreRow({ store, onRecord }) {
 }
 
 function InvestigationDetail({
-  investigation, fieldTasks, stores, onBack, onAddNote, onConfirmHypothesis, onRejectHypothesis,
+  investigation, fieldTasks, stores, allInvestigations, onBack, onAddNote, onConfirmHypothesis, onRejectHypothesis,
   onClose, onReopen, onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot,
 }) {
   const [noteBody, setNoteBody] = useState('')
@@ -623,6 +708,12 @@ function InvestigationDetail({
   const systemNotes = investigation.notes.filter((note) => note.system)
   const humanNotes = investigation.notes.filter((note) => !note.system)
   const linkedTasks = fieldTasks.filter((task) => task.investigationId === investigation.id)
+  // SCAN's "have we seen this before" memory - computed from the same stored records the
+  // investigation list already holds, never an invented summary of what probably happened.
+  const priorCases = investigation.subjectType === 'PRODUCT'
+    ? allInvestigations.filter((item) => item.id !== investigation.id
+        && item.subjectType === 'PRODUCT' && item.subjectName === investigation.subjectName)
+    : []
 
   async function submitNote(event) {
     event.preventDefault()
@@ -665,6 +756,23 @@ function InvestigationDetail({
           </div>
         ) : <EmptyState compact title="No hypotheses yet">SCAN did not find a strong enough signal to propose one. Add one manually as evidence comes in.</EmptyState>}
       </section>
+
+      {investigation.subjectType === 'PRODUCT' ? (
+        <section className="scan-panel">
+          <header className="scan-panel-header"><div><h3>Seen before</h3><p>Only real, stored investigations into this product - never a guess about past results.</p></div></header>
+          {priorCases.length ? (
+            <ul className="cci-prior-cases">
+              {priorCases.map((item) => (
+                <li key={item.id}>
+                  <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                  <span>{item.title}</span>
+                  <small>{formatRelativeTime(item.createdAt)}</small>
+                </li>
+              ))}
+            </ul>
+          ) : <EmptyState compact title="No prior cases on record">This is the first time SCAN has investigated this product.</EmptyState>}
+        </section>
+      ) : null}
 
       <section className="scan-panel">
         <header className="scan-panel-header"><div><h3>Field checks</h3></div></header>
@@ -717,11 +825,13 @@ function Investigate({
   onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot, loading, loadError,
 }) {
   const [showStartForm, setShowStartForm] = useState(false)
+  const [searchText, setSearchText] = useState('')
   const selected = investigations.find((item) => item.id === selectedInvestigationId)
 
   if (selected) {
     return (
       <InvestigationDetail
+        allInvestigations={investigations}
         fieldTasks={fieldTasks}
         investigation={selected}
         onAddNote={onAddNote}
@@ -757,19 +867,32 @@ function Investigate({
           />
         </section>
       ) : null}
+      {investigations.length ? (
+        <label className="cci-investigation-search">Search investigations
+          <input onChange={(event) => setSearchText(event.target.value)} placeholder="Search by title or question…" value={searchText} />
+        </label>
+      ) : null}
       {loading ? <p className="cci-work-loading">Loading investigations…</p> : investigations.length ? (
-        <div className="cci-investigation-list">
-          {investigations.map((item) => (
-            <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
-              <div>
-                <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
-                <strong>{item.title}</strong>
-                <small>{item.hypotheses.length} hypothesis(es) · {item.notes.length} note(s) · {formatRelativeTime(item.updatedAt)}</small>
-              </div>
-              <ScanIcon name="chevron" size={18} />
-            </button>
-          ))}
-        </div>
+        (() => {
+          const needle = searchText.trim().toLowerCase()
+          const visible = needle
+            ? investigations.filter((item) => item.title.toLowerCase().includes(needle) || item.question.toLowerCase().includes(needle))
+            : investigations
+          return visible.length ? (
+            <div className="cci-investigation-list">
+              {visible.map((item) => (
+                <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
+                  <div>
+                    <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                    <strong>{item.title}</strong>
+                    <small>{item.hypotheses.length} hypothesis(es) · {item.notes.length} note(s) · {formatRelativeTime(item.updatedAt)}</small>
+                  </div>
+                  <ScanIcon name="chevron" size={18} />
+                </button>
+              ))}
+            </div>
+          ) : <EmptyState compact title="No investigations match that search">Try a different word from the title or question.</EmptyState>
+        })()
       ) : <EmptyState title="No active investigations">Start from a commercial question, or investigate a detected change from My Work.</EmptyState>}
     </div>
   )
@@ -798,6 +921,12 @@ function CopilotAnswerView({ answer }) {
         </div>
       ) : null}
       <div className="cci-answer-block"><span>What we still don't know</span><p>{answer.whatWeStillDontKnow}</p></div>
+      {answer.priorCases?.length ? (
+        <div className="cci-answer-block">
+          <span>Seen before</span>
+          <ul>{answer.priorCases.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        </div>
+      ) : null}
       {answer.nextSteps.length ? (
         <div className="cci-copilot-next-steps">
           {answer.nextSteps.map((step) => <StatusBadge key={step.label} tone="neutral">{step.label}</StatusBadge>)}
@@ -807,11 +936,13 @@ function CopilotAnswerView({ answer }) {
   )
 }
 
+// Copilot's context (not free text) picks which deterministic tool runs - there is no NLU
+// layer parsing a typed question, so a question box next to the product/investigation picker
+// would be decorative and misleading. Each mode shows exactly one real input.
 function Copilot({ context, productOptions, investigations, onAsk }) {
   const [contextType, setContextType] = useState(context?.contextType || 'GENERAL')
   const [subjectName, setSubjectName] = useState(context?.subjectName || '')
   const [investigationId, setInvestigationId] = useState(context?.investigationId || '')
-  const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -824,13 +955,17 @@ function Copilot({ context, productOptions, investigations, onAsk }) {
         subjectName: contextType === 'PRODUCT' ? subjectName : null,
         investigationId: contextType === 'INVESTIGATION' ? investigationId : null,
         periodDays: DEFAULT_PERIOD_DAYS,
-        question: question.trim() || 'What changed?',
+        question: 'What changed?',
       })
       setAnswer(response)
     } finally {
       setLoading(false)
     }
   }
+
+  const canSubmit = contextType === 'GENERAL'
+    || (contextType === 'PRODUCT' && subjectName.trim())
+    || (contextType === 'INVESTIGATION' && investigationId)
 
   return (
     <div className="scan-page-stack">
@@ -852,9 +987,10 @@ function Copilot({ context, productOptions, investigations, onAsk }) {
               </select>
             </label>
           ) : null}
-          <label className="sr-only" htmlFor="cci-copilot-question">Question</label>
-          <input id="cci-copilot-question" onChange={(event) => setQuestion(event.target.value)} placeholder="What do you want to know?" value={question} />
-          <button className="scan-button scan-button-dark" disabled={loading} type="submit">{loading ? 'Thinking…' : 'Ask'}</button>
+          {contextType === 'GENERAL' ? (
+            <p className="cci-copilot-general-note">General questions aren't grounded in a specific product or investigation, so SCAN will tell you what it needs instead of guessing.</p>
+          ) : null}
+          <button className="scan-button scan-button-dark" disabled={loading || !canSubmit} type="submit">{loading ? 'Thinking…' : 'Ask'}</button>
         </form>
       </section>
       {answer ? <CopilotAnswerView answer={answer} /> : null}
@@ -863,14 +999,189 @@ function Copilot({ context, productOptions, investigations, onAsk }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Activations (Phase 2 placeholder)                                   */
+/* Activations                                                          */
 /* ------------------------------------------------------------------ */
 
-function Activations() {
+const PRIMARY_METRIC_OPTIONS = [
+  { value: 'BASKET_PENETRATION', label: 'Basket penetration' },
+  { value: 'REVENUE', label: 'Revenue' },
+]
+
+function StoreGroupPicker({ stores, assignments, onAssign }) {
+  return (
+    <fieldset className="cci-store-group-picker">
+      <legend>Assign stores to test or control</legend>
+      {stores.length ? stores.map((store) => (
+        <div className="cci-store-group-row" key={store.storeId}>
+          <span>{store.storeId}</span>
+          <label><input checked={assignments[store.storeId] === 'TEST'} name={`cci-activation-group-${store.storeId}`} onChange={() => onAssign(store.storeId, 'TEST')} type="radio" />Test</label>
+          <label><input checked={assignments[store.storeId] === 'CONTROL'} name={`cci-activation-group-${store.storeId}`} onChange={() => onAssign(store.storeId, 'CONTROL')} type="radio" />Control</label>
+          <label><input checked={!assignments[store.storeId]} name={`cci-activation-group-${store.storeId}`} onChange={() => onAssign(store.storeId, null)} type="radio" />Neither</label>
+        </div>
+      )) : <p>No reporting stores are available yet.</p>}
+    </fieldset>
+  )
+}
+
+function CreateActivationForm({ stores, productOptions, onCreate, onCancel }) {
+  const [name, setName] = useState('')
+  const [objective, setObjective] = useState('')
+  const [hypothesis, setHypothesis] = useState('')
+  const [productName, setProductName] = useState('')
+  const [primaryMetric, setPrimaryMetric] = useState('BASKET_PENETRATION')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [assignments, setAssignments] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  function assign(storeId, group) {
+    setAssignments((current) => {
+      const next = { ...current }
+      if (group) next[storeId] = group
+      else delete next[storeId]
+      return next
+    })
+  }
+
+  const testStoreIds = Object.keys(assignments).filter((id) => assignments[id] === 'TEST')
+  const controlStoreIds = Object.keys(assignments).filter((id) => assignments[id] === 'CONTROL')
+
+  async function submit(event) {
+    event.preventDefault()
+    setError('')
+    if (!testStoreIds.length || !controlStoreIds.length) {
+      setError('Assign at least one test store and one control store.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await onCreate({
+        name: name.trim(), objective: objective.trim(), hypothesis: hypothesis.trim(), productName: productName.trim(),
+        primaryMetric, startDate, endDate, testStoreIds, controlStoreIds,
+      })
+    } catch (requestError) {
+      setError(requestError?.message || 'Unable to create this activation.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form className="cci-create-activation" onSubmit={submit}>
+      <label>Name<input onChange={(event) => setName(event.target.value)} placeholder="e.g. Sprite cooler push" required value={name} /></label>
+      <label>Objective<input onChange={(event) => setObjective(event.target.value)} placeholder="What is this trying to achieve?" required value={objective} /></label>
+      <label>Hypothesis<input onChange={(event) => setHypothesis(event.target.value)} placeholder="Why should this work?" required value={hypothesis} /></label>
+      <label>Product
+        <input list="cci-activation-product-options" onChange={(event) => setProductName(event.target.value)} placeholder="e.g. Sprite 500ml" required value={productName} />
+        <datalist id="cci-activation-product-options">{productOptions.map((option) => <option key={option} value={option} />)}</datalist>
+      </label>
+      <label>Primary metric
+        <select onChange={(event) => setPrimaryMetric(event.target.value)} value={primaryMetric}>
+          {PRIMARY_METRIC_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+      <div className="cci-date-range">
+        <label>Start date<input onChange={(event) => setStartDate(event.target.value)} required type="date" value={startDate} /></label>
+        <label>End date<input onChange={(event) => setEndDate(event.target.value)} required type="date" value={endDate} /></label>
+      </div>
+      <StoreGroupPicker assignments={assignments} onAssign={assign} stores={stores} />
+      {error ? <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div> : null}
+      <div className="cci-form-actions">
+        <button className="scan-button scan-button-light" onClick={onCancel} type="button">Cancel</button>
+        <button className="scan-button scan-button-dark" disabled={submitting} type="submit">{submitting ? 'Creating…' : 'Create activation'}</button>
+      </div>
+    </form>
+  )
+}
+
+function GroupPerformanceCard({ title, group, currency }) {
+  return (
+    <div className="cci-activation-group-card">
+      <h4>{title}</h4>
+      <small>{group.storeCount} store(s) · {group.reportingStoreCount} reported activity during the window</small>
+      <dl>
+        <div><dt>Basket penetration</dt><dd>{decimal.format(group.baselinePenetrationPct)}% baseline → {decimal.format(group.duringPenetrationPct)}% during</dd></div>
+        <div><dt>Matching baskets</dt><dd>{integer.format(group.baselineMatchingBaskets)} of {integer.format(group.baselineBaskets)} baseline → {integer.format(group.duringMatchingBaskets)} of {integer.format(group.duringBaskets)} during</dd></div>
+        <div><dt>Revenue</dt><dd>{formatMoney(group.baselineRevenue, currency)} baseline → {formatMoney(group.duringRevenue, currency)} during</dd></div>
+      </dl>
+    </div>
+  )
+}
+
+function ActivationDetail({ activation, currency, onBack }) {
+  const { performance } = activation
   return (
     <div className="scan-page-stack">
-      <PageIntro description="Test stores against control stores, then review results with honest, non-causal language." eyebrow="Activations" title="Coming in a future phase." />
-      <EmptyState title="Activations are not built yet">Trade Marketing and Sales will be able to set up test-vs-control activations here, with a during-activation performance view and a post-completion review. This is intentionally not faked — it will appear once the activation workflow is real.</EmptyState>
+      <button className="scan-text-link cci-back-link" onClick={onBack} type="button"><ScanIcon name="chevron" size={16} />Back to activations</button>
+      <PageIntro
+        aside={<StatusBadge tone={statusTone(activation.status)}>{humanize(activation.status)}</StatusBadge>}
+        description={activation.objective}
+        eyebrow={activation.productName}
+        title={activation.name}
+      />
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Hypothesis</h3></div></header>
+        <p>{activation.hypothesis}</p>
+        <small>{activation.startDate} to {activation.endDate} · Primary metric: {humanize(activation.primaryMetric)}</small>
+      </section>
+      <section className="scan-panel">
+        <header className="scan-panel-header"><div><h3>Performance</h3><p>Baseline is the period immediately before this activation started, of equal length.</p></div></header>
+        <div className="cci-activation-groups">
+          <GroupPerformanceCard currency={currency} group={performance.test} title="Test stores" />
+          <GroupPerformanceCard currency={currency} group={performance.control} title="Control stores" />
+        </div>
+      </section>
+      <section className="scan-answer cci-structured-answer">
+        <div className="cci-answer-block"><span>Key finding</span><h3>{performance.keyFinding}</h3></div>
+        <div className="cci-answer-block"><span>Limitations</span><p>{performance.limitations}</p></div>
+        {performance.recommendation ? <div className="cci-answer-block"><span>Recommendation</span><p>{performance.recommendation}</p></div> : null}
+      </section>
+    </div>
+  )
+}
+
+function Activations({ activations, data, loading, loadError, selectedActivationId, onSelect, onBack, onCreate }) {
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const selected = activations.find((item) => item.id === selectedActivationId)
+
+  if (selected) {
+    return <ActivationDetail activation={selected} currency={data.currency} onBack={onBack} />
+  }
+
+  return (
+    <div className="scan-page-stack">
+      <PageIntro
+        aside={<button className="scan-button scan-button-dark" onClick={() => setShowCreateForm((value) => !value)} type="button">{showCreateForm ? 'Cancel' : 'Create activation'}</button>}
+        description="Test stores against control stores, then review results with honest, non-causal language."
+        eyebrow="Activations"
+        title="Real test-vs-control trials."
+      />
+      {loadError ? <div className="scan-inline-notice scan-inline-error" role="alert">{loadError}</div> : null}
+      {showCreateForm ? (
+        <section className="scan-panel">
+          <CreateActivationForm
+            onCancel={() => setShowCreateForm(false)}
+            onCreate={async (payload) => { const created = await onCreate(payload); setShowCreateForm(false); onSelect(created.id) }}
+            productOptions={data.cciSkuPerformance.map((item) => item.product)}
+            stores={data.stores}
+          />
+        </section>
+      ) : null}
+      {loading ? <p className="cci-work-loading">Loading activations…</p> : activations.length ? (
+        <div className="cci-investigation-list">
+          {activations.map((item) => (
+            <button className="cci-investigation-row" key={item.id} onClick={() => onSelect(item.id)} type="button">
+              <div>
+                <StatusBadge tone={statusTone(item.status)}>{humanize(item.status)}</StatusBadge>
+                <strong>{item.name}</strong>
+                <small>{item.productName} · {item.startDate} to {item.endDate}</small>
+              </div>
+              <ScanIcon name="chevron" size={18} />
+            </button>
+          ))}
+        </div>
+      ) : <EmptyState title="No activations yet">Set up a test-vs-control trial to measure a real commercial change with honest, non-causal language.</EmptyState>}
     </div>
   )
 }
@@ -1013,7 +1324,7 @@ function Network({ data }) {
 /* Shell                                                                */
 /* ------------------------------------------------------------------ */
 
-function DashboardPage({ activePage, data, intelligence, credentials, actions, onNavigate }) {
+function DashboardPage({ activePage, data, intelligence, credentials, actions, onNavigate, commercialRole }) {
   if (data.totalBaskets === 0) {
     return <section className="scan-panel"><EmptyState title="No transaction data imported yet">Import a validated retailer export for {data.retailerCode}. SCAN will not show derived intelligence until complete receipts are available.</EmptyState></section>
   }
@@ -1044,7 +1355,20 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       />
     )
   }
-  if (activePage === 'activations') return <Activations />
+  if (activePage === 'activations') {
+    return (
+      <Activations
+        activations={intelligence.activations}
+        data={data}
+        loadError={intelligence.error}
+        loading={intelligence.loading}
+        onBack={() => actions.selectActivation(null)}
+        onCreate={actions.createActivation}
+        onSelect={actions.selectActivation}
+        selectedActivationId={intelligence.selectedActivationId}
+      />
+    )
+  }
   if (activePage === 'network') return <Network data={data} />
   if (activePage === 'copilot') {
     return (
@@ -1059,6 +1383,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
   }
   return (
     <MyWork
+      commercialRole={commercialRole}
       credentials={credentials}
       fieldTasks={intelligence.fieldTasks}
       intelligenceError={intelligence.error}
@@ -1066,10 +1391,15 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       investigations={intelligence.investigations}
       movers={intelligence.movers}
       onAskAbout={actions.askCopilotAboutProduct}
+      onFollow={actions.followProduct}
       onNavigate={onNavigate}
       onOpenInvestigation={(id) => { actions.selectInvestigation(id); onNavigate('investigate') }}
       onPrepareBrief={actions.prepareBrief}
       onStartProductInvestigation={actions.startProductInvestigationFromWork}
+      onUnfollow={actions.unfollowProduct}
+      productOptions={productOptions}
+      watchlist={intelligence.watchlist}
+      watchlistChanges={intelligence.watchlistChanges}
     />
   )
 }
@@ -1077,6 +1407,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
 export default function CciDashboard() {
   const [credentials, setCredentials] = useState(null)
   const [retailerOptions, setRetailerOptions] = useState([])
+  const [commercialRole, setCommercialRole] = useState('COMMERCIAL')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1088,9 +1419,13 @@ export default function CciDashboard() {
   const [investigations, setInvestigations] = useState([])
   const [fieldTasks, setFieldTasks] = useState([])
   const [movers, setMovers] = useState([])
+  const [watchlist, setWatchlist] = useState([])
+  const [watchlistChanges, setWatchlistChanges] = useState([])
+  const [activations, setActivations] = useState([])
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [intelligenceError, setIntelligenceError] = useState('')
   const [selectedInvestigationId, setSelectedInvestigationId] = useState(null)
+  const [selectedActivationId, setSelectedActivationId] = useState(null)
   const [copilotContext, setCopilotContext] = useState(null)
 
   usePretextLayout(layoutRef, `${activePage}:${data?.generatedAt || 'login'}`)
@@ -1100,15 +1435,21 @@ export default function CciDashboard() {
     setIntelligenceLoading(true)
     setIntelligenceError('')
     try {
-      const [investigationsResponse, fieldTasksResponse, moversResponse] = await Promise.all([
+      const [investigationsResponse, fieldTasksResponse, moversResponse, watchlistResponse, watchlistChangesResponse, activationsResponse] = await Promise.all([
         fetchInvestigations({ ...creds, signal }),
         fetchFieldTasks({ ...creds, signal }),
         fetchMovers({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, limit: 10, signal }),
+        fetchWatchlist({ ...creds, signal }),
+        fetchWatchlistChanges({ ...creds, periodDays: DEFAULT_PERIOD_DAYS, signal }),
+        fetchActivations({ ...creds, signal }),
       ])
       if (signal?.aborted) return
       setInvestigations(investigationsResponse)
       setFieldTasks(fieldTasksResponse)
       setMovers(moversResponse)
+      setActivations(activationsResponse)
+      setWatchlist(watchlistResponse)
+      setWatchlistChanges(watchlistChangesResponse)
     } catch (requestError) {
       if (requestError?.name !== 'AbortError') {
         setIntelligenceError(requestError?.message || 'Unable to load commercial intelligence data.')
@@ -1142,6 +1483,7 @@ export default function CciDashboard() {
     try {
       const access = await fetchAnalyticsContext(accountCredentials)
       setRetailerOptions(access.retailers)
+      setCommercialRole(access.commercialRole === 'FIELD_SALES' ? 'FIELD_SALES' : 'COMMERCIAL')
       setCredentials({ ...accountCredentials, retailerCode: access.retailers[0].code })
       setRefreshKey((value) => value + 1)
     } catch (requestError) {
@@ -1159,7 +1501,17 @@ export default function CciDashboard() {
   function signOut() {
     setCredentials(null); setRetailerOptions([]); setData(null); setError(''); setLoading(false)
     setActivePage('my-work'); setInvestigations([]); setFieldTasks([]); setMovers([])
-    setSelectedInvestigationId(null); setCopilotContext(null)
+    setWatchlist([]); setWatchlistChanges([]); setActivations([]); setCommercialRole('COMMERCIAL')
+    setSelectedInvestigationId(null); setSelectedActivationId(null); setCopilotContext(null)
+  }
+  async function changeCommercialRole(nextRole) {
+    const previous = commercialRole
+    setCommercialRole(nextRole)
+    try {
+      await putCommercialRole({ ...credentials, commercialRole: nextRole })
+    } catch {
+      setCommercialRole(previous)
+    }
   }
 
   async function withReload(promiseFactory) {
@@ -1188,6 +1540,10 @@ export default function CciDashboard() {
     askCopilotAboutProduct: (productName) => { setCopilotContext({ contextType: 'PRODUCT', subjectName: productName }); setActivePage('copilot') },
     askCopilotAboutInvestigation: (investigationId) => { setCopilotContext({ contextType: 'INVESTIGATION', investigationId }); setActivePage('copilot') },
     prepareBrief: (template) => fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),
+    followProduct: (productName) => withReload(() => followProduct({ ...credentials, productName })),
+    unfollowProduct: (itemId) => withReload(() => unfollowProduct({ ...credentials, itemId })),
+    selectActivation: setSelectedActivationId,
+    createActivation: (payload) => withReload(() => createActivation({ ...credentials, ...payload })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [credentials])
 
@@ -1226,7 +1582,19 @@ export default function CciDashboard() {
             ) : null}
             <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
             <button className="scan-button scan-button-light cci-refresh-button" disabled={loading} onClick={refresh} type="button"><ScanIcon name="refresh" size={17} /><span>{loading ? 'Refreshing…' : 'Refresh'}</span></button>
-              <details className="cci-user-menu"><summary aria-label="CCI workspace menu">CCI</summary><div><strong>CCI Sales & Marketing</strong><small>Commercial intelligence workspace</small><button aria-label="Sign out from user menu" onClick={signOut} type="button"><ScanIcon name="signout" size={16} />Sign out</button></div></details>
+              <details className="cci-user-menu">
+                <summary aria-label="CCI workspace menu">CCI</summary>
+                <div>
+                  <strong>CCI Sales & Marketing</strong>
+                  <small>Commercial intelligence workspace</small>
+                  <label className="cci-role-switch" htmlFor="cci-role-select">I am</label>
+                  <select id="cci-role-select" onChange={(event) => changeCommercialRole(event.target.value)} value={commercialRole}>
+                    <option value="COMMERCIAL">Commercial team</option>
+                    <option value="FIELD_SALES">Field Sales</option>
+                  </select>
+                  <button aria-label="Sign out from user menu" onClick={signOut} type="button"><ScanIcon name="signout" size={16} />Sign out</button>
+                </div>
+              </details>
           </>
         )}
         eyebrow="CCI commercial intelligence"
@@ -1243,11 +1611,13 @@ export default function CciDashboard() {
         <DashboardPage
           activePage={activePage}
           actions={actions}
+          commercialRole={commercialRole}
           credentials={credentials}
           data={data}
           intelligence={{
-            investigations, fieldTasks, movers, loading: intelligenceLoading, error: intelligenceError,
-            selectedInvestigationId, copilotContext,
+            investigations, fieldTasks, movers, watchlist, watchlistChanges, activations,
+            loading: intelligenceLoading, error: intelligenceError,
+            selectedInvestigationId, selectedActivationId, copilotContext,
           }}
           onNavigate={setActivePage}
         />

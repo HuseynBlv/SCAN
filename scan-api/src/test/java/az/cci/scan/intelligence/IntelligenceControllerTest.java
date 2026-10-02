@@ -7,6 +7,8 @@ import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportPreviewRepository;
 import az.cci.scan.repository.ImportProfileRepository;
 import az.cci.scan.repository.InvestigationRepository;
+import az.cci.scan.repository.ActivationRepository;
+import az.cci.scan.repository.WatchlistItemRepository;
 import az.cci.scan.repository.OperationalAuditEventRepository;
 import az.cci.scan.repository.ReceiptRepository;
 import az.cci.scan.repository.RetailerOfferActivationRepository;
@@ -26,6 +28,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -60,6 +63,12 @@ class IntelligenceControllerTest {
     private InvestigationRepository investigationRepository;
 
     @Autowired
+    private ActivationRepository cciActivationRepository;
+
+    @Autowired
+    private WatchlistItemRepository watchlistItemRepository;
+
+    @Autowired
     private RetailerOfferActivationRepository activationRepository;
 
     @Autowired
@@ -91,6 +100,8 @@ class IntelligenceControllerTest {
         mockMvc = webAppContextSetup(applicationContext).apply(springSecurity()).build();
 
         fieldTaskRepository.deleteAll();
+        cciActivationRepository.deleteAll();
+        watchlistItemRepository.deleteAll();
         investigationRepository.deleteAll();
         activationRepository.deleteAll();
         auditEventRepository.deleteAll();
@@ -180,6 +191,138 @@ class IntelligenceControllerTest {
                 org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.containsString("1 of 1 stores reported an issue"))))
             .andExpect(jsonPath("$.hypotheses[0].confidence").value("HIGH"))
             .andExpect(jsonPath("$.hypotheses[0].supportingEvidence", org.hamcrest.Matchers.containsString("Field check confirmed")));
+    }
+
+    @Test
+    void searchesInvestigationsAndLooksUpRealProductHistoryOverRealHttp() throws Exception {
+        mockMvc.perform(post("/api/v1/investigations/general")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title": "Why is the north region soft?", "question": "What changed in the north region?"}
+                    """))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/investigations/general")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title": "Distributor delay resolved", "question": "Why were deliveries late?"}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/investigations")
+                .param("retailerCode", "INTEL")
+                .param("q", "north region")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].title").value("Why is the north region soft?"));
+
+        mockMvc.perform(post("/api/v1/investigations/product")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"productName": "Sprite 500ml", "periodDays": 14}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/investigations/history")
+                .param("retailerCode", "INTEL")
+                .param("productName", "Sprite 500ml")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].subjectName").value("Sprite 500ml"));
+
+        mockMvc.perform(get("/api/v1/investigations/history")
+                .param("retailerCode", "INTEL")
+                .param("productName", "Fanta Orange")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void followsChecksAndUnfollowsAProductOverRealHttp() throws Exception {
+        String followResponse = mockMvc.perform(post("/api/v1/watchlist")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"productName": "Sprite 500ml"}
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.productName").value("Sprite 500ml"))
+            .andReturn().getResponse().getContentAsString();
+        String itemId = JsonPath.read(followResponse, "$.id");
+
+        mockMvc.perform(get("/api/v1/watchlist")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1));
+
+        mockMvc.perform(get("/api/v1/watchlist/changes")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].productName").value("Sprite 500ml"));
+
+        mockMvc.perform(delete("/api/v1/watchlist/" + itemId)
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/watchlist")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void createsAndFetchesAnActivationOverRealHttp() throws Exception {
+        String createResponse = mockMvc.perform(post("/api/v1/activations")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name": "Sprite cooler push",
+                      "objective": "Increase Sprite visibility",
+                      "hypothesis": "Cooler placement drives trial",
+                      "productName": "Sprite 500ml",
+                      "primaryMetric": "BASKET_PENETRATION",
+                      "startDate": "2026-09-01",
+                      "endDate": "2026-09-07",
+                      "testStoreIds": ["STORE-A"],
+                      "controlStoreIds": ["STORE-B"]
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Sprite cooler push"))
+            .andExpect(jsonPath("$.status").value("COMPLETED"))
+            .andExpect(jsonPath("$.testStoreIds[0]").value("STORE-A"))
+            .andExpect(jsonPath("$.controlStoreIds[0]").value("STORE-B"))
+            .andExpect(jsonPath("$.performance.keyFinding").exists())
+            .andReturn().getResponse().getContentAsString();
+        String activationId = JsonPath.read(createResponse, "$.id");
+
+        mockMvc.perform(get("/api/v1/activations")
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1));
+
+        mockMvc.perform(get("/api/v1/activations/" + activationId)
+                .param("retailerCode", "INTEL")
+                .with(httpBasic("intel-cci", "intel-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(activationId));
     }
 
     @Test

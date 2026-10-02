@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ScanApiError } from './scanApi'
 import {
   askCopilot,
+  createActivation,
   fetchInvestigations,
   fetchMovers,
+  followProduct,
   openProductInvestigation,
   recordFieldTaskResult,
+  unfollowProduct,
 } from './intelligenceApi'
 
 function response({ ok, status, body }) {
@@ -91,5 +94,43 @@ describe('intelligenceApi', () => {
 
     await expect(fetchMovers({ retailerCode: 'DEMO', username: 'cci', password: 'secret' }))
       .rejects.toThrow('Cannot reach the SCAN API')
+  })
+
+  it('follows a product with a POST and no body on DELETE when unfollowing', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ ok: true, status: 201, body: { id: 'watch-1', productName: 'Sprite 500ml' } }))
+      .mockResolvedValueOnce(response({ ok: true, status: 204, body: null }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const followed = await followProduct({ retailerCode: 'DEMO', productName: 'Sprite 500ml', username: 'cci', password: 'secret' })
+    const [, followOptions] = fetchMock.mock.calls[0]
+    expect(followOptions.method).toBe('POST')
+    expect(JSON.parse(followOptions.body)).toEqual({ productName: 'Sprite 500ml' })
+    expect(followed.id).toBe('watch-1')
+
+    await unfollowProduct({ retailerCode: 'DEMO', itemId: 'watch-1', username: 'cci', password: 'secret' })
+    const [unfollowUrl, unfollowOptions] = fetchMock.mock.calls[1]
+    expect(unfollowUrl).toBe('/api/v1/watchlist/watch-1?retailerCode=DEMO')
+    expect(unfollowOptions.method).toBe('DELETE')
+    expect(unfollowOptions.body).toBeUndefined()
+  })
+
+  it('sends the full activation payload on create', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, status: 201, body: { id: 'act-1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createActivation({
+      retailerCode: 'DEMO', name: 'Sprite cooler push', objective: 'Increase visibility', hypothesis: 'Placement drives trial',
+      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
+      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'], username: 'cci', password: 'secret',
+    })
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/activations?retailerCode=DEMO')
+    expect(JSON.parse(options.body)).toEqual({
+      name: 'Sprite cooler push', objective: 'Increase visibility', hypothesis: 'Placement drives trial',
+      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
+      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
+    })
   })
 })

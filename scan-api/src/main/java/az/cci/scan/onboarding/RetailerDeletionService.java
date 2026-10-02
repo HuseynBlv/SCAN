@@ -1,6 +1,7 @@
 package az.cci.scan.onboarding;
 
 import az.cci.scan.config.PilotAccessProperties;
+import az.cci.scan.domain.Activation;
 import az.cci.scan.domain.FieldTask;
 import az.cci.scan.domain.ImportJob;
 import az.cci.scan.domain.ImportProfile;
@@ -10,7 +11,9 @@ import az.cci.scan.domain.Retailer;
 import az.cci.scan.domain.RetailerProduct;
 import az.cci.scan.domain.ScanAccount;
 import az.cci.scan.domain.Store;
+import az.cci.scan.domain.WatchlistItem;
 import az.cci.scan.operations.AuditService;
+import az.cci.scan.repository.ActivationRepository;
 import az.cci.scan.repository.FieldTaskRepository;
 import az.cci.scan.repository.ImportJobRepository;
 import az.cci.scan.repository.ImportPreviewRepository;
@@ -22,6 +25,7 @@ import az.cci.scan.repository.RetailerProductRepository;
 import az.cci.scan.repository.RetailerRepository;
 import az.cci.scan.repository.ScanAccountRepository;
 import az.cci.scan.repository.StoreRepository;
+import az.cci.scan.repository.WatchlistItemRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -60,6 +64,8 @@ public class RetailerDeletionService {
     private final OperationalAuditEventRepository auditEventRepository;
     private final FieldTaskRepository fieldTaskRepository;
     private final InvestigationRepository investigationRepository;
+    private final WatchlistItemRepository watchlistItemRepository;
+    private final ActivationRepository activationRepository;
     private final PilotAccessProperties pilotAccessProperties;
     private final AuditService auditService;
 
@@ -75,6 +81,8 @@ public class RetailerDeletionService {
         OperationalAuditEventRepository auditEventRepository,
         FieldTaskRepository fieldTaskRepository,
         InvestigationRepository investigationRepository,
+        WatchlistItemRepository watchlistItemRepository,
+        ActivationRepository activationRepository,
         PilotAccessProperties pilotAccessProperties,
         AuditService auditService
     ) {
@@ -89,6 +97,8 @@ public class RetailerDeletionService {
         this.auditEventRepository = auditEventRepository;
         this.fieldTaskRepository = fieldTaskRepository;
         this.investigationRepository = investigationRepository;
+        this.watchlistItemRepository = watchlistItemRepository;
+        this.activationRepository = activationRepository;
         this.pilotAccessProperties = pilotAccessProperties;
         this.auditService = auditService;
     }
@@ -157,6 +167,12 @@ public class RetailerDeletionService {
         fieldTaskRepository.deleteAll(fieldTasks);
         List<Investigation> investigations = investigationRepository.findAllByRetailerOrderByCreatedAtDesc(retailer);
         investigationRepository.deleteAll(investigations);
+
+        List<WatchlistItem> watchlistItems = watchlistItemRepository.findAllByRetailerOrderByCreatedAtDesc(retailer);
+        watchlistItemRepository.deleteAll(watchlistItems);
+
+        List<Activation> activations = activationRepository.findAllByRetailerOrderByStartDateDesc(retailer);
+        activationRepository.deleteAll(activations);
 
         // This retailer's own audit history goes too - it's squarely part of "its data" - but a
         // single new record survives with no retailer attached, so the deletion itself stays

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ScanApiError, fetchAnalyticsContext, fetchOverview } from './scanApi'
+import { ScanApiError, fetchAnalyticsContext, fetchOverview, setCommercialRole } from './scanApi'
 
 function response({ ok, status, body }) {
   return {
@@ -51,6 +51,27 @@ describe('fetchOverview', () => {
     expect(context.retailers).toEqual([
       { code: 'CASPOS_PILOT', name: 'Pilot Shop', demoData: false },
     ])
+    expect(context.commercialRole).toBe('COMMERCIAL')
+  })
+
+  it('reads a FIELD_SALES commercial role from context and can set it', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        ok: true, status: 200,
+        body: { retailers: [{ code: 'DEMO', name: 'Demo Shop', demoData: true }], commercialRole: 'FIELD_SALES' },
+      }))
+      .mockResolvedValueOnce(response({ ok: true, status: 200, body: { commercialRole: 'FIELD_SALES' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const context = await fetchAnalyticsContext({ username: 'field-cci', password: 'secret' })
+    expect(context.commercialRole).toBe('FIELD_SALES')
+
+    const updated = await setCommercialRole({ commercialRole: 'FIELD_SALES', username: 'field-cci', password: 'secret' })
+    expect(updated).toBe('FIELD_SALES')
+    const [url, options] = fetchMock.mock.calls[1]
+    expect(url).toBe('/api/v1/analytics/context/commercial-role')
+    expect(options.method).toBe('PUT')
+    expect(JSON.parse(options.body)).toEqual({ commercialRole: 'FIELD_SALES' })
   })
 
   it('fails closed when a CCI account has no retailer grants', async () => {

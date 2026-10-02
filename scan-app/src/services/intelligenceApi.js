@@ -137,3 +137,41 @@ export function fetchMeetingBrief({ retailerCode, template, periodDays, username
 export function fetchMovers({ retailerCode, periodDays, limit, username, password, signal }) {
   return request("GET", `/api/v1/analytics/movers${query({ retailerCode, periodDays, limit })}`, { username, password, signal });
 }
+
+// --- Watchlist ---------------------------------------------------
+
+export function fetchWatchlist({ retailerCode, username, password, signal }) {
+  return request("GET", `/api/v1/watchlist${query({ retailerCode })}`, { username, password, signal });
+}
+
+export function followProduct({ retailerCode, productName, username, password }) {
+  return request("POST", `/api/v1/watchlist${query({ retailerCode })}`, { username, password, body: { productName } });
+}
+
+export function unfollowProduct({ retailerCode, itemId, username, password }) {
+  return request("DELETE", `/api/v1/watchlist/${itemId}${query({ retailerCode })}`, { username, password });
+}
+
+export function fetchWatchlistChanges({ retailerCode, periodDays, username, password, signal }) {
+  return request("GET", `/api/v1/watchlist/changes${query({ retailerCode, periodDays })}`, { username, password, signal });
+}
+
+// --- Activations ---------------------------------------------------
+
+export function fetchActivations({ retailerCode, username, password, signal }) {
+  return request("GET", `/api/v1/activations${query({ retailerCode })}`, { username, password, signal });
+}
+
+export function fetchActivation({ retailerCode, activationId, username, password, signal }) {
+  return request("GET", `/api/v1/activations/${activationId}${query({ retailerCode })}`, { username, password, signal });
+}
+
+export function createActivation({
+  retailerCode, name, objective, hypothesis, productName, primaryMetric, startDate, endDate,
+  testStoreIds, controlStoreIds, username, password,
+}) {
+  return request("POST", `/api/v1/activations${query({ retailerCode })}`, {
+    username, password,
+    body: { name, objective, hypothesis, productName, primaryMetric, startDate, endDate, testStoreIds, controlStoreIds },
+  });
+}
