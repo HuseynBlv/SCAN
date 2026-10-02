@@ -106,11 +106,15 @@
 
 ## Product Information Architecture
 
-- **CCI workspace:** My Work, Investigate, Activations, Network, Copilot. Revised from the
-  original Home/Opportunities/Explore/Stores/Ask SCAN layout as part of the 2026-09-30
-  commercial-workspace redesign: the CCI home page leads with real work items (detected
-  changes, open investigations, field checks awaiting results), not a KPI-cards-first
-  dashboard. See the 2026-09-30 decisions below.
+- **CCI workspace:** Overview, Insights, Stores, Products, AI Assistant. Revised from the
+  2026-09-30 My Work/Investigate/Activations/Network/Copilot layout as part of the 2026-10-02
+  network-intelligence redesign: the retailer switcher is gone, and the default experience is
+  aggregated across every retailer a CCI account can see (not one retailer at a time). A single
+  store or product is a drill-down, never the primary unit of navigation. Investigate and
+  Activations are no longer top-level destinations - investigation is an action taken from an
+  Insight, a product row, or a My Work item (reusing the same Investigate detail view built in
+  the 2026-09-30 redesign), and Activations stays reachable in code but out of the nav until a
+  real end-to-end test-vs-control workflow exists. See the 2026-10-02 decisions below.
 - **Retailer workspace:** Home, Offers, Actions, Insights, Partner. Revised from the original
   Today/Sales/Products/Alerts analytics-first layout: the retailer home page leads with
   connection status, SCAN benefits, and a recommended commercial offer, not sales charts.
@@ -120,10 +124,13 @@
   retailer-bound administrator surface and is not part of the CCI or retailer information architecture.
 - **Retailer onboarding workspace:** Retailers with a guarded four-step flow: tenant/stores,
   named import format, no-write sample validation, and one-time credential issuance.
-- Basket, product, and time analysis, plus the former Opportunities/signals view, live inside
-  CCI Network (alongside store reporting and data health) rather than competing with
-  commercial work in the top-level navigation. This preserves the analytical depth of the
-  original Explore/Opportunities pages through progressive disclosure instead of removing it.
+- The single-retailer basket/companion/daypart analysis and signal cards that used to live under
+  CCI Network were retired with the Network nav item in the 2026-10-02 redesign rather than
+  carried forward as-is, because they could not be made genuinely network-wide without new
+  queries. That analytical depth is intended to return as part of the Product detail and Store
+  detail pages (companion products, strongest daypart) called for by the same redesign, not as a
+  restored Network page. Store-level data health now lives under Stores rather than as a
+  top-level concern.
 - Retailer synchronization issues and mapping-quality attention items surface on Home and
   Actions rather than a dedicated Alerts page, so shop owners see what requires attention where
   they already are instead of a fifth place to check.
@@ -295,3 +302,7 @@ decision or help establish data trust.
 | 2026-10-01 | Scope watchlists and activations to products only | ChangeDetectionService can only compute a real comparison for a product; a store/category/region watchlist or a multi-product activation would need comparison functions that don't exist yet, so neither pretends to support them. |
 | 2026-10-01 | Activation results use difference-in-differences language, never causal language | Test and control stores are not randomly assigned, so "test stores moved N points more than control" is reported, never "the activation caused N%"; limitations (no randomization, sample size) are always shown alongside the finding. |
 | 2026-10-01 | Role-aware personalization ships as two roles (Field Sales vs. everyone else), self-service | Per explicit user direction, over a six-role scheme: field tasks are the one thing that is meaningfully role-specific given what is built today (Activations has no Trade-Marketing-specific view yet, Category Manager has no category-level data yet). The account sets its own `commercialRole` as a UI preference, not an access boundary - tenant/retailer access stays governed entirely by TenantAccessService. |
+| 2026-10-02 | Rebuild CCI navigation as Overview / Insights / Stores / Products / AI Assistant, removing the retailer switcher | Per explicit user direction: the product becomes network-level commercial intelligence, not per-retailer dashboards switched by hand. A new `network` backend package generalizes every query to a list of retailer IDs (`TenantAccessService.cciRetailers`) so Overview/Insights/Stores/Products are genuinely aggregated across every retailer a CCI account can see, with no `retailerCode` parameter anywhere in that API surface. |
+| 2026-10-02 | Investigate and Activations stay in the code but leave the top-level nav | Investigation is now an action taken from an Insight, a product row, or a My Work item, not a destination you browse to - the existing Investigate detail view (What changed / Possible explanations / Evidence / Next steps) is reused unchanged. Activations has no real end-to-end test-vs-control workflow yet (per the 2026-10-01 decision above), so it is intentionally unreachable from the UI until one exists, rather than kept as a permanent nav item with no live entry point. |
+| 2026-10-02 | My Work's real-time task content (field checks, watchlist, in-progress investigations, meeting brief) is embedded inside Overview rather than kept as its own page | The redesign's nav has exactly five items and none of them is "My Work" - folding its content into the bottom of Overview (labeled "Your work") keeps every Phase 1/2 feature reachable without adding a sixth nav destination the spec did not call for. |
+| 2026-10-02 | The AI Commercial Brief and Insights feed surface at most 3 real items, generated the same way InsightRules/ChangeDetectionService already work | Up to one real decline (with store-concentration share), one real gain, and one data-quality note when mapping coverage is below 90% - never a fabricated fourth item, and never a vague "everything is fine" empty state (it states the actual stable numbers instead). |

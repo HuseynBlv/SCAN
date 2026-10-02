@@ -12,6 +12,11 @@ import {
   fetchInvestigations,
   fetchMeetingBrief,
   fetchMovers,
+  fetchNetworkBrief,
+  fetchNetworkCategoryMovers,
+  fetchNetworkOverview,
+  fetchNetworkProductMovers,
+  fetchNetworkStores,
   fetchWatchlist,
   fetchWatchlistChanges,
   followProduct,
@@ -55,6 +60,11 @@ vi.mock('../services/intelligenceApi', () => ({
   fetchActivations: vi.fn(),
   fetchActivation: vi.fn(),
   createActivation: vi.fn(),
+  fetchNetworkOverview: vi.fn(),
+  fetchNetworkStores: vi.fn(),
+  fetchNetworkProductMovers: vi.fn(),
+  fetchNetworkCategoryMovers: vi.fn(),
+  fetchNetworkBrief: vi.fn(),
 }))
 
 const overview = {
@@ -77,20 +87,6 @@ const overview = {
     fact: 'A deterministic fact.',
     interpretation: 'A deterministic interpretation.',
     recommendedAction: 'Test one action.',
-  }],
-}
-
-const overviewWithCompanions = {
-  ...overview,
-  topCompanionProducts: [{
-    name: 'SWEET HOME FALQA ALUMIN 10M',
-    basketCount: 80,
-    attachmentRatePercentage: 38.3,
-  }],
-  topCompanionCategories: [{
-    category: 'Snacks',
-    basketCount: 90,
-    attachmentRatePercentage: 43.1,
   }],
 }
 
@@ -138,6 +134,12 @@ const closedPastCase = {
 
 const mover = { productName: 'Sprite 500ml', category: 'Beverages', recentBaskets: 6, priorBaskets: 12, basketChangePct: -50 }
 
+const networkOverview = {
+  periodDays: 30, storesReporting: 2, totalBaskets: 200, cciBaskets: 20,
+  cciPenetrationPct: 10, priorCciPenetrationPct: 10, penetrationPointChange: 0,
+  dataCoveragePct: 95, generatedAt: '2026-08-25T10:00:00Z',
+}
+
 function mockIntelligenceDefaults() {
   fetchInvestigations.mockReset().mockResolvedValue([])
   fetchFieldTasks.mockReset().mockResolvedValue([])
@@ -153,6 +155,11 @@ function mockIntelligenceDefaults() {
   unfollowProduct.mockReset()
   fetchActivations.mockReset().mockResolvedValue([])
   createActivation.mockReset()
+  fetchNetworkOverview.mockReset().mockResolvedValue(networkOverview)
+  fetchNetworkStores.mockReset().mockResolvedValue([])
+  fetchNetworkProductMovers.mockReset().mockResolvedValue([])
+  fetchNetworkCategoryMovers.mockReset().mockResolvedValue([])
+  fetchNetworkBrief.mockReset().mockResolvedValue([])
 }
 
 async function signIn(user) {
@@ -206,14 +213,15 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'SCAN commercial workspace' })).toBeInTheDocument()
     expect(screen.getByText('Demo data')).toBeInTheDocument()
     expect(screen.getByText(/not current CCI market evidence/)).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'My Work' })[0]).toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('button', { name: 'Overview' })[0]).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: /Here.s what changed across your retail network/ })).toBeInTheDocument()
 
     const sections = [
-      ['Investigate', 'Real questions, with real evidence.'],
-      ['Activations', 'Real test-vs-control trials.'],
-      ['Network', 'Infrastructure and analytical depth.'],
-      ['Copilot', 'Ask about a product or an investigation.'],
-      ['My Work', 'Everything is caught up'],
+      ['Insights', "What's changing across your network."],
+      ['Stores', 'Every store in the network, ranked.'],
+      ['Products', 'CCI product performance across the network.'],
+      ['AI Assistant', 'Ask about a product or an investigation.'],
+      ['Overview', /Here.s what changed across your retail network/],
     ]
     for (const [buttonName, headingName] of sections) {
       await user.click(screen.getAllByRole('button', { name: buttonName })[0])
@@ -245,38 +253,21 @@ describe('CciDashboard', () => {
     expect(screen.getByLabelText('Password')).toHaveValue('')
   })
 
-  it('switches between retailers shared with the CCI account', async () => {
+  // The product redesign removes manual retailer switching entirely: the default experience
+  // aggregates every retailer a CCI account can see, and a single store is a drill-down, not a
+  // workspace-wide selection. This asserts that removal holds even when an account is granted
+  // access to more than one retailer - the switcher must not reappear.
+  it('never shows a retailer switcher, even for an account with access to multiple retailers', async () => {
     const user = userEvent.setup()
-    const cornerMarketOverview = { ...overview, retailerCode: 'SHOP_01', retailerName: 'Corner Market' }
     fetchAnalyticsContext.mockResolvedValue({
       retailers: [
         { code: 'KAGGLE', name: 'Kaggle Demo Retailer', demoData: true },
         { code: 'SHOP_01', name: 'Corner Market', demoData: false },
       ],
+      commercialRole: 'COMMERCIAL',
     })
-    fetchOverview
-      .mockResolvedValueOnce(overview)
-      .mockResolvedValueOnce(cornerMarketOverview)
-    const { container } = render(<CciDashboard />)
-
-    await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
-    await user.type(screen.getByLabelText('Password'), 'demo-secret')
-    await user.click(screen.getByRole('button', { name: 'Open workspace' }))
-    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
-    expect(fetchOverview).toHaveBeenNthCalledWith(1, expect.objectContaining({ retailerCode: 'KAGGLE' }))
-
-    act(() => { container.querySelector('.cci-retailer-menu').open = true })
-    await user.click(screen.getByRole('button', { name: 'Corner Market SHOP_01' }))
-
-    await waitFor(() => expect(fetchOverview).toHaveBeenCalledTimes(2))
-    expect(fetchOverview).toHaveBeenNthCalledWith(2, expect.objectContaining({ retailerCode: 'SHOP_01' }))
-    expect(await screen.findByText('Corner Market · SHOP_01')).toBeInTheDocument()
-  })
-
-  it('hides the retailer switcher for an account shared with only one retailer', async () => {
-    const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
-    render(<CciDashboard />)
+    const { container } = render(<CciDashboard />)
 
     await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
@@ -284,6 +275,7 @@ describe('CciDashboard', () => {
     await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
 
     expect(screen.queryByText('Switch retailer')).not.toBeInTheDocument()
+    expect(container.querySelector('.cci-retailer-menu')).not.toBeInTheDocument()
   })
 
   it('clears displayed analytics when retailer permission is revoked', async () => {
@@ -322,21 +314,8 @@ describe('CciDashboard', () => {
 
     expect(await screen.findByRole('heading', { name: 'No transaction data imported yet' }))
       .toBeInTheDocument()
-    screen.getAllByRole('button', { name: 'Investigate' })
+    screen.getAllByRole('button', { name: 'Insights' })
       .forEach((button) => expect(button).toBeDisabled())
-  })
-
-  it('provides accessible chart labels and equivalent category table data under Network', async () => {
-    const user = userEvent.setup()
-    fetchOverview.mockResolvedValue(overviewWithCompanions)
-    await signIn(user)
-
-    await user.click(screen.getAllByRole('button', { name: 'Network' })[0])
-    expect(screen.getByRole('heading', { name: 'Infrastructure and analytical depth.' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Baskets' }))
-
-    expect(screen.getByRole('img', { name: /Companion product attachment rates/ })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /Companion category attachment rates/ })).toBeInTheDocument()
   })
 
   it('starts an investigation from a detected change in My Work and shows real evidence', async () => {
@@ -374,7 +353,6 @@ describe('CciDashboard', () => {
     recordFieldTaskResult.mockResolvedValue({ ...createdTask, status: 'COMPLETED', stores: [{ ...createdTask.stores[0], completed: true, hasIssue: true }] })
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
     await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
     await user.click(await screen.findByRole('button', { name: 'Create field check' }))
     await user.type(screen.getByLabelText('What should the field team check?'), 'Check Sprite availability')
@@ -394,7 +372,6 @@ describe('CciDashboard', () => {
     fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
     await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
 
     expect(await screen.findByRole('heading', { name: 'Seen before' })).toBeInTheDocument()
@@ -407,7 +384,10 @@ describe('CciDashboard', () => {
     fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Investigate' })[0])
+    // Reach the investigation list (with search) the way the redesign intends: investigation is
+    // an action/detail, not a nav destination, so go in through a real investigation and back out.
+    await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
+    await user.click(await screen.findByRole('button', { name: 'Back to investigations' }))
     expect(await screen.findByText('Sprite 500ml is down 40%')).toBeInTheDocument()
 
     await user.type(screen.getByLabelText('Search investigations'), '50%')
@@ -430,7 +410,7 @@ describe('CciDashboard', () => {
     })
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Copilot' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'AI Assistant' })[0])
     await user.click(screen.getByRole('button', { name: 'A product' }))
     await user.type(screen.getByLabelText('Product'), 'Sprite 500ml')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
@@ -451,7 +431,7 @@ describe('CciDashboard', () => {
     await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
     const formControls = () => container.querySelectorAll('.cci-copilot-form input, .cci-copilot-form select')
 
-    await user.click(screen.getAllByRole('button', { name: 'Copilot' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'AI Assistant' })[0])
     expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
     expect(formControls()).toHaveLength(0)
 
@@ -514,53 +494,10 @@ describe('CciDashboard', () => {
     expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
   })
 
-  it('creates an activation and shows its real test-vs-control performance', async () => {
-    const user = userEvent.setup()
-    fetchOverview.mockResolvedValue({
-      ...overview,
-      stores: [
-        { storeId: 'STORE-01', basketCount: 100, cciBasketCount: 10, cciPenetrationPercentage: 10, averageBasketValue: 12 },
-        { storeId: 'STORE-02', basketCount: 100, cciBasketCount: 10, cciPenetrationPercentage: 10, averageBasketValue: 12 },
-      ],
-    })
-    const createdActivation = {
-      id: 'act-1', name: 'Sprite cooler push', objective: 'Increase Sprite visibility', hypothesis: 'Cooler placement drives trial',
-      productName: 'Sprite 500ml', primaryMetric: 'BASKET_PENETRATION', startDate: '2026-09-01', endDate: '2026-09-07',
-      status: 'COMPLETED', createdBy: 'scan-demo-cci', createdAt: '2026-09-01T00:00:00Z',
-      testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
-      performance: {
-        test: { storeCount: 1, reportingStoreCount: 1, baselineBaskets: 4, baselineMatchingBaskets: 2, baselinePenetrationPct: 50, duringBaskets: 4, duringMatchingBaskets: 4, duringPenetrationPct: 100, baselineRevenue: 5, duringRevenue: 10 },
-        control: { storeCount: 1, reportingStoreCount: 1, baselineBaskets: 4, baselineMatchingBaskets: 2, baselinePenetrationPct: 50, duringBaskets: 4, duringMatchingBaskets: 2, duringPenetrationPct: 50, baselineRevenue: 5, duringRevenue: 5 },
-        testPenetrationPointChange: 50, controlPenetrationPointChange: 0, penetrationDifferenceInDifference: 50,
-        keyFinding: 'Test stores moved 50.0 points more than control stores over the activation window.',
-        limitations: 'Store selection was not randomized, so other factors could explain part of this difference.',
-        recommendation: 'This is a single observational comparison, not a randomized controlled test.',
-      },
-    }
-    createActivation.mockResolvedValue(createdActivation)
-    fetchActivations.mockResolvedValueOnce([]).mockResolvedValue([createdActivation])
-    await signIn(user)
-
-    await user.click(screen.getAllByRole('button', { name: 'Activations' })[0])
-    await user.click(screen.getByRole('button', { name: 'Create activation' }))
-    await user.type(screen.getByLabelText('Name'), 'Sprite cooler push')
-    await user.type(screen.getByLabelText('Objective'), 'Increase Sprite visibility')
-    await user.type(screen.getByLabelText('Hypothesis'), 'Cooler placement drives trial')
-    await user.type(screen.getByLabelText('Product'), 'Sprite 500ml')
-    await user.type(screen.getByLabelText('Start date'), '2026-09-01')
-    await user.type(screen.getByLabelText('End date'), '2026-09-07')
-    const storeRows = screen.getAllByText(/^STORE-0/).map((span) => span.closest('.cci-store-group-row'))
-    await user.click(within(storeRows[0]).getByLabelText('Test'))
-    await user.click(within(storeRows[1]).getByLabelText('Control'))
-    await user.click(screen.getByRole('button', { name: 'Create activation' }))
-
-    expect(createActivation).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'Sprite cooler push', testStoreIds: ['STORE-01'], controlStoreIds: ['STORE-02'],
-    }))
-    expect(await screen.findByRole('heading', { name: 'Sprite cooler push' })).toBeInTheDocument()
-    expect(screen.getByText('Test stores moved 50.0 points more than control stores over the activation window.')).toBeInTheDocument()
-    expect(screen.getByText(/50% baseline → 100% during/)).toBeInTheDocument()
-  })
+  // Activations has no UI entry point in this redesign on purpose: the nav no longer exposes it,
+  // and nothing yet links to it from Overview/Insights/Products. Per the redesign spec, it stays
+  // out of the UI until a real end-to-end test-vs-control workflow exists - the component, its
+  // actions, and the backend remain in place (and backend-tested) for when that happens.
 
   it('reorders My Work to show field checks first after switching to the Field Sales role', async () => {
     const user = userEvent.setup()

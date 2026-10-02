@@ -414,3 +414,62 @@
   width: 100%; min-height: 36px; margin: 0 2px 6px; padding: 0 9px; border: 1px solid var(--scan-border); border-radius: 6px;
   background: #fff; color: var(--scan-ink); font-size: .76rem;
 }
+
+/* -------------------------------------------------------------- */
+/* Network (Overview / Insights / Stores / Products)                 */
+/* -------------------------------------------------------------- */
+
+.cci-overview .cci-discovery-hero .scan-segmented { margin-top: 16px; }
+.cci-my-work-embedded.cci-my-work { margin-top: 8px; padding-top: 32px; border-top: 1px solid var(--scan-border); }
+
+.is-up { color: var(--scan-success); }
+.is-down { color: var(--scan-critical); }
+
+.scan-link-button { border: 0; padding: 0; background: transparent; color: var(--scan-red-dark); font-size: .76rem; font-weight: 650; cursor: pointer; }
+.scan-link-button:hover { text-decoration: underline; }
+
+.cci-clickable-row { cursor: pointer; }
+
+.cci-table-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px; }
+.cci-table-filters input, .cci-table-filters select {
+  min-height: 40px; padding: 0 12px; border: 1px solid var(--scan-border); border-radius: 6px; background: #fff; color: var(--scan-ink); font-size: .8rem;
+}
+.cci-table-filters input { flex: 1; min-width: 220px; }
+
+.cci-table-actions { display: flex; gap: 8px; justify-content: flex-end; white-space: nowrap; }
+
+.cci-data-health p { margin: 0; color: var(--scan-muted); font-size: .82rem; line-height: 1.55; }
+
+.cci-commercial-brief { display: flex; flex-direction: column; min-width: 0; }
+.cci-brief-list { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cci-brief-list li { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--scan-border); }
+.cci-brief-list li:first-child { padding-top: 0; border-top: 0; }
+.cci-brief-list strong { display: block; font-size: .9rem; letter-spacing: -.01em; }
+.cci-brief-list p { margin: 4px 0 0; color: var(--scan-muted); font-size: .8rem; line-height: 1.5; }
+.cci-brief-action { align-self: flex-start; border: 0; padding: 0; background: transparent; color: var(--scan-red-dark); font-size: .74rem; font-weight: 650; cursor: pointer; }
+.cci-brief-action:hover { text-decoration: underline; }
+.cci-brief-footer { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--scan-border); }
+
+.cci-biggest-movers { min-width: 0; }
+.cci-biggest-movers .scan-panel-header { flex-wrap: wrap; gap: 12px; }
+.cci-mover-list { display: grid; }
+.cci-mover-row, .cci-mover-row-button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 0; border-bottom: 1px solid var(--scan-border); }
+.cci-mover-row-button { border: 0; background: transparent; text-align: left; cursor: pointer; }
+.cci-mover-row-button:hover { background: var(--scan-subtle); }
+.cci-mover-row > div, .cci-mover-row-button > div { min-width: 0; }
+.cci-mover-row strong, .cci-mover-row-button strong { display: block; font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cci-mover-row small, .cci-mover-row-button small { display: block; margin-top: 2px; color: var(--scan-muted); font-size: .68rem; }
+.cci-mover-change { flex: 0 0 auto; font-size: .78rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.cci-mover-change.is-up { color: var(--scan-success); }
+.cci-mover-change.is-down { color: var(--scan-critical); }
+
+.cci-insights-feed { display: grid; gap: 16px; }
+.cci-insight-card { display: grid; gap: 10px; }
+.cci-insight-card h3 { margin: 0; font-size: 1.05rem; line-height: 1.3; letter-spacing: -.02em; }
+.cci-insight-card p { margin: 0; color: var(--scan-muted); font-size: .84rem; line-height: 1.55; }
+.cci-insight-card button { justify-self: flex-start; }
+
+@media (max-width: 900px) {
+  .cci-table-filters { flex-direction: column; }
+  .cci-table-filters input { min-width: 0; }
+}
