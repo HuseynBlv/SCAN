@@ -18,6 +18,7 @@ import {
   fetchNetworkOverview,
   fetchNetworkProductMovers,
   fetchNetworkStores,
+  fetchNetworkTrend,
   fetchProductDetail,
   fetchStoreDetail,
   fetchWatchlist,
@@ -69,6 +70,7 @@ vi.mock('../services/intelligenceApi', () => ({
   fetchNetworkProductMovers: vi.fn(),
   fetchNetworkCategoryMovers: vi.fn(),
   fetchNetworkBrief: vi.fn(),
+  fetchNetworkTrend: vi.fn(),
   fetchStoreDetail: vi.fn(),
   fetchProductDetail: vi.fn(),
 }))
@@ -167,6 +169,7 @@ function mockIntelligenceDefaults() {
   fetchNetworkProductMovers.mockReset().mockResolvedValue([])
   fetchNetworkCategoryMovers.mockReset().mockResolvedValue([])
   fetchNetworkBrief.mockReset().mockResolvedValue([])
+  fetchNetworkTrend.mockReset().mockResolvedValue([])
   fetchStoreDetail.mockReset()
   fetchProductDetail.mockReset()
 }
@@ -195,6 +198,20 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('link', { name: /Retailer owner portal/ })).toHaveAttribute('href', '/?portal=retailer')
     expect(screen.getByRole('link', { name: /Data connection/ })).toHaveAttribute('href', '/?portal=connection')
     expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
+  })
+
+  it('renders the real daily trend on Overview and switches metric', async () => {
+    const user = userEvent.setup()
+    fetchOverview.mockResolvedValue(overview)
+    fetchNetworkTrend.mockResolvedValue([
+      { date: '2026-08-24', totalBaskets: 10, cciBaskets: 5, cciPenetrationPct: 50 },
+      { date: '2026-08-25', totalBaskets: 10, cciBaskets: 2, cciPenetrationPct: 20 },
+    ])
+    await signIn(user)
+
+    expect(await screen.findByRole('img', { name: /CCI penetration trend/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'CCI baskets' }))
+    expect(await screen.findByRole('img', { name: /CCI baskets trend/ })).toBeInTheDocument()
   })
 
   it('signs in, shows loading, navigates every section, refreshes, and signs out', async () => {

@@ -9,6 +9,7 @@ import {
   fetchNetworkBrief,
   fetchNetworkOverview,
   fetchNetworkStores,
+  fetchNetworkTrend,
   fetchProductDetail,
   fetchStoreDetail,
   followProduct,
@@ -163,6 +164,14 @@ describe('intelligenceApi', () => {
 
     await fetchProductDetail({ product: 'Sprite 500ml', periodDays: 30, username: 'cci', password: 'secret' })
     expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/network/products/detail?product=Sprite+500ml&periodDays=30')
+  })
+
+  it('fetches the network trend', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, status: 200, body: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchNetworkTrend({ periodDays: 30, username: 'cci', password: 'secret' })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/network/trend?periodDays=30')
   })
 
   it('asks the network-wide Copilot endpoint with no retailerCode parameter', async () => {

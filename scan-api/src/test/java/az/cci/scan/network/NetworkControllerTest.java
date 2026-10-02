@@ -165,6 +165,14 @@ class NetworkControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.length()").value(2))
             .andExpect(jsonPath("$[*].retailerCode", org.hamcrest.Matchers.containsInAnyOrder("NETC-A", "NETC-B")));
+
+        mockMvc.perform(get("/api/v1/network/trend")
+                .with(httpBasic("netc-cci", "netc-cci-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].totalBaskets").value(2))
+            .andExpect(jsonPath("$[0].cciBaskets").value(2))
+            .andExpect(jsonPath("$[0].cciPenetrationPct").value(100.0));
     }
 
     @Test

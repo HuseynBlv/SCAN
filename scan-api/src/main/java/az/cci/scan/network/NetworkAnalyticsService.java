@@ -15,6 +15,7 @@ import az.cci.scan.network.NetworkDtos.ProductStoreDistribution;
 import az.cci.scan.network.NetworkDtos.StoreDetail;
 import az.cci.scan.network.NetworkDtos.StoreProduct;
 import az.cci.scan.network.NetworkDtos.StoreRanking;
+import az.cci.scan.network.NetworkDtos.TrendPoint;
 import az.cci.scan.network.NetworkQueryRepository.NetworkBasketRow;
 import az.cci.scan.network.NetworkQueryRepository.NetworkProductPresenceRow;
 import az.cci.scan.network.NetworkQueryRepository.NetworkProductRow;
@@ -24,7 +25,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -92,6 +95,34 @@ public class NetworkAnalyticsService {
             periodDays, storesReporting, recentTotal, recentCci, recentPct, priorPct, recentPct - priorPct,
             coverage, Instant.now()
         );
+    }
+
+    /**
+     * The primary trend chart's real day-by-day series - penetration and basket volume only for
+     * this first slice (units/revenue/average-basket from the spec are deliberately not included
+     * yet: revenue and average-basket-value are currency-denominated, and this network can span
+     * retailers on different currencies, so summing them into one series would silently mix
+     * currencies the same way network-wide revenue already deliberately avoids elsewhere). Only
+     * days with at least one real basket appear - a day with none is omitted, never plotted as a
+     * fabricated 0%.
+     */
+    public List<TrendPoint> trend(List<Retailer> retailers, int periodDays) {
+        List<UUID> retailerIds = ids(retailers);
+        Instant anchor = queryRepository.latestTransactionTimestamp(retailerIds).orElse(Instant.now());
+        Instant end = anchor.plusSeconds(1);
+        Instant start = anchor.minus(periodDays, ChronoUnit.DAYS);
+        List<NetworkBasketRow> baskets = queryRepository.basketsInRange(retailerIds, start, end);
+
+        Map<LocalDate, long[]> byDay = new java.util.TreeMap<>();
+        for (NetworkBasketRow row : baskets) {
+            LocalDate day = row.transactionTimestamp().atZone(ZoneOffset.UTC).toLocalDate();
+            long[] counts = byDay.computeIfAbsent(day, ignored -> new long[2]);
+            counts[0]++;
+            if (row.containsCci()) counts[1]++;
+        }
+        return byDay.entrySet().stream()
+            .map(entry -> new TrendPoint(entry.getKey(), entry.getValue()[0], entry.getValue()[1], pct(entry.getValue()[1], entry.getValue()[0])))
+            .toList();
     }
 
     public List<StoreRanking> storeRanking(List<Retailer> retailers, int periodDays) {
