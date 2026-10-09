@@ -4,86 +4,75 @@ import { describe, expect, it } from 'vitest'
 import LandingPage from './LandingPage'
 
 describe('LandingPage', () => {
+  it('renders exactly the five scoped main sections', () => {
+    const { container } = render(<LandingPage />)
+
+    expect(container.querySelectorAll('main > section')).toHaveLength(5)
+    expect(screen.getByRole('heading', { name: 'See what actually happens inside the basket.' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /From transactions.*to decisions\./ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /One platform.*Two perspectives\./ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Connect. Analyze. Act.' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Every transaction.*contains intelligence\./ })).toBeInTheDocument()
+  })
+
   it('reuses the existing authentication routes for every conversion action', () => {
     render(<LandingPage />)
 
     screen.getAllByRole('link', { name: 'Sign in' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/?portal=cci')
     })
-    screen.getAllByRole('link', { name: /Get started$/ }).forEach((link) => {
+    screen.getAllByRole('link', { name: 'Get started' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/?portal=retailer')
     })
-    expect(screen.getByRole('link', { name: /Get started as a retailer/ })).toHaveAttribute('href', '/?portal=retailer')
-    expect(screen.getByRole('link', { name: /Request enterprise access/ })).toHaveAttribute('href', '/?portal=cci')
   })
 
-  it('connects section navigation to real landing page targets', () => {
+  it('connects navigation to the compact landing page targets', () => {
     render(<LandingPage />)
 
-    expect(screen.getAllByRole('link', { name: 'Platform' })[0]).toHaveAttribute('href', '#platform')
-    expect(screen.getAllByRole('link', { name: 'For Retailers' })[0]).toHaveAttribute('href', '#retailers')
-    expect(screen.getAllByRole('link', { name: 'For Enterprise' })[0]).toHaveAttribute('href', '#enterprise')
+    expect(screen.getAllByRole('link', { name: 'Intelligence' })[0]).toHaveAttribute('href', '#transaction-intelligence')
+    expect(screen.getAllByRole('link', { name: 'Perspectives' })[0]).toHaveAttribute('href', '#platform')
     expect(screen.getAllByRole('link', { name: 'How It Works' })[0]).toHaveAttribute('href', '#how-it-works')
-    expect(screen.getByRole('link', { name: /Explore SCAN/ })).toHaveAttribute('href', '#platform')
+    expect(screen.getByRole('link', { name: /See how it works/ })).toHaveAttribute('href', '#transaction-intelligence')
   })
 
-  it('switches the intelligence visualization with accessible tabs', async () => {
+  it('switches between retailer and enterprise perspectives', async () => {
     const user = userEvent.setup()
     render(<LandingPage />)
 
-    const promotionTab = screen.getByRole('tab', { name: /Promotion Analytics/ })
-    await user.click(promotionTab)
+    const enterpriseTab = screen.getByRole('tab', { name: 'Enterprise' })
+    await user.click(enterpriseTab)
 
-    expect(promotionTab).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Promotion Analytics')
-    expect(screen.getByRole('heading', { name: 'Plan what to measure.' })).toBeInTheDocument()
+    expect(enterpriseTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Enterprise')
+    expect(screen.getByRole('heading', { name: 'Understand the market.' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Enterprise intelligence preview')).toBeInTheDocument()
   })
 
-  it('supports standard keyboard navigation across intelligence tabs', async () => {
+  it('supports keyboard navigation between perspectives', async () => {
     const user = userEvent.setup()
     render(<LandingPage />)
 
-    const basketTab = screen.getByRole('tab', { name: 'Basket Intelligence' })
-    basketTab.focus()
+    const retailerTab = screen.getByRole('tab', { name: 'Retailer' })
+    retailerTab.focus()
     await user.keyboard('{ArrowRight}')
 
-    const productTab = screen.getByRole('tab', { name: 'Product Performance' })
-    await waitFor(() => expect(productTab).toHaveFocus())
-    expect(productTab).toHaveAttribute('aria-selected', 'true')
-
-    await user.keyboard('{End}')
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Demand Patterns' })).toHaveFocus())
-  })
-
-  it('supports reverse, wraparound, and Home keyboard navigation across intelligence tabs', async () => {
-    const user = userEvent.setup()
-    render(<LandingPage />)
-
-    const basketTab = screen.getByRole('tab', { name: 'Basket Intelligence' })
-    basketTab.focus()
-    await user.keyboard('{ArrowLeft}')
-
-    const demandTab = screen.getByRole('tab', { name: 'Demand Patterns' })
-    await waitFor(() => expect(demandTab).toHaveFocus())
-    expect(demandTab).toHaveAttribute('aria-selected', 'true')
+    const enterpriseTab = screen.getByRole('tab', { name: 'Enterprise' })
+    await waitFor(() => expect(enterpriseTab).toHaveFocus())
+    expect(enterpriseTab).toHaveAttribute('aria-selected', 'true')
 
     await user.keyboard('{Home}')
-    await waitFor(() => expect(basketTab).toHaveFocus())
-    expect(basketTab).toHaveAttribute('aria-selected', 'true')
-
-    await user.keyboard('{ArrowDown}')
-    expect(basketTab).toHaveFocus()
-    expect(basketTab).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(retailerTab).toHaveFocus())
   })
 
-  it('renders the regional concept when its tab is selected', async () => {
+  it('connects a receipt item to its resulting insight', async () => {
     const user = userEvent.setup()
     render(<LandingPage />)
 
-    await user.click(screen.getByRole('tab', { name: 'Regional Insights' }))
+    const chips = screen.getByRole('button', { name: 'Chips, Paprika; highlight related insight' })
+    await user.click(chips)
 
-    expect(screen.getByRole('heading', { name: 'Compare behavior by district.' })).toBeInTheDocument()
-    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Regional Insights')
+    expect(chips).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Bundle opportunity: Drink + snack; highlight related basket item' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('exposes an accessible mobile navigation toggle', async () => {
@@ -91,11 +80,11 @@ describe('LandingPage', () => {
     render(<LandingPage />)
 
     const menuButton = screen.getByRole('button', { name: 'Open navigation menu' })
-    expect(screen.getAllByRole('link', { name: 'Platform' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: 'Intelligence' })).toHaveLength(2)
     await user.click(menuButton)
     const closeButton = screen.getByRole('button', { name: 'Close navigation menu' })
     expect(closeButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getAllByRole('link', { name: 'Platform' })).toHaveLength(3)
+    expect(screen.getAllByRole('link', { name: 'Intelligence' })).toHaveLength(3)
 
     await user.click(closeButton)
     expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute('aria-expanded', 'false')
@@ -108,8 +97,7 @@ describe('LandingPage', () => {
     const menuButton = screen.getByRole('button', { name: 'Open navigation menu' })
     await user.click(menuButton)
     const mobileMenu = document.getElementById('landing-mobile-menu')
-    const mobilePlatformLink = within(mobileMenu).getByRole('link', { name: 'Platform' })
-    mobilePlatformLink.focus()
+    within(mobileMenu).getByRole('link', { name: 'Intelligence' }).focus()
     await user.keyboard('{Escape}')
 
     const closedMenuButton = screen.getByRole('button', { name: 'Open navigation menu' })
@@ -123,7 +111,7 @@ describe('LandingPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open navigation menu' }))
     const mobileMenu = document.getElementById('landing-mobile-menu')
-    await user.click(within(mobileMenu).getByRole('link', { name: 'Platform' }))
+    await user.click(within(mobileMenu).getByRole('link', { name: 'Perspectives' }))
 
     expect(screen.getByRole('button', { name: 'Open navigation menu' })).toHaveAttribute('aria-expanded', 'false')
   })

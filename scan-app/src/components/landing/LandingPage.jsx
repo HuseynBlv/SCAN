@@ -1,16 +1,12 @@
 import LandingNavigation from './LandingNavigation'
 import {
-  AudienceSection,
-  CapabilityStrip,
-  EnterpriseSection,
   FinalCTA,
   HeroSection,
   HowItWorksSection,
   LandingFooter,
-  RetailerSection,
+  PerspectivesSection,
   TransactionFlowSection,
 } from './LandingSections'
-import { IntelligenceShowcase } from './LandingVisuals'
 import './LandingPage.css'
 
 export default function LandingPage() {
@@ -20,12 +16,8 @@ export default function LandingPage() {
       <main>
         <HeroSection />
         <TransactionFlowSection />
-        <AudienceSection />
-        <IntelligenceShowcase />
+        <PerspectivesSection />
         <HowItWorksSection />
-        <RetailerSection />
-        <EnterpriseSection />
-        <CapabilityStrip />
         <FinalCTA />
       </main>
       <LandingFooter />

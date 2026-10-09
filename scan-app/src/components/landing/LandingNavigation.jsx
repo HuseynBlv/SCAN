@@ -5,9 +5,8 @@ export const CCI_AUTH_ROUTE = '/?portal=cci'
 export const RETAILER_AUTH_ROUTE = '/?portal=retailer'
 
 const navigation = [
-  { href: '#platform', label: 'Platform' },
-  { href: '#retailers', label: 'For Retailers' },
-  { href: '#enterprise', label: 'For Enterprise' },
+  { href: '#transaction-intelligence', label: 'Intelligence' },
+  { href: '#platform', label: 'Perspectives' },
   { href: '#how-it-works', label: 'How It Works' },
 ]
 
