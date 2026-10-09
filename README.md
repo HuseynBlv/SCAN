@@ -214,7 +214,8 @@ Open the URL Vite prints, usually `http://localhost:5173`, then sign in:
 
 - Retailer owner portal: `http://localhost:5173/?portal=retailer`, username `scan-retailer`,
   password `SCAN_RETAILER_PASSWORD`.
-- CCI portal: `http://localhost:5173/`, username `scan-cci`, password `SCAN_CCI_PASSWORD`.
+- Public landing page: `http://localhost:5173/`.
+- CCI portal: `http://localhost:5173/?portal=cci`, username `scan-cci`, password `SCAN_CCI_PASSWORD`.
   The API selects the retailer granted to that account.
 - Data connection: `http://localhost:5173/?portal=connection`, username `scan-admin`, password
   `SCAN_ADMIN_PASSWORD`. The retailer and import profile are read from that account after sign-in.

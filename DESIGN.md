@@ -7,7 +7,8 @@
 - **Who it is for:** Medium-sized retailer owners and CCI Sales/Marketing users who need
   decision-ready information without using a BI tool.
 - **Space:** Retail analytics, consumer packaged goods, and retailer data collaboration.
-- **Project type:** Responsive analytics web application with separate retailer and CCI portals.
+- **Project type:** Responsive web application with a public landing page and separate retailer
+  and CCI analytics portals.
 - **Memorable idea:** SCAN turns existing retailer checkout data into useful actions for both
   the retailer and CCI.
 
@@ -106,6 +107,9 @@
 
 ## Product Information Architecture
 
+- **Public entry point:** `/` introduces SCAN's retailer and CCI value propositions, explains the
+  transaction-to-intelligence flow, and links users to the retailer and CCI sign-in routes. It
+  uses illustrative metrics only and labels planned capabilities explicitly.
 - **CCI workspace:** Overview, Insights, Stores, Products, AI Assistant. Revised from the
   2026-09-30 My Work/Investigate/Activations/Network/Copilot layout as part of the 2026-10-02
   network-intelligence redesign: the retailer switcher is gone, and the default experience is

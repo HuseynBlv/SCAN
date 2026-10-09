@@ -136,7 +136,7 @@ printf 'Checking health, real frontend assets, and API permissions...\n'
 expect_http 200 "$SCAN_SMOKE_URL/health"
 assert_json '. == {"status":"UP"}'
 expect_http 200 "$SCAN_SMOKE_URL/"
-grep -q '<title>SCAN | Basket Intelligence</title>' "$SCAN_SMOKE_TMP_DIR/response"
+grep -q '<title>SCAN | Retail Intelligence</title>' "$SCAN_SMOKE_TMP_DIR/response"
 SCAN_SMOKE_ASSET="$(sed -nE 's/.*src="([^"]+\.js)".*/\1/p' "$SCAN_SMOKE_TMP_DIR/response")"
 [[ "$SCAN_SMOKE_ASSET" == /assets/* && "$SCAN_SMOKE_ASSET" != *$'\n'* ]]
 expect_http 200 "$SCAN_SMOKE_URL$SCAN_SMOKE_ASSET"

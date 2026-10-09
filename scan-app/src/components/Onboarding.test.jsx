@@ -70,7 +70,7 @@ describe('Onboarding', () => {
 
   it('links the sign-in screen to every other portal', () => {
     render(<Onboarding />)
-    expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/?portal=cci')
     expect(screen.getByRole('link', { name: /Retailer workspace/ })).toHaveAttribute('href', '/?portal=retailer')
     expect(screen.getByRole('link', { name: /Data connection/ })).toHaveAttribute('href', '/?portal=connection')
   })

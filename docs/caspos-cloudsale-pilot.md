@@ -113,7 +113,7 @@ Retailer uploads and CCI analytics read the same Neon records; there is no secon
 scheduled dashboard synchronization. After an import completes, open:
 
 ```text
-https://scan-caspos-pilot.onrender.com/
+https://scan-caspos-pilot.onrender.com/?portal=cci
 ```
 
 Sign in with username `scan-caspos-cci` and the `SCAN_CCI_PASSWORD` value from the

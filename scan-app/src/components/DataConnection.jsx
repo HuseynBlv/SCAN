@@ -100,7 +100,7 @@ function Login({ error, loading, onSubmit }) {
           <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Checking access…' : 'Open data connection'}</button>
         </form>
         <div className="portal-switch-links">
-          <a className="portal-switch-link" href="/">CCI intelligence <span aria-hidden="true">→</span></a>
+          <a className="portal-switch-link" href="/?portal=cci">CCI intelligence <span aria-hidden="true">→</span></a>
           <a className="portal-switch-link" href="/?portal=retailer">Retailer workspace <span aria-hidden="true">→</span></a>
           <a className="portal-switch-link" href="/?portal=onboarding">Retailer onboarding <span aria-hidden="true">→</span></a>
         </div>
@@ -355,7 +355,7 @@ function ImportResult({ checking, job, onCheckJob, onNavigate }) {
       </dl>
       {job.unresolvedProducts ? <div className="connection-result-warning"><ScanIcon name="warning" size={18} /><p><strong>Product mapping is incomplete.</strong> The receipts were imported, but normalized product analysis may be understated until these source products are reviewed.</p></div> : null}
       <footer>
-        <a className="scan-button scan-button-dark" href="/">Open intelligence <ScanIcon name="chevron" size={17} /></a>
+        <a className="scan-button scan-button-dark" href="/?portal=cci">Open intelligence <ScanIcon name="chevron" size={17} /></a>
         <button className="scan-button scan-button-light" onClick={() => onNavigate('mapping')} type="button">Review mapping</button>
       </footer>
       <small>Completed {formatDateTime(job.completedAt)} · Job {job.id}</small>

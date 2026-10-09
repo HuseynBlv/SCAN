@@ -1,7 +1,7 @@
 # SCAN App
 
-The React frontend for SCAN. It provides separate retailer owner and CCI Sales/Marketing
-portals backed by deterministic analytics from `scan-api`.
+The React frontend for SCAN. It provides a public product landing page plus separate retailer
+owner and CCI Sales/Marketing portals backed by deterministic analytics from `scan-api`.
 
 The original cashier-scanning prototype is preserved for reference but is not part of the
 current retailer-export workflow.
@@ -29,10 +29,11 @@ npm run dev
 
 Vite proxies `/api` to `http://localhost:8080`. Open the displayed Vite URL and sign in with:
 
+- Public landing page: `/` (no sign-in required).
 - Retailer portal: `/?portal=retailer`, username `scan-retailer`, password
   `SCAN_RETAILER_PASSWORD`.
-- CCI portal: `/`, username `scan-cci`, password `SCAN_CCI_PASSWORD`. The API returns the
-  retailer access granted to that account; there is no retailer-code field on sign-in.
+- CCI portal: `/?portal=cci`, username `scan-cci`, password `SCAN_CCI_PASSWORD`. The API
+  returns the retailer access granted to that account; there is no retailer-code field on sign-in.
 - Data connection: `/?portal=connection`, username `scan-admin`, password
   `SCAN_ADMIN_PASSWORD`. The assigned retailer and file profile are returned after sign-in.
 - Retailer onboarding: `/?portal=onboarding`, username `scan-onboarding`, password
