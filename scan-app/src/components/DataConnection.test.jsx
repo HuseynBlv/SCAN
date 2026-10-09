@@ -106,7 +106,7 @@ describe('DataConnection', () => {
 
   it('links the sign-in screen to every other portal', () => {
     render(<DataConnection />)
-    expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: /CCI intelligence/ })).toHaveAttribute('href', '/?portal=cci')
     expect(screen.getByRole('link', { name: /Retailer workspace/ })).toHaveAttribute('href', '/?portal=retailer')
     expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
   })
@@ -188,7 +188,7 @@ describe('DataConnection', () => {
       file, username: 'shop-admin', password: 'admin-secret',
       previewId: 'preview-1',
     }))
-    expect(screen.getByRole('link', { name: /Open intelligence/ })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: /Open intelligence/ })).toHaveAttribute('href', '/?portal=cci')
   })
 
   it('stops on backend validation errors and does not offer intelligence as if import succeeded', async () => {

@@ -1,20 +1,20 @@
 import { lazy } from "react";
+import { selectApp } from "./appSelection";
 
-const selectedPortal = new URLSearchParams(window.location.search).get("portal");
+const appLoaders = {
+  cci: () => import("./components/CciDashboard.jsx"),
+  connection: () => import("./components/DataConnection.jsx"),
+  landing: () => import("./components/landing/LandingPage.jsx"),
+  legacy: () => import("./App.jsx"),
+  onboarding: () => import("./components/Onboarding.jsx"),
+  retailer: () => import("./components/RetailerDashboard.jsx"),
+};
 
-let loadApp;
-
-if (import.meta.env.VITE_ENABLE_LEGACY_SCANNER === "true") {
-  loadApp = () => import("./App.jsx");
-} else if (selectedPortal === "retailer") {
-  loadApp = () => import("./components/RetailerDashboard.jsx");
-} else if (selectedPortal === "connection" || selectedPortal === "connect") {
-  loadApp = () => import("./components/DataConnection.jsx");
-} else if (selectedPortal === "onboarding") {
-  loadApp = () => import("./components/Onboarding.jsx");
-} else {
-  loadApp = () => import("./components/CciDashboard.jsx");
-}
+const selectedApp = selectApp(
+  window.location.search,
+  import.meta.env.VITE_ENABLE_LEGACY_SCANNER === "true",
+);
+const loadApp = appLoaders[selectedApp];
 
 const AppLoader = lazy(loadApp);
 

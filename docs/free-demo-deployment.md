@@ -21,9 +21,9 @@ flowchart LR
 
 The root `Dockerfile` builds React, copies its production files into the Java application,
 and packages everything in a Java 21 container. Node and Maven are build tools only; they
-do not run in the final service. Spring Boot serves the dashboard at `/` and the API at
-`/api/v1/...`, so browser requests stay on the same origin. No CORS change or Vercel proxy
-is needed for this demo.
+do not run in the final service. Spring Boot serves the public landing page at `/`, the CCI
+sign-in at `/?portal=cci`, and the API at `/api/v1/...`, so browser requests stay on the same
+origin. No CORS change or Vercel proxy is needed for this demo.
 
 Only the page assets and minimal `GET /health` response are public. Each deployment has unique
 account usernames. Data administrators, connectors, and retailer users are persisted with one
@@ -136,8 +136,9 @@ can suspend service; do not enable paid overages to work around them.
 
 ## 3. Check the empty hosted app
 
-Open the Render URL in a browser. The SCAN sign-in page should appear. A cold start can
-take a minute or more; wait and reload before troubleshooting credentials.
+Open the Render URL in a browser. The SCAN public landing page should appear. Then open
+`/?portal=cci` and confirm the CCI sign-in page loads. A cold start can take a minute or more;
+wait and reload before troubleshooting credentials.
 
 From a terminal, replace the placeholder with your real URL, without a trailing slash:
 
