@@ -156,8 +156,9 @@ deterministic.
 
 ## Container and free-demo hosting
 
-The repository-root `Dockerfile` builds the React dashboard into this service, so one
-container serves both `/` and `/api`. Follow the
+The repository-root `Dockerfile` builds the React application into this service, so one
+container serves the public landing page at `/`, portal routes such as `/?portal=cci`, and
+the API under `/api`. Follow the
 [Render + Neon setup guide](../docs/free-demo-deployment.md); hosted resources are not
 created automatically by this repository.
 
