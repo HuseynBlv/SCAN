@@ -2,6 +2,22 @@
 
 All notable changes to SCAN are documented in this file.
 
+## [0.3.0.0] - 2026-10-09
+
+### Added
+
+- Explore SCAN through a responsive public landing page with retailer and enterprise product
+  previews, transaction-to-intelligence storytelling, and an accessible interactive showcase.
+
+### Changed
+
+- Open the CCI workspace explicitly through `/?portal=cci` while keeping `/` available as the
+  public entry point and preserving the existing retailer, connection, onboarding, and legacy
+  scanner routes.
+- Keep public capability claims honest by marking promotion analysis as planned and labeling
+  demonstration metrics as illustrative.
+- Update deployment documentation and container smoke checks for the new public entry point.
+
 ## [0.2.0.0] - 2026-09-11
 
 ### Added
