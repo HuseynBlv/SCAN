@@ -86,6 +86,7 @@ function Login({ error, loading, onSubmit }) {
   return (
     <main className="cci-login-shell connection-login-shell">
       <section className="cci-login-card connection-login-card" aria-labelledby="connection-login-title">
+        <a className="login-home-link" href="/"><span aria-hidden="true">←</span> Back to SCAN home</a>
         <ScanBrand subtitle="Sales & Consumption Analytics Network" />
         <div className="cci-login-copy">
           <span className="cci-eyebrow">Data connection</span>

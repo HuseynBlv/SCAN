@@ -7,6 +7,7 @@
 }
 
 .cci-login-card {
+  position: relative;
   width: min(100%, 980px);
   min-height: 620px;
   display: grid;
@@ -20,6 +21,25 @@
   border-radius: 16px;
   background: var(--scan-surface);
 }
+
+.login-home-link {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--scan-muted);
+  font-size: .75rem;
+  font-weight: 620;
+  text-decoration: none;
+}
+
+.login-home-link span { transition: transform 160ms ease; }
+.login-home-link:hover { color: var(--scan-red-dark); }
+.login-home-link:hover span { transform: translateX(-2px); }
+.login-home-link:focus-visible { outline: 2px solid var(--scan-red); outline-offset: 4px; }
 
 .cci-brand {
   grid-area: brand;
@@ -217,7 +237,7 @@
       "switch";
   }
 
-  .cci-brand { padding: 28px 24px 0; }
+  .cci-brand { padding: 64px 24px 0; }
   .cci-login-copy { padding: 38px 24px 26px; }
   .cci-login-copy h1 { font-size: clamp(2.1rem, 11vw, 3.1rem); }
 
@@ -233,7 +253,7 @@
 @media (max-width: 420px) {
   .cci-login-shell { padding: 0; }
   .cci-login-card { min-height: 100vh; border: 0; border-radius: 0; }
-  .cci-brand { padding-top: 24px; }
+  .cci-brand { padding-top: 60px; }
   .cci-login-copy { padding-top: 30px; }
   .portal-switch-links { gap: 14px; }
 }

@@ -141,6 +141,7 @@ function Login({ error, loading, onSubmit }) {
   return (
     <main className="cci-login-shell">
       <section className="cci-login-card" aria-labelledby="cci-login-title">
+        <a className="login-home-link" href="/"><span aria-hidden="true">←</span> Back to SCAN home</a>
         <ScanBrand subtitle="Sales & Consumption Analytics Network" />
         <div className="cci-login-copy">
           <span className="cci-eyebrow">CCI commercial intelligence workspace</span>
