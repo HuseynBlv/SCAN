@@ -207,9 +207,11 @@ class SecurityIntegrationTest {
         mockMvc.perform(head("/assets/security-test.js"))
             .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/product-mappings/catalog"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().doesNotExist("WWW-Authenticate"));
         mockMvc.perform(get("/api/v1/unknown"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().doesNotExist("WWW-Authenticate"));
     }
 
     @Test
@@ -224,7 +226,17 @@ class SecurityIntegrationTest {
     @Test
     void requiresAuthenticationForAnalytics() throws Exception {
         mockMvc.perform(get("/api/v1/analytics/overview").param("retailerCode", "SHARED"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().doesNotExist("WWW-Authenticate"));
+    }
+
+    @Test
+    void rejectedCredentialsStayInTheApplicationInsteadOfOpeningABrowserPrompt() throws Exception {
+        mockMvc.perform(get("/api/v1/retailer/overview")
+                .param("period", "LAST_30_DAYS")
+                .with(httpBasic("test-retailer", "wrong-password")))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().doesNotExist("WWW-Authenticate"));
     }
 
     @Test
