@@ -18,6 +18,13 @@ import {
 } from '../services/retailerApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
+import {
+  isPresentationCredentials,
+  PRESENTATION_PASSWORD,
+  PRESENTATION_USERNAME,
+  presentationEngagement,
+  presentationOverview,
+} from './presentationRetailer'
 import { usePretextLayout } from './usePretextLayout'
 import {
   ChartPanel,
@@ -190,6 +197,12 @@ function Login({ error, loading, onSubmit }) {
     onSubmit({ username: username.trim(), password })
   }
 
+  function openPresentation() {
+    setUsername(PRESENTATION_USERNAME)
+    setPassword(PRESENTATION_PASSWORD)
+    onSubmit({ username: PRESENTATION_USERNAME, password: PRESENTATION_PASSWORD })
+  }
+
   return (
     <main className="cci-login-shell retailer-login-shell">
       <section className="cci-login-card" aria-labelledby="retailer-login-title">
@@ -205,6 +218,11 @@ function Login({ error, loading, onSubmit }) {
           <label>Password<input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
           <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Connecting…' : 'Open my dashboard'}</button>
+          <div className="retailer-presentation-access">
+            <span>Presentation mode</span>
+            <p>Explore a polished shop account with realistic synthetic data and working interactions.</p>
+            <button disabled={loading} onClick={openPresentation} type="button">Open presentation account <span aria-hidden="true">→</span></button>
+          </div>
         </form>
         <div className="portal-switch-links">
           <a className="portal-switch-link" href="/?portal=cci">CCI intelligence workspace <span aria-hidden="true">→</span></a>
@@ -629,6 +647,7 @@ export default function RetailerDashboard() {
 
   useEffect(() => {
     if (!credentials) return undefined
+    if (credentials.presentation) return undefined
     const controller = new AbortController()
     fetchRetailerOverview({ ...credentials, period, signal: controller.signal })
       .then((overview) => { if (!controller.signal.aborted) setData(overview) })
@@ -644,6 +663,7 @@ export default function RetailerDashboard() {
 
   useEffect(() => {
     if (!credentials) return undefined
+    if (credentials.presentation) return undefined
     const controller = new AbortController()
     Promise.all([
       fetchRetailerOffers({ ...credentials, signal: controller.signal }),
@@ -665,6 +685,31 @@ export default function RetailerDashboard() {
   async function activateOffer(offerKey) {
     setActivatingKey(offerKey)
     setEngagementError('')
+    if (credentials.presentation) {
+      const selected = engagement.offers.available.find((offer) => offer.offerKey === offerKey)
+      if (selected) {
+        setEngagement((current) => ({
+          ...current,
+          offers: {
+            ...current.offers,
+            available: current.offers.available.filter((offer) => offer.offerKey !== offerKey),
+            active: [{ ...selected, status: 'ACTIVE' }, ...current.offers.active],
+          },
+          partnerStatus: {
+            ...current.partnerStatus,
+            benefits: {
+              ...current.partnerStatus.benefits,
+              thisMonth: current.partnerStatus.benefits.thisMonth + (selected.estimatedBenefitAzn || 0),
+              lifetime: current.partnerStatus.benefits.lifetime + (selected.estimatedBenefitAzn || 0),
+            },
+            benefitHistory: [{ activatedAt: new Date().toISOString(), title: selected.title, benefitSummary: selected.benefitSummary, estimatedBenefitAzn: selected.estimatedBenefitAzn }, ...current.partnerStatus.benefitHistory],
+          },
+        }))
+        setJustActivatedKey(offerKey)
+      }
+      setActivatingKey(null)
+      return
+    }
     try {
       await activateRetailerOffer({ ...credentials, offerKey })
       // Show the success checkmark in place before the offer moves to the Active tab, rather
@@ -691,8 +736,22 @@ export default function RetailerDashboard() {
     }
   }
 
-  function refresh() { setLoading(true); setEngagementLoading(true); setError(''); setEngagementError(''); setRefreshKey((value) => value + 1) }
-  function changePeriod(nextPeriod) { setLoading(true); setError(''); setPeriod(nextPeriod) }
+  function refresh() {
+    setError(''); setEngagementError('')
+    if (credentials.presentation) {
+      setData(presentationOverview(period)); setEngagement(presentationEngagement()); setLoading(false); setEngagementLoading(false)
+      return
+    }
+    setLoading(true); setEngagementLoading(true); setRefreshKey((value) => value + 1)
+  }
+  function changePeriod(nextPeriod) {
+    setError(''); setPeriod(nextPeriod)
+    if (credentials.presentation) {
+      setData(presentationOverview(nextPeriod)); setLoading(false)
+      return
+    }
+    setLoading(true)
+  }
   function navigate(nextPage) { setActivePage(nextPage) }
   function signOut() {
     setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('LAST_30_DAYS'); setActivePage('home')
@@ -701,14 +760,16 @@ export default function RetailerDashboard() {
 
   if (!credentials || (!data && error)) {
     return <Login error={error} loading={loading} onSubmit={(next) => {
-      setCredentials(next); setData(null); setError(''); setLoading(true)
-      setEngagement(null); setEngagementLoading(true); setRefreshKey((value) => value + 1)
+      const presentation = isPresentationCredentials(next)
+      setCredentials({ ...next, presentation }); setData(presentation ? presentationOverview(period) : null); setError(''); setLoading(!presentation)
+      setEngagement(presentation ? presentationEngagement() : null); setEngagementLoading(!presentation); setRefreshKey((value) => value + 1)
     }} />
   }
   if (!data) return <LoadingState title="Reading your latest sales…" description="Preparing your shop summary." />
 
   const headerActions = (
     <>
+      {credentials.presentation ? <span className="retailer-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
       {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
       <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
       <button aria-label={loading ? 'Refreshing…' : 'Refresh'} className="scan-icon-button" disabled={loading || engagementLoading} onClick={refresh} type="button"><ScanIcon name="refresh" size={18} /></button>

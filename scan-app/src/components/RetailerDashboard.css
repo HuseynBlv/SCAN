@@ -6,6 +6,70 @@
   max-width: 1180px;
 }
 
+.retailer-presentation-access {
+  display: grid;
+  gap: 7px;
+  margin-top: 2px;
+  padding: 15px;
+  border: 1px solid #dfd8cb;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fff 0%, #f6f2e9 100%);
+}
+
+.retailer-presentation-access > span {
+  color: var(--scan-red-dark);
+  font-size: .66rem;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.retailer-presentation-access p {
+  margin: 0;
+  color: var(--scan-muted);
+  font-size: .72rem;
+  line-height: 1.45;
+}
+
+.retailer-presentation-access button {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--scan-ink);
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.retailer-presentation-access button:hover:not(:disabled) { color: var(--scan-red-dark); }
+
+.retailer-presentation-badge {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid #e6d7b8;
+  border-radius: 999px;
+  background: #fff9eb;
+  color: #765411;
+  font-size: .68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.retailer-presentation-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d99b1d;
+}
+
 .retailer-period-select {
   display: grid;
   gap: 4px;

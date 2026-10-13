@@ -212,6 +212,9 @@ npm run dev
 
 Open the URL Vite prints, usually `http://localhost:5173`, then sign in:
 
+- Presentation account: `http://localhost:5173/?portal=retailer`, username `scan-showcase`,
+  password `Showcase2026!`. This browser-only account uses clearly labeled synthetic data, works
+  without the API, and resets when the page reloads. It is intended only for product presentations.
 - Retailer owner portal: `http://localhost:5173/?portal=retailer`, username `scan-retailer`,
   password `SCAN_RETAILER_PASSWORD`.
 - Public landing page: `http://localhost:5173/`.

@@ -170,6 +170,42 @@ describe('RetailerDashboard', () => {
     expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
   })
 
+  it('opens a presentation-ready account without calling the API', async () => {
+    const user = userEvent.setup()
+    render(<RetailerDashboard />)
+
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })).toBeInTheDocument()
+    expect(screen.getAllByText('Nərgiz Market · Nizami')).toHaveLength(2)
+    expect(screen.getByText('Presentation data')).toBeInTheDocument()
+    expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
+    expect(screen.getAllByText('₼186.40')).toHaveLength(2)
+    expect(fetchRetailerOverview).not.toHaveBeenCalled()
+    expect(fetchRetailerOffers).not.toHaveBeenCalled()
+  })
+
+  it('accepts the presentation credentials and supports offer activation', async () => {
+    const user = userEvent.setup()
+    render(<RetailerDashboard />)
+
+    const username = screen.getByLabelText('Username')
+    await user.clear(username)
+    await user.type(username, 'scan-showcase')
+    await user.type(screen.getByLabelText('Password'), 'Showcase2026!')
+    await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
+    await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })
+
+    await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
+    expect(await screen.findByRole('heading', { name: 'SCAN Partner offers' })).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Activate offer' })[0])
+
+    expect(screen.getByRole('tab', { name: /Available 2/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /Active 1/ }))
+    expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
+    expect(activateRetailerOffer).not.toHaveBeenCalled()
+  })
+
   it('leads with connection, benefits, and commercial offers rather than a sales dashboard', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
