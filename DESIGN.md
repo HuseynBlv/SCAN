@@ -109,7 +109,11 @@
 
 - **Public entry point:** `/` introduces SCAN's retailer and CCI value propositions, explains the
   transaction-to-intelligence flow, and links users to the retailer and CCI sign-in routes. It
-  uses illustrative metrics only and labels planned capabilities explicitly.
+  uses illustrative metrics only and labels planned capabilities explicitly. Keep this page to
+  five compact sections: Hero, Transaction to Intelligence, Two Perspectives, How SCAN Works,
+  and Final CTA. Interaction is explanatory rather than decorative: basket-item focus traces to
+  a related insight, the audience switch changes one preview, and reduced-motion preferences
+  disable the short entrance and connector animations.
 - **CCI workspace:** Overview, Insights, Stores, Products, AI Assistant. Revised from the
   2026-09-30 My Work/Investigate/Activations/Network/Copilot layout as part of the 2026-10-02
   network-intelligence redesign: the retailer switcher is gone, and the default experience is

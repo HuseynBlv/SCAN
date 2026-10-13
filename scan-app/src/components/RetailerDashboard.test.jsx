@@ -164,6 +164,7 @@ describe('RetailerDashboard', () => {
 
   it('links the sign-in screen to every other portal', () => {
     render(<RetailerDashboard />)
+    expect(screen.getByRole('link', { name: 'Back to SCAN home' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('link', { name: /CCI intelligence workspace/ })).toHaveAttribute('href', '/?portal=cci')
     expect(screen.getByRole('link', { name: /Data connection/ })).toHaveAttribute('href', '/?portal=connection')
     expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
