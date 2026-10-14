@@ -313,6 +313,11 @@ decision or help establish data trust.
 - **Short:** 180ms for tabs, filters, and small disclosures.
 - **Medium:** 240ms for drawers, dialogs, and view transitions.
 - **Easing:** enter `cubic-bezier(0.2, 0.8, 0.2, 1)`; exit `ease-in`; movement `ease-in-out`.
+- Motion must explain a state change: data arriving, an insight being generated, an action moving
+  through its workflow, an opportunity becoming active, or an import advancing to its next step.
+- Refresh motion is brief and coordinated: freshness pulse, KPI transition, chart redraw, then a
+  temporary `NEW` intelligence marker. Never run these animations continuously while data is idle.
+- Confirm accepted/completed/active states in place before moving an item to another workflow view.
 - Respect `prefers-reduced-motion`. Never animate KPI numbers in a way that delays reading.
 
 ## SCAN Intelligence

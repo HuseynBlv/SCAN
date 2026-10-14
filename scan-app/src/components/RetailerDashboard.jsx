@@ -299,7 +299,7 @@ function ActivateButton({ offer, onActivate, activating, justActivated, label })
   if (justActivated) {
     return (
       <button className="scan-button retailer-activate-button is-success" disabled type="button">
-        <ScanIcon name="check" size={16} /> Offer activated
+        <ScanIcon name="check" size={16} /> Active
       </button>
     )
   }
@@ -386,7 +386,7 @@ function HomeSalesMovement({ data }) {
   )
 }
 
-function Home({ data, engagement, onNavigate, onOpenIntelligence }) {
+function Home({ data, engagement, motionState, motionTick, onNavigate, onOpenIntelligence }) {
   const state = homeState(data, engagement)
   const opportunity = engagement.offers.available[1] || engagement.offers.available[0]
   const action = engagement.actions[0]
@@ -401,9 +401,9 @@ function Home({ data, engagement, onNavigate, onOpenIntelligence }) {
       </section>
 
       <div className="retailer-commerce-grid retailer-ops-kpis">
-        <MetricCard change={signedPercent(state.salesChange)} changeTone={state.salesChange >= 0 ? 'positive' : 'warning'} chartValues={state.salesTrend} icon="sales" label="Sales today" note="vs last Tuesday" value={formatHomeMoney(state.sales, data.currency, 0)} />
-        <MetricCard change={signedPercent(state.transactionChange)} changeTone={state.transactionChange >= 0 ? 'positive' : 'warning'} chartValues={state.transactionTrend} icon="basket" label="Transactions" note="vs last Tuesday" value={integer.format(state.transactions)} />
-        <MetricCard change={signedPercent(state.averageBasketChange)} changeTone={state.averageBasketChange >= 0 ? 'positive' : 'warning'} chartValues={state.averageBasketTrend} icon="chart" label="Average basket" note="vs last Tuesday" value={formatHomeMoney(state.averageBasket, data.currency)} />
+        <MetricCard change={signedPercent(state.salesChange)} changeTone={state.salesChange >= 0 ? 'positive' : 'warning'} chartValues={state.salesTrend} icon="sales" key={`sales-${motionTick}`} label="Sales today" note="vs last Tuesday" value={formatHomeMoney(state.sales, data.currency, 0)} />
+        <MetricCard change={signedPercent(state.transactionChange)} changeTone={state.transactionChange >= 0 ? 'positive' : 'warning'} chartValues={state.transactionTrend} icon="basket" key={`transactions-${motionTick}`} label="Transactions" note="vs last Tuesday" value={integer.format(state.transactions)} />
+        <MetricCard change={signedPercent(state.averageBasketChange)} changeTone={state.averageBasketChange >= 0 ? 'positive' : 'warning'} chartValues={state.averageBasketTrend} icon="chart" key={`basket-${motionTick}`} label="Average basket" note="vs last Tuesday" value={formatHomeMoney(state.averageBasket, data.currency)} />
         <Card className="retailer-store-pulse">
           <header><span>Store pulse</span><div className={`retailer-pulse-orbit ${healthy ? 'is-healthy' : 'is-warning'}`}><ScanIcon name={healthy ? 'pulse' : 'warning'} size={18} /></div></header>
           <strong>{healthy ? 'Healthy' : 'Needs attention'}</strong>
@@ -412,8 +412,8 @@ function Home({ data, engagement, onNavigate, onOpenIntelligence }) {
       </div>
 
       <div className="retailer-commerce-grid retailer-ops-intelligence-row">
-        <Card className="retailer-detected-changes">
-          <SectionHeader action={<Badge tone="red">Live</Badge>} description="What changed today" eyebrow="SCAN Intelligence" title="Detected changes" />
+        <Card className={`retailer-detected-changes ${motionState === 'updated' ? 'is-new' : ''}`}>
+          <SectionHeader action={<div className="retailer-insight-status">{motionState === 'updated' ? <Badge tone="positive">New</Badge> : null}<Badge tone="red">Live</Badge></div>} description="What changed today" eyebrow="SCAN Intelligence" title="Detected changes" />
           <ol>
             {state.changes.map((change, index) => (
               <li key={`${change.title}-${index}`}>
@@ -460,7 +460,7 @@ function Home({ data, engagement, onNavigate, onOpenIntelligence }) {
       <div className="retailer-commerce-grid retailer-ops-performance-row">
         <Card className="retailer-sales-movement-card">
           <SectionHeader action={<div className="retailer-chart-legend"><span><i className="is-sales" />Sales</span><span><i />Baseline</span></div>} description="Today against the recent operating baseline" title="Sales movement" />
-          <HomeSalesMovement data={data} />
+          <HomeSalesMovement data={data} key={motionTick} />
         </Card>
         <Card className="retailer-top-products-card">
           <SectionHeader action={<button className="scan-text-link" onClick={() => onNavigate('insights')} type="button">View all</button>} title="Top products" />
@@ -494,7 +494,7 @@ function SupportingOpportunityCard({ offer, onActivate, activating, justActivate
       <small className="retailer-opportunity-condition">{offer.normalCondition} · Valid until {formatDay(offer.expiresAt)}</small>
       {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
       <footer>
-        {justActivated ? <Badge tone="success">Offer activated</Badge> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Activated</Badge>}
+        {justActivated ? <ActivateButton activating={false} justActivated label="Activate" offer={offer} onActivate={onActivate} /> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Active</Badge>}
         <button className="scan-text-link" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
       </footer>
     </Card>
@@ -504,7 +504,7 @@ function SupportingOpportunityCard({ offer, onActivate, activating, justActivate
 function FeaturedOpportunity({ offer, onActivate, activating, justActivated }) {
   const [expanded, setExpanded] = useState(false)
   return (
-    <Card className="retailer-featured-opportunity">
+    <Card className={`retailer-featured-opportunity ${justActivated ? 'is-activated' : ''}`}>
       <div className="retailer-featured-copy">
         <header><Badge tone="red">Basket Growth Opportunity</Badge>{offer.status === 'ACTIVE' ? <Badge tone="success">Activated</Badge> : null}</header>
         <h2>{offer.productName}</h2>
@@ -518,7 +518,7 @@ function FeaturedOpportunity({ offer, onActivate, activating, justActivated }) {
         <div className="retailer-featured-support"><ScanIcon name="recommendations" size={16} /><span>CCI support</span><strong>{offer.partnerCondition}</strong></div>
         {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
         <footer>
-          {justActivated ? <Badge tone="success">Opportunity activated</Badge> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate Opportunity" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Opportunity active</Badge>}
+          {justActivated ? <ActivateButton activating={false} justActivated label="Activate Opportunity" offer={offer} onActivate={onActivate} /> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate Opportunity" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Active</Badge>}
           <button className="scan-button scan-button-light" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
         </footer>
       </div>
@@ -558,10 +558,8 @@ function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
   )
 }
 
-function ActionFeedCard({ action, onOpenIntelligence }) {
+function ActionFeedCard({ action, motionPhase, onAccept, onComplete, onDismiss, onOpenIntelligence }) {
   const [expanded, setExpanded] = useState(false)
-  const [primaryDone, setPrimaryDone] = useState(false)
-  const [secondaryDone, setSecondaryDone] = useState(false)
   const meta = ACTION_TYPE_META[action.type] || { label: humanize(action.type), tone: 'neutral' }
   const highPriority = action.priority === 'HIGH' || action.type === 'STOCK_RISK'
   const activeAction = ['OPEN', 'IN_PROGRESS'].includes(action.status || 'OPEN')
@@ -575,7 +573,7 @@ function ActionFeedCard({ action, onOpenIntelligence }) {
   const primaryAction = action.primaryAction || (action.type === 'STOCK_RISK' ? 'Add to order list' : 'Create opportunity')
   const secondaryAction = action.secondaryAction || (action.type === 'STOCK_RISK' ? 'Mark checked' : 'Dismiss')
   return (
-    <Card as="article" className={`retailer-workflow-action ${highPriority ? 'is-high-priority' : ''}`}>
+    <Card as="article" className={`retailer-workflow-action ${highPriority ? 'is-high-priority' : ''} ${motionPhase ? `is-${motionPhase}` : ''}`}>
       <header>
         <div><Badge tone={meta.tone}>{meta.label}</Badge><span>{action.scope === 'CCI' ? 'CCI portfolio' : 'Your store'}</span></div>
         {stateBadge}
@@ -594,9 +592,10 @@ function ActionFeedCard({ action, onOpenIntelligence }) {
       </div>
       <div className="retailer-workflow-recommendation"><span>SCAN recommends</span><p>{action.recommendation}</p></div>
       {expanded ? <div className="retailer-workflow-why"><strong>Why this action?</strong><p>{action.why || action.explanation}</p></div> : null}
+      {motionPhase === 'completing' ? <div className="retailer-action-confirmation" role="status"><ScanIcon name="check" size={15} /> Action completed. Moving to Completed…</div> : null}
       <footer>
-        {activeAction ? <button className="scan-button scan-button-primary" disabled={primaryDone} onClick={() => setPrimaryDone(true)} type="button">{primaryDone ? 'Added' : primaryAction}</button> : null}
-        {activeAction ? <button className="scan-button scan-button-light" disabled={secondaryDone} onClick={() => setSecondaryDone(true)} type="button">{secondaryDone ? (secondaryAction === 'Dismiss' ? 'Dismissed' : 'Checked') : secondaryAction}</button> : null}
+        {activeAction ? <button className={`scan-button scan-button-primary ${['accepted', 'completing'].includes(motionPhase) ? 'is-accepted' : ''}`} disabled={motionPhase === 'accepted' || motionPhase === 'completing'} onClick={() => onAccept(action.id)} type="button">{motionPhase === 'accepted' || motionPhase === 'completing' ? <><ScanIcon name="check" size={15} /> Accepted</> : primaryAction}</button> : null}
+        {activeAction ? <button className="scan-button scan-button-light" disabled={motionPhase === 'completing'} onClick={() => secondaryAction === 'Dismiss' ? onDismiss(action.id) : onComplete(action.id)} type="button">{motionPhase === 'completing' ? <><ScanIcon name="check" size={15} /> Completed</> : secondaryAction}</button> : null}
         <button className="scan-text-link" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
         <button aria-label={`Ask SCAN about ${action.displayTitle || action.title}`} className="scan-text-link retailer-action-intelligence-link" onClick={(event) => onOpenIntelligence({ type: 'action', label: action.displayTitle || action.title }, event.currentTarget)} type="button"><ScanIcon name="ask" size={14} />Ask SCAN</button>
       </footer>
@@ -613,12 +612,31 @@ const ACTION_FILTERS = [
 
 function Actions({ data, actions, onNavigate, onOpenIntelligence, workspace }) {
   const [filter, setFilter] = useState('OPEN')
+  const [workflowStates, setWorkflowStates] = useState({})
+  const transitionTimers = useRef([])
+  useEffect(() => () => transitionTimers.current.forEach((timer) => window.clearTimeout(timer)), [])
   const attention = attentionItems(data)
-  const counts = workspace?.counts || { open: actions.length, inProgress: 0, completed: 0, dismissed: 0, highPriority: actions.filter((action) => action.type === 'STOCK_RISK').length }
+  const resolvedActions = actions.map((action) => ({ ...action, status: workflowStates[action.id]?.status || action.status }))
+  const baseCounts = workspace?.counts || { open: actions.length, inProgress: 0, completed: 0, dismissed: 0, highPriority: actions.filter((action) => action.type === 'STOCK_RISK').length }
+  const completedHere = actions.filter((action) => workflowStates[action.id]?.status === 'COMPLETED' && (action.status || 'OPEN') !== 'COMPLETED').length
+  const dismissedHere = actions.filter((action) => workflowStates[action.id]?.status === 'DISMISSED' && (action.status || 'OPEN') !== 'DISMISSED').length
+  const counts = { ...baseCounts, open: Math.max(0, baseCounts.open - completedHere - dismissedHere), completed: baseCounts.completed + completedHere, dismissed: baseCounts.dismissed + dismissedHere }
   const countFor = (id) => counts[id === 'IN_PROGRESS' ? 'inProgress' : id.toLowerCase()] || 0
-  const visibleActions = actions.filter((action) => (action.status || 'OPEN') === filter)
+  const visibleActions = resolvedActions.filter((action) => (action.status || 'OPEN') === filter)
   const recentResult = workspace?.recentResult
   const activity = workspace?.activity || []
+  const updateAction = (id, next) => setWorkflowStates((current) => ({ ...current, [id]: { ...current[id], ...next } }))
+  const completeAction = (id) => {
+    updateAction(id, { phase: 'completing' })
+    transitionTimers.current.push(window.setTimeout(() => {
+      updateAction(id, { phase: 'completed', status: 'COMPLETED' })
+      setFilter('COMPLETED')
+    }, 650))
+  }
+  const dismissAction = (id) => {
+    updateAction(id, { phase: 'dismissed' })
+    transitionTimers.current.push(window.setTimeout(() => updateAction(id, { status: 'DISMISSED' }), 420))
+  }
   return (
     <div className="scan-page-stack retailer-actions-workflow">
       <PageIntro description="What happened, why it matters, and what you can do." eyebrow="Operating workflow" title="Actions" />
@@ -629,7 +647,7 @@ function Actions({ data, actions, onNavigate, onOpenIntelligence, workspace }) {
       <div className="retailer-actions-layout">
         <section className="retailer-action-feed" aria-label={`${humanize(filter)} action feed`}>
           <SectionHeader description="Prioritized from the latest store signals" title={filter === 'OPEN' ? 'Action feed' : humanize(filter)} />
-          {visibleActions.length ? visibleActions.map((action) => <ActionFeedCard action={action} key={action.id} onOpenIntelligence={onOpenIntelligence} />) : <EmptyState compact title={`No ${humanize(filter).toLowerCase()} actions`}>Nothing is in this workflow state right now.</EmptyState>}
+          {visibleActions.length ? visibleActions.map((action) => <ActionFeedCard action={action} key={action.id} motionPhase={workflowStates[action.id]?.phase} onAccept={(id) => updateAction(id, { phase: 'accepted' })} onComplete={completeAction} onDismiss={dismissAction} onOpenIntelligence={onOpenIntelligence} />) : <EmptyState compact title={`No ${humanize(filter).toLowerCase()} actions`}>Nothing is in this workflow state right now.</EmptyState>}
         </section>
         <aside className="retailer-action-rail">
           <Card className="retailer-action-summary-card">
@@ -863,7 +881,7 @@ function Data({ data, onNavigate, presentation }) {
   )
 }
 
-function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onOpenIntelligence, onPeriodChange, period, activatingKey, justActivatedKey, presentation }) {
+function Page({ activePage, data, engagement, engagementLoading, loading, motionState, motionTick, onActivate, onNavigate, onOpenIntelligence, onPeriodChange, period, activatingKey, justActivatedKey, presentation }) {
   if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
   if (activePage === 'insights') return <Insights data={data} loading={loading} onOpenIntelligence={onOpenIntelligence} onPeriodChange={onPeriodChange} period={period} />
   if (activePage === 'data') return <Data data={data} onNavigate={onNavigate} presentation={presentation} />
@@ -871,7 +889,7 @@ function Page({ activePage, data, engagement, engagementLoading, loading, onActi
   if (activePage === 'opportunities') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
   if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} workspace={engagement.actionWorkspace} />
   if (activePage === 'partner') return <Partner partnerStatus={engagement.partnerStatus} />
-  return <Home data={data} engagement={engagement} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} />
+  return <Home data={data} engagement={engagement} motionState={motionState} motionTick={motionTick} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} />
 }
 
 function intelligenceContextForPage(activePage, data, engagement) {
@@ -902,8 +920,23 @@ export default function RetailerDashboard() {
   const [intelligenceOpen, setIntelligenceOpen] = useState(false)
   const [intelligenceContext, setIntelligenceContext] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [motionState, setMotionState] = useState('idle')
+  const [motionTick, setMotionTick] = useState(0)
   const layoutRef = useRef(null)
   const intelligenceReturnFocus = useRef(null)
+  const refreshRequested = useRef(false)
+  const refreshTimer = useRef(null)
+
+  const finishRefreshMotion = useCallback(() => {
+    if (!refreshRequested.current) return
+    refreshRequested.current = false
+    setMotionTick((value) => value + 1)
+    setMotionState('updated')
+    window.clearTimeout(refreshTimer.current)
+    refreshTimer.current = window.setTimeout(() => setMotionState('idle'), 2200)
+  }, [])
+
+  useEffect(() => () => window.clearTimeout(refreshTimer.current), [])
 
   usePretextLayout(layoutRef, `${activePage}:${period}:${data?.generatedAt || 'login'}:${engagement ? 'ready' : 'loading'}`)
 
@@ -912,7 +945,7 @@ export default function RetailerDashboard() {
     if (credentials.presentation) return undefined
     const controller = new AbortController()
     fetchRetailerOverview({ ...credentials, period, signal: controller.signal })
-      .then((overview) => { if (!controller.signal.aborted) setData(overview) })
+      .then((overview) => { if (!controller.signal.aborted) { setData(overview); finishRefreshMotion() } })
       .catch((requestError) => {
         if (!controller.signal.aborted && requestError?.name !== 'AbortError') {
           setError(requestError?.message || 'Unable to load retailer analytics.')
@@ -921,7 +954,7 @@ export default function RetailerDashboard() {
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [credentials, period, refreshKey])
+  }, [credentials, finishRefreshMotion, period, refreshKey])
 
   useEffect(() => {
     if (!credentials) return undefined
@@ -1000,8 +1033,14 @@ export default function RetailerDashboard() {
 
   function refresh() {
     setError(''); setEngagementError('')
+    refreshRequested.current = true
+    setMotionState('refreshing')
     if (credentials.presentation) {
-      setData(presentationOverview(period)); setEngagement(presentationEngagement()); setLoading(false); setEngagementLoading(false)
+      setLoading(true); setEngagementLoading(true)
+      window.clearTimeout(refreshTimer.current)
+      refreshTimer.current = window.setTimeout(() => {
+        setData(presentationOverview(period)); setEngagement(presentationEngagement()); setLoading(false); setEngagementLoading(false); finishRefreshMotion()
+      }, 420)
       return
     }
     setLoading(true); setEngagementLoading(true); setRefreshKey((value) => value + 1)
@@ -1050,7 +1089,7 @@ export default function RetailerDashboard() {
   )
 
   return (
-    <div ref={layoutRef}>
+    <div className={`retailer-motion-state is-${motionState}`} ref={layoutRef}>
       <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="My shop" meta={<p>Retailer Workspace</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
         {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" onClick={refresh} type="button">Retry</button></div> : null}
         {engagementError ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{engagementError}</span></div> : null}
@@ -1062,6 +1101,8 @@ export default function RetailerDashboard() {
           engagementLoading={engagementLoading}
           justActivatedKey={justActivatedKey}
           loading={loading}
+          motionState={motionState}
+          motionTick={motionTick}
           onActivate={activateOffer}
           onNavigate={navigate}
           onOpenIntelligence={openIntelligence}
