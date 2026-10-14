@@ -30,7 +30,11 @@ describe('presentationRetailer', () => {
     expect(overview.home.salesMovement).toHaveLength(14)
     expect(overview.sync.errors).toEqual([])
     expect(engagement.offers.available).toHaveLength(3)
-    expect(engagement.actions).toHaveLength(3)
+    expect(engagement.actions).toHaveLength(7)
+    expect(engagement.actionWorkspace).toMatchObject({
+      counts: { open: 3, inProgress: 2, completed: 8, dismissed: 1, highPriority: 2 },
+      recentResult: { before: '22%', after: '28%', change: '+6 pts attachment' },
+    })
     expect(engagement.partnerStatus.level).toBe('GOLD')
   })
 })

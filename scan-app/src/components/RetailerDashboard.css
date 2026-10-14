@@ -1728,3 +1728,117 @@
   .retailer-detected-changes li > div small { white-space: normal; }
   .retailer-home-chart { height: 220px; }
 }
+
+/* Retailer Actions operating workflow */
+.retailer-actions-workflow { gap: 14px; }
+.retailer-actions-workflow .scan-page-intro { padding-bottom: 0; }
+.retailer-action-filters {
+  width: fit-content;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #e6e4df;
+  border-radius: 14px;
+  background: #efeee9;
+}
+.retailer-action-filters button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #666762;
+  font-size: .67rem;
+  font-weight: 650;
+}
+.retailer-action-filters button span {
+  min-width: 20px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(21, 21, 21, .07);
+  font-size: .58rem;
+  text-align: center;
+}
+.retailer-action-filters button.is-active {
+  background: #fff;
+  color: #171815;
+  box-shadow: 0 2px 9px rgba(24, 24, 22, .06);
+}
+.retailer-action-filters button.is-active span { background: #fee8e9; color: #c51017; }
+
+.retailer-actions-layout { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(270px, .8fr); gap: 14px; align-items: start; }
+.retailer-action-feed { display: grid; gap: 12px; min-width: 0; }
+.retailer-action-feed > .retail-section-header { padding: 0 2px 3px; }
+.retailer-action-feed > .retail-section-header h2 { font-size: 1.08rem; }
+.retailer-workflow-action { position: relative; overflow: hidden; padding: 18px 20px; }
+.retailer-workflow-action.is-high-priority::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #f40009; }
+.retailer-workflow-action > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.retailer-workflow-action > header > div { display: flex; align-items: center; gap: 9px; }
+.retailer-workflow-action > header > div > span:last-child { color: #858681; font-size: .58rem; }
+.retailer-workflow-action-body { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: end; gap: 20px; margin-top: 15px; }
+.retailer-workflow-action-copy { min-width: 0; }
+.retailer-workflow-action-copy h2 { margin: 0; font-size: 1.08rem; line-height: 1.25; letter-spacing: -.035em; }
+.retailer-workflow-action-copy > p { margin: 8px 0 0; color: #72736e; font-size: .65rem; line-height: 1.45; }
+.retailer-workflow-metric { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.retailer-workflow-metric > strong { font-size: 1rem; letter-spacing: -.025em; }
+.retailer-workflow-metric > span:last-child { color: #777873; font-size: .59rem; }
+.retailer-workflow-action-body .retail-mini-chart { width: 160px; height: 58px; margin: 0; align-self: end; }
+.retailer-workflow-recommendation { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 12px; margin-top: 13px; padding: 11px 13px; border-radius: 11px; background: #f6f5f2; }
+.retailer-workflow-recommendation span { color: #a10e14; font-size: .57rem; font-weight: 720; letter-spacing: .06em; text-transform: uppercase; }
+.retailer-workflow-recommendation p { margin: 0; font-size: .67rem; font-weight: 620; line-height: 1.4; }
+.retailer-workflow-why { margin-top: 10px; padding: 10px 13px; border-left: 2px solid #f0a5a8; background: #fff8f8; }
+.retailer-workflow-why strong { font-size: .62rem; }
+.retailer-workflow-why p { margin: 4px 0 0; color: #6f7175; font-size: .63rem; line-height: 1.45; }
+.retailer-workflow-action > footer { display: flex; align-items: center; gap: 8px; margin-top: 13px; }
+.retailer-workflow-action > footer .scan-button { min-height: 34px; padding: 0 12px; border-radius: 9px; font-size: .63rem; }
+.retailer-workflow-action > footer .scan-text-link { margin-left: 2px; font-size: .62rem; }
+
+.retailer-action-rail { display: grid; gap: 12px; }
+.retailer-action-summary-card,
+.retailer-action-result-card,
+.retailer-action-activity-card { padding: 18px; }
+.retailer-action-summary-card dl { display: grid; gap: 1px; margin: 13px 0 0; overflow: hidden; border-radius: 12px; background: #e8e6e1; }
+.retailer-action-summary-card dl > div { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px; background: #f7f6f3; }
+.retailer-action-summary-card dt { color: #70716c; font-size: .63rem; }
+.retailer-action-summary-card dd { margin: 0; font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.retailer-action-result-card > h3 { margin: 17px 0 11px; font-size: .84rem; }
+.retailer-action-result-card > div { display: flex; align-items: center; gap: 9px; }
+.retailer-action-result-card > div span { color: #868781; font-size: 1.15rem; text-decoration: line-through; }
+.retailer-action-result-card > div svg { color: #aaa9a4; }
+.retailer-action-result-card > div strong { font-size: 1.55rem; letter-spacing: -.05em; }
+.retailer-action-result-card > b { display: block; margin-top: 5px; color: #327454; font-size: .7rem; }
+.retailer-action-result-card > p { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #eceae5; color: #757671; font-size: .61rem; }
+.retailer-action-activity-card > ol { margin: 13px 0 0; padding: 0; list-style: none; }
+.retailer-action-activity-card li { display: grid; grid-template-columns: 45px 7px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 42px; }
+.retailer-action-activity-card time { color: #858681; font-size: .58rem; }
+.retailer-action-activity-card li i { width: 7px; height: 7px; border-radius: 50%; background: #f40009; box-shadow: 0 0 0 3px #fee9ea; }
+.retailer-action-activity-card li strong { font-size: .65rem; }
+.retailer-action-activity-card > p { color: #777873; font-size: .65rem; }
+
+@media (max-width: 980px) {
+  .retailer-actions-layout { grid-template-columns: minmax(0, 1.65fr) minmax(250px, .75fr); }
+  .retailer-workflow-action-body { grid-template-columns: 1fr; }
+  .retailer-workflow-action-body .retail-mini-chart { width: 100%; }
+}
+
+@media (max-width: 760px) {
+  .retailer-actions-layout { grid-template-columns: 1fr; }
+  .retailer-action-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .retailer-action-activity-card { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+  .retailer-action-filters { width: 100%; overflow-x: auto; }
+  .retailer-action-filters button { flex: 0 0 auto; }
+  .retailer-workflow-action { padding: 16px; }
+  .retailer-workflow-action > header { align-items: flex-start; }
+  .retailer-workflow-action > header > div { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .retailer-workflow-recommendation { grid-template-columns: 1fr; gap: 5px; }
+  .retailer-workflow-action > footer { align-items: stretch; flex-wrap: wrap; }
+  .retailer-workflow-action > footer .scan-button { flex: 1 1 auto; }
+  .retailer-action-rail { grid-template-columns: 1fr; }
+  .retailer-action-activity-card { grid-column: auto; }
+}

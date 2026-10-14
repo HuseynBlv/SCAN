@@ -179,6 +179,16 @@
 5. Sales movement closes the operating view with a recent baseline, event markers, and the compact
    top-products list. Deeper analytics remain under Insights and connection evidence under Data.
 
+### Retailer Actions
+
+1. Compact status pills show Open, In progress, Completed, and Dismissed workflow counts.
+2. The primary column is a prioritized action feed. Each medium-height card combines the detected
+   fact, supporting metric, micro trend, recommendation, and immediate controls.
+3. High priority uses a thin red edge and small badge rather than a red surface. Warning and
+   completed states use restrained amber and green labels.
+4. A narrow supporting rail summarizes workload, the most recent measured result, and action
+   activity so retailers can see that recommendations lead to observable outcomes.
+
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.
 
