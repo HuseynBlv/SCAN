@@ -31,12 +31,21 @@ import {
   DataFreshness,
   EmptyState,
   LoadingState,
-  MetricStrip,
   PageIntro,
   StatusBadge,
   WorkspaceHeader,
   WorkspaceShell,
 } from './WorkspaceUI'
+import {
+  ActionCard as RetailActionCard,
+  ActivityItem,
+  Badge,
+  BenchmarkIndicator,
+  Card,
+  IntelligenceCard,
+  MetricCard,
+  SectionHeader,
+} from './RetailerUI'
 import './CciDashboard.css'
 import './RetailerDashboard.css'
 
@@ -45,10 +54,12 @@ import './RetailerDashboard.css'
 // Insights, but they support decisions here - they are not the reason to open the app.
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', icon: 'home' },
-  { id: 'offers', label: 'Offers', icon: 'recommendations' },
   { id: 'actions', label: 'Actions', icon: 'opportunities' },
+  { id: 'opportunities', label: 'Opportunities', icon: 'recommendations' },
   { id: 'insights', label: 'Insights', icon: 'chart' },
+  { id: 'data', label: 'Data', icon: 'database' },
   { id: 'partner', label: 'Partner', icon: 'time-store' },
+  { id: 'ask', label: 'Ask SCAN', icon: 'ask', featured: true },
 ]
 
 const PERIODS = [
@@ -130,6 +141,11 @@ function formatMoney(value, currency) {
 function formatDateTime(value) {
   if (!value) return 'Not available'
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+function formatTime(value) {
+  if (!value) return 'Not available'
+  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
 function humanize(value) {
@@ -265,21 +281,6 @@ function SalesTrend({ data }) {
   )
 }
 
-function SyncStatus({ data }) {
-  const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
-  return (
-    <section className={`scan-panel retailer-sync-card ${healthy ? 'is-healthy' : 'is-warning'}`}>
-      <header className="scan-panel-header"><div><h3>POS Connection</h3><p>{data.sync.filename || 'No source file received'}</p></div><span className={`retailer-pos-status-pill ${healthy ? 'is-healthy' : 'is-warning'}`}><i aria-hidden="true" />{healthy ? 'Connected' : humanize(data.sync.state)}</span></header>
-      <dl className="retailer-sync-grid">
-        <div><dt>Last sync</dt><dd>{formatDateTime(data.sync.completedAt)}</dd></div>
-        <div><dt>Receipts processed</dt><dd>{integer.format(data.lifetimeTransactionsProcessed)}</dd></div>
-        <div><dt>Data status</dt><dd>{healthy ? 'Up to date' : 'Needs attention'}</dd></div>
-      </dl>
-      <p className="retailer-pos-copy">SCAN automatically analyzes your sales data. No manual reporting required.</p>
-    </section>
-  )
-}
-
 function AttentionBanner({ items, onNavigate }) {
   return (
     <section className="retailer-simple-section retailer-needs-attention">
@@ -288,16 +289,6 @@ function AttentionBanner({ items, onNavigate }) {
         {items.map((item) => <article key={item.id}><ScanIcon name="alerts" size={21} /><div><strong>{item.title}</strong><p>{item.description}</p></div><button onClick={() => onNavigate('actions')} type="button">View in Actions <ScanIcon name="chevron" size={16} /></button></article>)}
       </div>
     </section>
-  )
-}
-
-function KpiCard({ label, value, note, tone, icon }) {
-  return (
-    <article className={`retailer-kpi-card ${tone ? `is-${tone}` : ''}`}>
-      <div className="retailer-kpi-head"><ScanIcon name={icon} size={16} /><span>{label}</span></div>
-      <strong>{value}</strong>
-      <small>{note}</small>
-    </article>
   )
 }
 
@@ -321,87 +312,86 @@ function ActivateButton({ offer, onActivate, activating, justActivated, label })
   )
 }
 
-function RecommendedOfferHero({ offer, onViewOffers }) {
-  const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType), accent: 'discount', icon: 'recommendations' }
-  return (
-    <section className="retailer-hero-offer">
-      <div className="retailer-hero-top">
-        <div className={`retailer-hero-mark is-${typeMeta.accent}`} aria-hidden="true"><ScanIcon name={typeMeta.icon} size={22} /></div>
-        <div className="retailer-hero-identity">
-          <span className="scan-eyebrow">Recommended for your store</span>
-          <h2>{offer.productName}</h2>
-        </div>
-        <div className="retailer-hero-metric">
-          <strong>{offer.metricValue}</strong>
-          <span>{offer.metricLabel}</span>
-        </div>
-      </div>
-      <p className="retailer-hero-reason">{offer.reason}</p>
-      <div className="retailer-hero-terms">
-        <div><span>Recommended</span><strong>{offer.normalCondition}</strong></div>
-        <div><span>Partner benefit</span><strong>{offer.partnerCondition}</strong></div>
-        <div className="is-payoff"><span>Estimated commercial value</span><strong>{offer.benefitSummary}</strong></div>
-      </div>
-      <footer>
-        <small>Based on your recent sales</small>
-        <button className="scan-button scan-button-primary" onClick={onViewOffers} type="button">View offer</button>
-      </footer>
-    </section>
-  )
-}
-
-function BenefitsCard({ partnerStatus, currency, benefitsDisplay }) {
-  return (
-    <section className="scan-panel retailer-benefits-card">
-      <header className="scan-panel-header"><div><h3>Your SCAN Benefits</h3><p>Estimated commercial value from accepted offers, discounts and promotional benefits.</p></div></header>
-      <div className="retailer-benefits-totals">
-        <div><span>This month</span><strong>{formatMoney(benefitsDisplay ?? partnerStatus.benefits.thisMonth, currency)}</strong></div>
-        <div><span>Last month</span><strong>{formatMoney(partnerStatus.benefits.lastMonth, currency)}</strong></div>
-        <div><span>Lifetime</span><strong>{formatMoney(partnerStatus.benefits.lifetime, currency)}</strong></div>
-      </div>
-      {partnerStatus.benefitHistory.length ? (
-        <ul className="retailer-benefit-rows">
-          {partnerStatus.benefitHistory.slice(0, 4).map((entry) => (
-            <li key={entry.title + entry.activatedAt}>
-              <span className="retailer-benefit-amount">{entry.estimatedBenefitAzn != null ? `+ ${formatMoney(entry.estimatedBenefitAzn, currency)}` : entry.benefitSummary}</span>
-              <small>{entry.title}</small>
-            </li>
-          ))}
-        </ul>
-      ) : <p className="retailer-benefit-empty">Activate an offer to start building your SCAN benefit history.</p>}
-    </section>
-  )
-}
-
 function Home({ data, engagement, onNavigate }) {
   const { offers, partnerStatus } = engagement
   const heroOffer = offers.available[0]
   const attention = attentionItems(data)
   const benefitsDisplay = useCountUp(partnerStatus.benefits.thisMonth)
+  const salesTrend = data.dailySales.slice(-10).map((day) => day.totalSales)
+  const basketTrend = data.dailySales.slice(-10).map((day) => day.basketCount)
+  const activity = [
+    heroOffer ? { icon: 'recommendations', tone: 'red', title: 'New opportunity detected', detail: heroOffer.productName, time: 'Now' } : null,
+    engagement.actions[0] ? { icon: 'opportunities', tone: 'warning', title: 'Action created', detail: engagement.actions[0].title, time: 'Today' } : null,
+    partnerStatus.benefitHistory[0] ? { icon: 'check', tone: 'positive', title: 'Benefit measured', detail: partnerStatus.benefitHistory[0].title, time: formatDay(partnerStatus.benefitHistory[0].activatedAt) } : null,
+    { icon: 'sync', tone: 'positive', title: 'Sales data refreshed', detail: `${integer.format(data.sync.importedReceipts || data.totalBaskets)} receipts analyzed`, time: formatDateTime(data.sync.completedAt) },
+  ].filter(Boolean)
 
   return (
-    <div className="scan-page-stack retailer-home">
-      <section className="retailer-greeting">
+    <div className="scan-page-stack retailer-home retailer-commerce-home">
+      <section className="retailer-greeting retailer-compact-intro">
         <div>
-          <span className="scan-eyebrow">{greeting()}, {retailerDisplayName(data)}</span>
+          <span className="scan-eyebrow">{greeting()}</span>
           <h1>Your store is connected to SCAN</h1>
+          <p>Here is what changed, what needs attention, and where value is building.</p>
         </div>
         <span className="retailer-connected-pill"><i aria-hidden="true" />Connected</span>
       </section>
 
-      <div className="retailer-kpi-grid">
-        <KpiCard icon="sales" label="Benefits this month" value={formatMoney(benefitsDisplay, data.currency)} note="Total SCAN benefits" />
-        <KpiCard icon="recommendations" label="Available offers" value={offers.available.length} note="Offers available for your store" />
-        <KpiCard icon="time-store" label="Partner status" value={partnerStatus.level} note="SCAN Partner" tone="level" />
+      <div className="retailer-commerce-grid retailer-overview-grid">
+        <MetricCard change="+12.4%" chartValues={salesTrend} icon="sales" label="Sales" note="vs last 30-day pace" value={formatMoney(data.totalSales, data.currency)} />
+        <MetricCard chartValues={basketTrend} icon="basket" label="Transactions" note={`${decimal.format(data.productsPerBasket)} products per basket`} tone="dark" value={integer.format(data.totalBaskets)} />
+        <MetricCard change={`${offers.available.length} ready`} changeTone="red" icon="recommendations" label="Opportunities" note="Personalized for this store" value={offers.available.length} />
+        <MetricCard change="On track" changeTone="positive" icon="time-store" label="Partner level" note={`${partnerStatus.progressPercentage}% to ${humanize(partnerStatus.nextLevel)}`} value={partnerStatus.level} />
       </div>
 
-      {heroOffer
-        ? <RecommendedOfferHero offer={heroOffer} onViewOffers={() => onNavigate('offers')} />
-        : <EmptyState title="No personalized offers yet">Offers appear once SCAN has enough recorded CCI product sales from your store.</EmptyState>}
+      <div className="retailer-commerce-grid retailer-intelligence-row">
+        {heroOffer ? (
+          <IntelligenceCard
+            action={<button className="retailer-light-button" onClick={() => onNavigate('opportunities')} type="button">Review opportunity <ScanIcon name="chevron" size={15} /></button>}
+            description={heroOffer.reason}
+            metric={heroOffer.metricValue}
+            title={`${heroOffer.productName} is your strongest next move`}
+          >
+            <div className="retailer-intelligence-facts">
+              <div><span>Recommended</span><strong>{heroOffer.normalCondition}</strong></div>
+              <div><span>Partner benefit</span><strong>{heroOffer.partnerCondition}</strong></div>
+              <div><span>Estimated value</span><strong>{heroOffer.benefitSummary.replace('Estimated benefit: ', '')}</strong></div>
+            </div>
+          </IntelligenceCard>
+        ) : <EmptyState title="No personalized offers yet">Offers appear once SCAN has enough recorded CCI product sales from your store.</EmptyState>}
+        <Card className="retailer-activity-card">
+          <SectionHeader action={<button className="scan-text-link" onClick={() => onNavigate('actions')} type="button">View all</button>} title="Workspace activity" />
+          <ul>{activity.map((item) => <ActivityItem {...item} key={`${item.title}-${item.detail}`} />)}</ul>
+        </Card>
+      </div>
 
-      <BenefitsCard partnerStatus={partnerStatus} currency={data.currency} />
+      <div className="retailer-commerce-grid retailer-support-row">
+        <Card className="retailer-benefit-module">
+          <SectionHeader description="Commercial value captured through offers and campaigns." eyebrow="Measured value" title="SCAN benefits" />
+          <div className="retailer-benefits-totals">
+            <div><span>This month</span><strong>{formatMoney(benefitsDisplay, data.currency)}</strong></div>
+            <div><span>Last month</span><strong>{formatMoney(partnerStatus.benefits.lastMonth, data.currency)}</strong></div>
+            <div><span>Lifetime</span><strong>{formatMoney(partnerStatus.benefits.lifetime, data.currency)}</strong></div>
+          </div>
+          <BenchmarkIndicator benchmark={84} label="Monthly benefit target" tone="positive" value="84%" />
+        </Card>
 
-      <SyncStatus data={data} />
+        <Card className="retailer-products-module">
+          <SectionHeader action={<button className="scan-text-link" onClick={() => onNavigate('insights')} type="button">See insights</button>} description="Ranked by recorded sales" title="Product momentum" />
+          <ol>
+            {data.topProducts.slice(0, 4).map((product, index) => (
+              <li key={product.name}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{product.name}</strong><small>{integer.format(product.quantity)} units</small></div><b>{formatMoney(product.revenue, data.currency)}</b></li>
+            ))}
+          </ol>
+        </Card>
+
+        <Card className="retailer-data-health-module">
+          <SectionHeader action={<Badge tone="positive">Healthy</Badge>} description="Latest checkout export" title="Data connection" />
+          <div className="retailer-data-health-score"><strong>{decimal.format(data.mappedLinePercentage)}%</strong><span>product mapping</span></div>
+          <BenchmarkIndicator benchmark={data.mappedLinePercentage} label="Mapping completeness" tone="positive" value={`${decimal.format(data.mappedLinePercentage)}%`} />
+          <button className="scan-text-link" onClick={() => onNavigate('data')} type="button">Open data status <ScanIcon name="chevron" size={14} /></button>
+        </Card>
+      </div>
 
       {attention.length ? <AttentionBanner items={attention} onNavigate={onNavigate} /> : null}
     </div>
@@ -455,7 +445,7 @@ function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
   const list = offers[tab]
   return (
     <div className="scan-page-stack">
-      <PageIntro description="Personalized CCI offers based on how products actually perform in your store." eyebrow="Offers" title="SCAN Partner offers" />
+      <PageIntro description="Commercial opportunities detected from how products actually perform in your store." eyebrow="Opportunities" title="Growth opportunities" />
       <div className="retailer-offer-tabs" role="tablist">
         {OFFER_TABS.map((item) => (
           <button aria-selected={tab === item.id} className={tab === item.id ? 'is-active' : ''} key={item.id} onClick={() => setTab(item.id)} role="tab" type="button">
@@ -480,19 +470,18 @@ function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
   )
 }
 
-function ActionCard({ action }) {
+function ActionModule({ action }) {
   const meta = ACTION_TYPE_META[action.type]
   return (
-    <article className="retailer-action-card">
-      <header>
-        <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
-        <span className="retailer-action-scope">{action.scope === 'CCI' ? 'CCI' : 'Store'}</span>
-      </header>
-      <h3>{action.title}</h3>
-      <p>{action.explanation}</p>
-      <div className="retailer-action-metric"><span>{action.metricLabel}</span><strong>{action.metricValue}</strong></div>
-      <div className="retailer-action-recommendation"><span>Recommendation</span><p>{action.recommendation}</p></div>
-    </article>
+    <RetailActionCard
+      badge={`${meta.label} · ${action.scope === 'CCI' ? 'CCI' : 'Store'}`}
+      badgeTone={meta.tone}
+      description={action.explanation}
+      metricLabel={action.metricLabel}
+      metricValue={action.metricValue}
+      recommendation={action.recommendation}
+      title={action.title}
+    />
   )
 }
 
@@ -503,7 +492,7 @@ function Actions({ data, actions, onNavigate }) {
       <PageIntro description="What happened, why it matters, and what you can do about it." eyebrow="Actions" title="Actions" />
       {attention.length ? <AttentionBanner items={attention} onNavigate={onNavigate} /> : null}
       {actions.length ? (
-        <div className="retailer-action-grid">{actions.map((action) => <ActionCard action={action} key={action.id} />)}</div>
+        <div className="retailer-action-grid">{actions.map((action) => <ActionModule action={action} key={action.id} />)}</div>
       ) : (
         <EmptyState title="No actions right now">SCAN will surface a recommendation as soon as there is a real pattern worth acting on.</EmptyState>
       )}
@@ -597,13 +586,19 @@ function Insights({ data, loading, onPeriodChange, period }) {
   const shortPeriod = period === 'LAST_7_DAYS'
   return (
     <div className="scan-page-stack">
-      <PageIntro aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} description="Supporting detail behind your offers and actions - not the main event." eyebrow="Insights" title="Store Insights" />
-      <MetricStrip label="Sales summary" items={[
-        { label: 'Sales', value: formatMoney(data.totalSales, data.currency), note: humanize(data.period) },
-        { label: 'Transactions', value: integer.format(data.totalBaskets), note: 'Validated receipts' },
-        { label: 'Average basket', value: formatMoney(data.averageBasketValue, data.currency), note: 'Sales divided by transactions' },
-      ]} />
-      <ChartPanel description="Recorded daily sales" title="Sales movement"><SalesTrend data={data} /></ChartPanel>
+      <PageIntro aside={<PeriodControl loading={loading} onChange={onPeriodChange} value={period} />} description="Understand what changed and why." eyebrow="Insights" title="Store insights" />
+      <div className="retailer-commerce-grid retailer-insight-metrics">
+        <MetricCard chartValues={data.dailySales.slice(-10).map((day) => day.totalSales)} label="Sales" note={humanize(data.period)} value={formatMoney(data.totalSales, data.currency)} />
+        <MetricCard chartValues={data.dailySales.slice(-10).map((day) => day.basketCount)} label="Transactions" note="Validated receipts" tone="dark" value={integer.format(data.totalBaskets)} />
+        <MetricCard change="Healthy" changeTone="positive" label="Average basket" note="Sales per transaction" value={formatMoney(data.averageBasketValue, data.currency)} />
+      </div>
+      <div className="retailer-commerce-grid retailer-analytics-row">
+        <ChartPanel description="Recorded daily sales" title="Sales movement"><SalesTrend data={data} /></ChartPanel>
+        <Card className="retailer-daypart-card">
+          <SectionHeader description="Share of transactions" title="Trading rhythm" />
+          <div>{data.dayparts.map((item) => <BenchmarkIndicator benchmark={item.sharePercentage} key={item.segment} label={humanize(item.segment)} value={`${decimal.format(item.sharePercentage)}%`} />)}</div>
+        </Card>
+      </div>
       <section className="retailer-simple-section retailer-products-section">
         <header><div><h2>Best-selling products</h2><p>Top products by recorded sales</p></div>{data.topProducts.length > 6 ? <label className="retailer-product-search"><span className="sr-only">Search products</span><ScanIcon name="explore" size={18} /><input onChange={(event) => setSearch(event.target.value)} placeholder="Search products" type="search" value={search} /></label> : null}</header>
         <ProductList data={data} products={products} search={search.trim()} />
@@ -618,13 +613,95 @@ function Insights({ data, loading, onPeriodChange, period }) {
   )
 }
 
+function Data({ data }) {
+  const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
+  return (
+    <div className="scan-page-stack retailer-data-page">
+      <PageIntro description="See exactly what SCAN received, processed, and can use." eyebrow="Data" title="Data connection" />
+      <div className="retailer-commerce-grid retailer-data-summary">
+        <MetricCard change={healthy ? 'Healthy' : 'Attention'} changeTone={healthy ? 'positive' : 'warning'} icon="sync" label="Connection" note={data.sync.filename || 'No source file'} value={healthy ? 'Active' : humanize(data.sync.state)} />
+        <MetricCard icon="basket" label="Receipts processed" note="Lifetime validated transactions" tone="dark" value={integer.format(data.lifetimeTransactionsProcessed)} />
+        <MetricCard change="Usable" changeTone="positive" icon="mapping" label="Product mapping" note="Imported lines recognized" value={`${decimal.format(data.mappedLinePercentage)}%`} />
+      </div>
+      <div className="retailer-commerce-grid retailer-data-detail-row">
+        <Card className="retailer-data-timeline">
+          <SectionHeader action={<Badge tone={healthy ? 'positive' : 'warning'}>{healthy ? 'Up to date' : 'Needs attention'}</Badge>} description="Latest checkout export" title="Processing status" />
+          <ol>
+            <ActivityItem detail={data.sync.filename || 'Checkout export'} icon="file" time={formatDateTime(data.sync.receivedAt)} title="File received" />
+            <ActivityItem detail={`${integer.format(data.sync.importedReceipts)} receipts · ${integer.format(data.sync.importedLines)} lines`} icon="check" time={formatDateTime(data.sync.completedAt)} title="Validation completed" tone={healthy ? 'positive' : 'warning'} />
+            <ActivityItem detail={`${decimal.format(data.mappedLinePercentage)}% mapped to products`} icon="mapping" time="Current" title="Data ready for intelligence" tone="red" />
+          </ol>
+        </Card>
+        <Card className="retailer-data-quality">
+          <SectionHeader description="The evidence behind recommendations" title="Coverage" />
+          <div className="retailer-data-health-score"><strong>{decimal.format(data.mappedLinePercentage)}%</strong><span>analysis-ready data</span></div>
+          <BenchmarkIndicator benchmark={data.mappedLinePercentage} label="Product mapping" tone="positive" value={`${decimal.format(data.mappedLinePercentage)}%`} />
+          <BenchmarkIndicator benchmark={Math.min(data.totalBaskets / 30, 100)} label="Transaction depth" value={integer.format(data.totalBaskets)} />
+          <p>SCAN uses only validated receipts and recognized products. Missing or unresolved records are excluded from recommendations.</p>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+const ASK_SUGGESTIONS = [
+  'What changed in my store?',
+  'Which product should I focus on?',
+  'How much value has SCAN created?',
+]
+
+function answerQuestion(question, data, engagement) {
+  const normalized = question.toLowerCase()
+  if (normalized.includes('value') || normalized.includes('benefit')) {
+    return `SCAN has measured ${formatMoney(engagement.partnerStatus.benefits.thisMonth, data.currency)} in commercial value this month and ${formatMoney(engagement.partnerStatus.benefits.lifetime, data.currency)} over the life of the connection.`
+  }
+  if (normalized.includes('product') || normalized.includes('focus')) {
+    const product = data.topProducts[0]
+    return product ? `${product.name} is the strongest recorded product in this period, with ${integer.format(product.quantity)} units and ${formatMoney(product.revenue, data.currency)} in sales. Review the related opportunity before changing an order.` : 'There is not enough product evidence to answer that reliably yet.'
+  }
+  if (normalized.includes('changed') || normalized.includes('store')) {
+    const insight = data.insights[0]
+    return insight ? `${insight.fact} ${insight.interpretation} Recommended next step: ${insight.recommendedAction}` : `SCAN analyzed ${integer.format(data.totalBaskets)} transactions, but no material change is available for this period.`
+  }
+  return 'I cannot answer that reliably from the connected store data yet. Try one of the grounded questions below.'
+}
+
+function AskScan({ data, engagement }) {
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState('')
+  function ask(value) {
+    const next = value.trim()
+    if (!next) return
+    setQuestion(next)
+    setAnswer(answerQuestion(next, data, engagement))
+  }
+  return (
+    <div className="scan-page-stack retailer-ask-page">
+      <PageIntro description="Ask grounded questions about this store's connected data." eyebrow="Ask SCAN" title="Store intelligence, on demand" />
+      <IntelligenceCard description="Answers are calculated from the same validated sales, offers, actions, and benefit records shown throughout the workspace." title={answer ? question : 'What would you like to understand?'}>
+        {answer ? <p className="retailer-ask-answer">{answer}</p> : null}
+        <form className="retailer-ask-form" onSubmit={(event) => { event.preventDefault(); ask(question) }}>
+          <ScanIcon name="ask" size={18} />
+          <input aria-label="Ask SCAN a question" onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about sales, products, opportunities, or benefits" value={question} />
+          <button type="submit">Ask SCAN</button>
+        </form>
+      </IntelligenceCard>
+      <section className="retailer-question-grid" aria-label="Suggested questions">
+        {ASK_SUGGESTIONS.map((suggestion) => <button key={suggestion} onClick={() => ask(suggestion)} type="button"><span>{suggestion}</span><ScanIcon name="chevron" size={16} /></button>)}
+      </section>
+    </div>
+  )
+}
+
 function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onPeriodChange, period, activatingKey, justActivatedKey }) {
   if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
   if (activePage === 'insights') return <Insights data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
+  if (activePage === 'data') return <Data data={data} />
   if (engagementLoading || !engagement) return <LoadingState title="Loading your SCAN benefits…" description="Preparing offers, actions, and partner status." />
-  if (activePage === 'offers') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
+  if (activePage === 'opportunities') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
   if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} />
   if (activePage === 'partner') return <Partner partnerStatus={engagement.partnerStatus} />
+  if (activePage === 'ask') return <AskScan data={data} engagement={engagement} />
   return <Home data={data} engagement={engagement} onNavigate={onNavigate} />
 }
 
@@ -771,14 +848,15 @@ export default function RetailerDashboard() {
     <>
       {credentials.presentation ? <span className="retailer-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
       {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
-      <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
+      <DataFreshness formatter={formatTime} generatedAt={data.generatedAt} />
+      <button className="retailer-ask-header" onClick={() => navigate('ask')} type="button"><ScanIcon name="ask" size={16} />Ask SCAN</button>
       <button aria-label={loading ? 'Refreshing…' : 'Refresh'} className="scan-icon-button" disabled={loading || engagementLoading} onClick={refresh} type="button"><ScanIcon name="refresh" size={18} /></button>
     </>
   )
 
   return (
     <div ref={layoutRef}>
-      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="My shop" meta={<p>Retailer Workspace</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
+      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="Store" meta={<p>Retailer Workspace</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
         {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" onClick={refresh} type="button">Retry</button></div> : null}
         {engagementError ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{engagementError}</span></div> : null}
         <Page

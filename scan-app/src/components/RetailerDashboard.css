@@ -1396,3 +1396,196 @@
     transition: none;
   }
 }
+
+/* 2026 compact commerce workspace */
+.scan-workspace-retailer {
+  grid-template-columns: 208px minmax(0, 1fr);
+  background: #f7f7f5;
+}
+
+.scan-workspace-retailer .scan-sidebar {
+  padding: 21px 12px 14px;
+  background: #151614;
+}
+
+.scan-workspace-retailer .scan-sidebar nav {
+  gap: 3px;
+  margin-top: 32px;
+}
+
+.scan-workspace-retailer .scan-sidebar nav button {
+  min-height: 41px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: .77rem;
+}
+
+.scan-workspace-retailer .scan-sidebar nav button.is-active {
+  box-shadow: inset 3px 0 #f40009;
+  background: #292a27;
+}
+
+.scan-workspace-retailer .scan-sidebar nav button.is-featured {
+  margin-top: 13px;
+  border: 1px solid #363733;
+  color: #fff;
+}
+
+.scan-workspace-retailer .scan-sidebar nav button.is-featured svg { color: #ff454b; }
+.scan-workspace-retailer .scan-main { padding: 18px clamp(20px, 2.4vw, 36px) 48px; }
+.scan-workspace-retailer .scan-view { max-width: 1560px; margin-top: 22px; }
+.scan-workspace-retailer .scan-page-stack { gap: 16px; }
+.scan-workspace-retailer .scan-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 60px;
+  padding: 0 0 14px;
+  background: rgba(247, 247, 245, .94);
+  backdrop-filter: blur(12px);
+}
+.scan-workspace-retailer .scan-topbar-copy > span { display: none; }
+.scan-workspace-retailer .scan-topbar h1 { margin: 0 0 2px; font-size: 1rem; font-weight: 650; letter-spacing: -.025em; }
+.scan-workspace-retailer .scan-topbar-copy p { font-size: .64rem; }
+.scan-workspace-retailer .scan-freshness { min-height: 34px; padding: 0 10px; border-color: transparent; background: transparent; }
+.scan-workspace-retailer .scan-icon-button { width: 34px; height: 34px; border-radius: 11px; }
+.retailer-ask-header {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 11px;
+  background: #1b1c19;
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 650;
+}
+.retailer-ask-header svg { color: #ff4a50; }
+.scan-workspace-retailer .scan-page-intro { padding: 0 0 5px; }
+.scan-workspace-retailer .scan-page-intro h2 { margin-top: 5px; font-size: clamp(2rem, 3.3vw, 2.65rem); }
+.scan-workspace-retailer .scan-page-intro p { margin-top: 7px; font-size: .78rem; }
+
+.retailer-compact-intro { min-height: 74px; padding: 0 2px 3px; }
+.retailer-compact-intro h1 { margin: 5px 0 6px; font-size: clamp(2rem, 3.6vw, 2.75rem); font-weight: 650; letter-spacing: -.06em; }
+.retailer-compact-intro p { margin: 0; color: #6f7175; font-size: .77rem; }
+.retailer-commerce-grid { display: grid; gap: 14px; }
+.retailer-overview-grid { grid-template-columns: 1.2fr 1fr .8fr .8fr; }
+.retailer-intelligence-row { grid-template-columns: minmax(0, 1.65fr) minmax(310px, .85fr); }
+.retailer-support-row { grid-template-columns: 1.1fr 1fr .8fr; align-items: stretch; }
+.retailer-activity-card,
+.retailer-benefit-module,
+.retailer-products-module,
+.retailer-data-health-module,
+.retailer-daypart-card,
+.retailer-data-timeline,
+.retailer-data-quality { padding: 21px; }
+.retailer-activity-card > ul,
+.retailer-products-module > ol,
+.retailer-data-timeline > ol { margin: 12px 0 0; padding: 0; list-style: none; }
+.retailer-intelligence-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 24px; overflow: hidden; border-radius: 14px; background: #333430; }
+.retailer-intelligence-facts > div { display: grid; gap: 5px; padding: 13px; background: #242522; }
+.retailer-intelligence-facts span { color: #8f908a; font-size: .6rem; }
+.retailer-intelligence-facts strong { color: #fff; font-size: .72rem; line-height: 1.35; }
+.retailer-light-button { min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 13px; border: 0; border-radius: 10px; background: #fff; color: #181916; font-size: .68rem; font-weight: 660; }
+.retailer-benefit-module .retailer-benefits-totals { margin: 20px 0; padding: 0; border: 0; }
+.retailer-benefit-module .retailer-benefits-totals > div { padding: 0 14px; }
+.retailer-benefit-module .retailer-benefits-totals > div:first-child { padding-left: 0; }
+.retailer-benefit-module .retailer-benefits-totals strong { font-size: 1.35rem; }
+.retailer-products-module ol li { display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 10px 0; border-bottom: 1px solid #eceae5; }
+.retailer-products-module ol li:last-child { border-bottom: 0; }
+.retailer-products-module li > span { color: #aaa9a4; font-size: .61rem; }
+.retailer-products-module li > div { min-width: 0; display: grid; gap: 2px; }
+.retailer-products-module li strong { overflow: hidden; font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; }
+.retailer-products-module li small { color: #858681; font-size: .59rem; }
+.retailer-products-module li b { font-size: .68rem; font-variant-numeric: tabular-nums; }
+.retailer-data-health-score { display: grid; margin: 26px 0 22px; }
+.retailer-data-health-score strong { font-size: 2.25rem; font-weight: 650; letter-spacing: -.06em; }
+.retailer-data-health-score span { margin-top: 3px; color: #777872; font-size: .64rem; }
+.retailer-data-health-module > .scan-text-link { margin-top: 20px; }
+
+.retailer-action-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.retailer-action-grid > article:first-child { grid-column: auto; }
+.retailer-offer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.retailer-offer-card { border-radius: 22px; box-shadow: 0 10px 35px rgba(24,24,22,.035); }
+.retailer-offer-tabs { border-radius: 15px; }
+.retailer-simple-section,
+.retailer-partner-card,
+.retailer-partner-benefits,
+.retailer-partner-preview,
+.retailer-benefits-card,
+.scan-workspace-retailer .scan-chart-panel { border-color: #e7e5e0; border-radius: 22px; background: #fff; box-shadow: 0 10px 35px rgba(24,24,22,.035); }
+
+.retailer-insight-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.retailer-analytics-row { grid-template-columns: minmax(0, 1.65fr) minmax(260px, .65fr); }
+.retailer-daypart-card > div:last-child { display: grid; gap: 22px; margin-top: 28px; }
+.retailer-sales-chart { height: 275px; }
+.retailer-products-section { padding: 22px; }
+.retailer-product-list > li { padding: 13px 0; }
+
+.retailer-data-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.retailer-data-detail-row { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); }
+.retailer-data-quality { display: flex; flex-direction: column; gap: 18px; }
+.retailer-data-quality .retailer-data-health-score { margin: 12px 0 0; }
+.retailer-data-quality > p { margin: auto 0 0; padding-top: 16px; border-top: 1px solid #eceae5; color: #747570; font-size: .68rem; line-height: 1.5; }
+
+.retailer-ask-page { max-width: 1120px; }
+.retailer-ask-page .retail-intelligence-card { padding: clamp(24px, 4vw, 42px); }
+.retailer-ask-answer { margin: 18px 0 0 !important; color: #fff !important; font-size: .94rem !important; }
+.retailer-ask-form { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; margin-top: 28px; padding: 8px 8px 8px 15px; border: 1px solid #3a3b37; border-radius: 15px; background: #22231f; }
+.retailer-ask-form > svg { color: #ff4a50; }
+.retailer-ask-form input { min-height: 40px; border: 0; outline: 0; background: transparent; color: #fff; font: inherit; font-size: .78rem; }
+.retailer-ask-form input::placeholder { color: #858681; }
+.retailer-ask-form button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: #f40009; color: #fff; font-size: .68rem; font-weight: 680; }
+.retailer-question-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.retailer-question-grid button { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 18px; border: 1px solid #e7e5e0; border-radius: 17px; background: #fff; color: #222320; font-size: .73rem; font-weight: 620; text-align: left; }
+.retailer-question-grid button:hover { border-color: #b9b8b3; transform: translateY(-1px); }
+
+@media (max-width: 1180px) {
+  .retailer-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .retailer-support-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .retailer-data-health-module { grid-column: 1 / -1; }
+  .retailer-offer-grid,
+  .retailer-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  .scan-workspace-retailer .scan-main { padding: 14px 22px 48px; }
+  .retailer-intelligence-row,
+  .retailer-analytics-row,
+  .retailer-data-detail-row { grid-template-columns: 1fr; }
+  .retailer-support-row { grid-template-columns: 1fr 1fr; }
+  .retailer-data-health-module { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+  .scan-workspace-retailer .scan-main { padding: 12px 16px 92px; }
+  .scan-workspace-retailer .scan-topbar { align-items: flex-start; }
+  .scan-workspace-retailer .scan-topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .scan-workspace-retailer .scan-freshness { display: none; }
+  .retailer-presentation-badge { display: none; }
+  .retailer-ask-header { padding: 0 10px; }
+  .retailer-compact-intro { align-items: flex-start; }
+  .retailer-overview-grid,
+  .retailer-support-row,
+  .retailer-insight-metrics,
+  .retailer-data-summary,
+  .retailer-question-grid,
+  .retailer-offer-grid,
+  .retailer-action-grid { grid-template-columns: 1fr; }
+  .retailer-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .retailer-overview-grid .retail-metric-card { min-height: 150px; padding: 14px; }
+  .retailer-overview-grid .retail-metric-value { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .retailer-overview-grid .retail-metric-value > strong { font-size: clamp(1.45rem, 7vw, 1.8rem); }
+  .retailer-overview-grid .retail-mini-chart { width: calc(100% + 28px); margin-right: -14px; margin-left: -14px; }
+  .retailer-data-health-module { grid-column: auto; }
+  .retailer-intelligence-facts { grid-template-columns: 1fr; }
+  .retailer-benefit-module .retailer-benefits-totals { grid-template-columns: 1fr 1fr; gap: 18px; }
+  .retailer-benefit-module .retailer-benefits-totals > div { padding: 0; border: 0; }
+  .retailer-ask-form { grid-template-columns: auto minmax(0, 1fr); }
+  .retailer-ask-form input { min-width: 0; }
+  .retailer-ask-form button { grid-column: 1 / -1; }
+  .scan-workspace-retailer .scan-mobile-nav { justify-content: flex-start; overflow-x: auto; }
+  .scan-workspace-retailer .scan-mobile-nav button { min-width: 74px; flex: 0 0 auto; }
+}

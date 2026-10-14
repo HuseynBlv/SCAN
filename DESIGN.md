@@ -14,12 +14,13 @@
 
 ## Approved Direction
 
-- **Variant:** A — restrained operational dashboard.
+- **Variant:** Compact commerce operations dashboard.
 - **Mockup:** `/Users/huseynbva/.gstack/projects/HuseynBlv-SCAN/designs/design-system-20260830-scan/variant-A.png`
-- **Direction:** Coca-Cola operational editorial.
+- **Direction:** Coca-Cola commerce operations.
 - **Decoration:** Minimal and intentional. Typography, alignment, thin rules, and selective
   color provide hierarchy; decoration must not compete with data.
-- **Mood:** Confident, clear, energetic, trustworthy, and suitable for everyday business use.
+- **Mood:** Confident, compact, premium, active, and suitable for everyday business use. The
+  dashboard should feel like production commerce software rather than a prototype or static report.
 - **Reference principles:** Coca-Cola digital restraint, CCI corporate information design, and
   Apple-like hierarchy and low chrome. Do not copy Apple colors or Coca-Cola trademarks.
 
@@ -34,8 +35,9 @@
 4. **Shared product, distinct permissions.** Retailer and CCI portals use the same design
    language. Distinguish them through content, account context, and permissions, not unrelated
    color themes.
-5. **Flat and precise.** Prefer surface contrast and thin borders to shadows, gradients, glow,
-   glass effects, or excessive rounding.
+5. **Connected and precise.** Use rounded modular cards, subtle surface contrast, hairline borders,
+   and very soft shadows to create one connected operating canvas. Avoid gradients, glow,
+   glass effects, and visually unrelated card styles.
 6. **Actionable language.** Recommendations use Fact → Interpretation → Recommended Action.
    Suggested actions are tests, not promises of business impact.
 
@@ -63,16 +65,16 @@
 ## Color
 
 - **Approach:** Restrained brand palette with independent semantic colors.
-- **Brand red:** `#E61C24` — brand mark, active navigation rule, selected state, primary chart
+- **Brand red:** `#F40009` — brand mark, active navigation rule, selected state, primary chart
   series, and rare high-priority emphasis.
 - **Brand red active:** `#C9141C` — pressed state and high-contrast red text where needed.
 - **Ink:** `#17181B` — primary text and dark actions.
 - **Sidebar:** `#101214` — desktop navigation surface.
-- **Canvas:** `#F4F4F2` — application background.
+- **Canvas:** `#F7F7F5` — application background.
 - **Surface:** `#FFFFFF` — panels, cards, tables, and inputs.
 - **Muted text:** `#686C75` — secondary explanation and metadata.
 - **Border:** `#DDE0E3` — panel, table, and input boundaries.
-- **Subtle fill:** `#F7F7F5` — grouped rows and low-emphasis regions.
+- **Subtle fill:** `#F2F2F0` and `#F7F6F3` — grouped rows and low-emphasis regions.
 - **Success:** `#087F5B` — completed import, healthy mapping, positive status.
 - **Warning:** `#B76E00` — incomplete or attention-needed state.
 - **Information:** `#2563C9` — neutral informational state and comparison series.
@@ -85,25 +87,26 @@
 ## Spacing
 
 - **Base unit:** 8px.
-- **Density:** Comfortable and scan-friendly, not Apple marketing-page spaciousness.
+- **Density:** Compact and scan-friendly. Useful information should appear above the fold without
+  making controls or cards feel cramped.
 - **Scale:** 2xs(4), xs(8), sm(12), md(16), lg(24), xl(32), 2xl(48), 3xl(64).
 - **Page gutters:** 32px desktop, 24px tablet, 16px mobile.
-- **Panel padding:** 24px desktop, 16px mobile.
+- **Panel padding:** 20–28px desktop, 16–20px mobile.
 - **Section gap:** 24px.
 - **Tight control gap:** 8–12px.
 
 ## Layout
 
 - **Approach:** Grid-disciplined application with editorial hierarchy on Overview.
-- **Desktop shell:** 232px sticky dark sidebar plus a fluid content area.
+- **Desktop shell:** 208px sticky dark sidebar plus a fluid content area and compact persistent header.
 - **Content width:** Fluid up to 1600px. Keep analytical content left-aligned rather than
   centering a narrow marketing container.
 - **Grid:** 12 columns desktop, 8 tablet, 4 mobile.
 - **Primary breakpoints:** 1200px, 900px, 680px.
-- **Border radius:** control 8px, panel 12px, compact status 9999px. Do not apply one large
-  radius to every element.
-- **Elevation:** No shadow by default. A subtle shadow is allowed only for menus, dialogs,
-  mobile navigation overlays, and other truly floating layers.
+- **Border radius:** control 10–15px, primary card 20–24px, compact status 9999px. Radius follows
+  hierarchy: larger modules receive more radius than small controls.
+- **Elevation:** Cards may use a restrained low-opacity shadow with a subtle neutral border.
+  Menus, dialogs, and mobile navigation may use stronger elevation because they float.
 
 ## Product Information Architecture
 
@@ -123,11 +126,13 @@
   Insight, a product row, or a My Work item (reusing the same Investigate detail view built in
   the 2026-09-30 redesign), and Activations stays reachable in code but out of the nav until a
   real end-to-end test-vs-control workflow exists. See the 2026-10-02 decisions below.
-- **Retailer workspace:** Home, Offers, Actions, Insights, Partner. Revised from the original
+- **Retailer workspace:** Home, Actions, Opportunities, Insights, Data, Partner, with Ask SCAN
+  available globally. Revised from the original
   Today/Sales/Products/Alerts analytics-first layout: the retailer home page leads with
   connection status, SCAN benefits, and a recommended commercial offer, not sales charts.
   Analytics (the former Sales and Products pages) now live together under the secondary
-  Insights page, supporting offers and actions rather than being the reason to open the app.
+  Insights page, supporting opportunities and actions rather than being the reason to open the app.
+  Data makes connection health and evidence visible without sending a retailer into an admin tool.
 - **Data connection workspace:** Connections, Import data, Product mapping. This is a
   retailer-bound administrator surface and is not part of the CCI or retailer information architecture.
 - **Retailer onboarding workspace:** Retailers with a guarded four-step flow: tenant/stores,
@@ -164,17 +169,14 @@
 
 ### Retailer workspace
 
-1. Greeting and connection status: store name, a live "Connected" indicator, and the shop's
-   commercial standing (benefits this month, available offers, Partner status) as the three
-   headline KPIs - not sales or revenue.
-2. One recommended commercial offer, computed from the store's own recorded CCI product sales,
-   as the single most visually prominent component on the page.
-3. SCAN Benefits: this month, last month, and lifetime estimated commercial value, with a short
-   list of where it came from.
-4. POS connection status (last sync, lifetime transactions processed) and, only when relevant,
-   a Needs-attention item grounded in synchronization or mapping data.
-5. Deeper analytics (sales trend, best sellers, slow movers) live under the secondary Insights
-   page and support the offers and actions above rather than leading the experience.
+1. Compact status intro: connection state and one sentence explaining what changed.
+2. Four integrated metrics with micro visualizations: sales, transactions, opportunities, and
+   Partner level. These establish context but do not overpower the page.
+3. One large SCAN Intelligence module paired with workspace activity. Detection, action creation,
+   completion, and measured results should feel like one continuous system.
+4. SCAN benefits, product momentum, and data health form a compact supporting grid.
+5. Deeper analytics live under Insights. Connection evidence lives under Data. Only genuine feed
+   failures become needs-attention items.
 
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.
@@ -183,7 +185,8 @@ decision or help establish data trust.
 
 ### Navigation
 
-- Desktop navigation uses the dark sidebar with white text and a thin red active rule.
+- Desktop navigation uses a narrow dark sidebar. The active item has a dark-gray rounded surface,
+  white text, and a thin red left rule. Ask SCAN receives a separated compact treatment.
 - Inactive labels use a muted light gray; hover adds a subtle translucent white fill.
 - Mobile navigation becomes a compact drawer or bottom navigation. Preserve a 44px minimum
   target size.
@@ -200,7 +203,7 @@ decision or help establish data trust.
 
 ### Panels and KPI Cards
 
-- White surface, 1px border, 12px radius, no default shadow.
+- White or warm-gray surface, 1px neutral border, 20–24px radius, and a very soft shadow.
 - KPI strips may share one container with vertical dividers instead of becoming five isolated
   floating cards.
 - Label first, value second, deterministic context third.
@@ -213,7 +216,20 @@ decision or help establish data trust.
 - Use horizontal grid lines sparingly; avoid decorative chart backgrounds.
 - Tooltips repeat the metric name, exact value, date/segment, and applicable unit.
 - Chart color must not be the only carrier of meaning. Use labels, shapes, or line styles.
-- Prefer one decision-relevant chart per panel over multiple tiny charts.
+- Use micro visualizations inside KPI cards when they add trend context. Prefer one larger
+  decision-relevant chart per analytical panel and avoid viewport-sized empty charts.
+
+### Retailer Module Primitives
+
+- `Card` defines the shared surface, border, radius, and elevation.
+- `MetricCard` combines a value, contextual badge, note, and optional embedded `MiniChart`.
+- `InsightCard` communicates a detected pattern with evidence and an available next step.
+- `ActionCard` uses fact, measure, and next-best-action hierarchy.
+- `ActivityItem` connects detections, actions, completed recommendations, sync events, and results.
+- `BenchmarkIndicator` compares progress or coverage without creating a separate chart panel.
+- `SectionHeader` keeps module headings small, aligned, and reusable.
+- `IntelligenceCard` is the rare near-black SCAN Intelligence surface and receives the strongest
+  visual weight. Red remains an accent inside it rather than becoming the entire dashboard.
 
 ### Tables
 

@@ -164,7 +164,7 @@ export function WorkspaceShell({
           {navItems.map((item) => (
             <button
               aria-current={activePage === item.id ? 'page' : undefined}
-              className={activePage === item.id ? 'is-active' : ''}
+              className={`${activePage === item.id ? 'is-active' : ''} ${item.featured ? 'is-featured' : ''}`.trim()}
               disabled={disableNavigation && item.id !== navItems[0].id}
               key={item.id}
               onClick={() => onNavigate(item.id)}
@@ -192,7 +192,7 @@ export function WorkspaceShell({
           {navItems.map((item) => (
             <button
               aria-current={activePage === item.id ? 'page' : undefined}
-              className={activePage === item.id ? 'is-active' : ''}
+              className={`${activePage === item.id ? 'is-active' : ''} ${item.featured ? 'is-featured' : ''}`.trim()}
               disabled={disableNavigation && item.id !== navItems[0].id}
               key={item.id}
               onClick={() => onNavigate(item.id)}

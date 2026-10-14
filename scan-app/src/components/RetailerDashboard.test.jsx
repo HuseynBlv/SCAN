@@ -179,8 +179,8 @@ describe('RetailerDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })).toBeInTheDocument()
     expect(screen.getAllByText('Nərgiz Market · Nizami')).toHaveLength(2)
     expect(screen.getByText('Presentation data')).toBeInTheDocument()
-    expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
-    expect(screen.getAllByText('₼186.40')).toHaveLength(2)
+    expect(screen.getAllByText('Coca-Cola Zero 330ml').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('₼186.40').length).toBeGreaterThan(0)
     expect(fetchRetailerOverview).not.toHaveBeenCalled()
     expect(fetchRetailerOffers).not.toHaveBeenCalled()
   })
@@ -196,8 +196,8 @@ describe('RetailerDashboard', () => {
     await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
     await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })
 
-    await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
-    expect(await screen.findByRole('heading', { name: 'SCAN Partner offers' })).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
+    expect(await screen.findByRole('heading', { name: 'Growth opportunities' })).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: 'Activate offer' })[0])
 
     expect(screen.getByRole('tab', { name: /Available 2/ })).toBeInTheDocument()
@@ -217,21 +217,19 @@ describe('RetailerDashboard', () => {
       username: 'scan-retailer', password: 'retailer-secret',
     }))
     expect(screen.getAllByText('Connected').length).toBeGreaterThan(0)
-    expect(screen.getByText('Benefits this month')).toBeInTheDocument()
-    expect(screen.getByText('Available offers')).toBeInTheDocument()
-    expect(screen.getByText('Partner status')).toBeInTheDocument()
+    expect(screen.getAllByText('Opportunities').length).toBeGreaterThan(0)
+    expect(screen.getByText('Partner level')).toBeInTheDocument()
     expect(screen.getByText('GOLD')).toBeInTheDocument()
     // Same currency symbol and decimal precision everywhere on the page - not "AZN 84.5" next
     // to offer text reading "₼14.40".
     expect(screen.getAllByText('₼84.50').length).toBeGreaterThan(0)
-    // The hero recommendation, not total sales, is the headline commercial moment.
-    expect(screen.getByText('Recommended for your store')).toBeInTheDocument()
-    expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
-    expect(screen.getByText('Estimated benefit: ₼14.40')).toBeInTheDocument()
+    // SCAN Intelligence, not a giant sales chart, is the headline commercial moment.
+    expect(screen.getByText('SCAN Intelligence')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Coca-Cola Zero 330ml is your strongest next move' })).toBeInTheDocument()
+    expect(screen.getByText('₼14.40')).toBeInTheDocument()
     expect(screen.getByText('+18%')).toBeInTheDocument()
-    expect(screen.getByText('Your SCAN Benefits')).toBeInTheDocument()
-    expect(screen.getByText('POS Connection')).toBeInTheDocument()
-    expect(screen.getByText('54,321')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'SCAN benefits' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Data connection' })).toBeInTheDocument()
     expect(screen.queryByText('Sales today')).not.toBeInTheDocument()
   })
 
@@ -243,8 +241,8 @@ describe('RetailerDashboard', () => {
     render(<RetailerDashboard />)
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
-    expect(await screen.findByRole('heading', { name: 'SCAN Partner offers' })).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
+    expect(await screen.findByRole('heading', { name: 'Growth opportunities' })).toBeInTheDocument()
     expect(screen.getByText('Order 3 cases')).toBeInTheDocument()
     expect(screen.getByText('Volume offer')).toBeInTheDocument()
 
@@ -267,7 +265,7 @@ describe('RetailerDashboard', () => {
     render(<RetailerDashboard />)
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
     await user.click(await screen.findByRole('button', { name: 'Activate offer' }))
 
     expect(await screen.findByText('This offer is no longer available. Refresh to see current offers.')).toBeInTheDocument()
@@ -279,7 +277,7 @@ describe('RetailerDashboard', () => {
     fetchRetailerOverview.mockResolvedValue(overview)
     render(<RetailerDashboard />)
     await signIn(user)
-    await user.click(screen.getAllByRole('button', { name: 'Offers' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
 
     expect(screen.queryByText(/It was purchased in 80 separate baskets/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Why you're seeing this/ }))
@@ -328,7 +326,7 @@ describe('RetailerDashboard', () => {
     expect(await screen.findByText('Coca-Cola 500ml is selling 34% faster than usual')).toBeInTheDocument()
     expect(screen.getByText('24.3 units/day')).toBeInTheDocument()
     expect(screen.getByText('Consider adding stock to your next order and checking shelf availability.')).toBeInTheDocument()
-    expect(screen.getByText('CCI')).toBeInTheDocument()
+    expect(screen.getByText(/Stock risk · CCI/)).toBeInTheDocument()
   })
 
   it('surfaces a failed checkout feed as a Needs attention item on Home and Actions', async () => {
@@ -368,13 +366,38 @@ describe('RetailerDashboard', () => {
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Insights' })[0])
-    expect(await screen.findByRole('heading', { name: 'Store Insights' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Store insights' })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /Daily retailer sales/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Best-selling products' })).toBeInTheDocument()
     expect(screen.getAllByText('Coca-Cola 500ml').length).toBeGreaterThan(0)
 
     await user.selectOptions(screen.getByLabelText('Period'), 'LAST_7_DAYS')
     await waitFor(() => expect(fetchRetailerOverview).toHaveBeenCalledWith(expect.objectContaining({ period: 'LAST_7_DAYS' })))
+  })
+
+  it('makes connection evidence available in the retailer workspace', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue(overview)
+    render(<RetailerDashboard />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Data' })[0])
+    expect(await screen.findByRole('heading', { name: 'Data connection' })).toBeInTheDocument()
+    expect(screen.getByText('54,321')).toBeInTheDocument()
+    expect(screen.getAllByText('transactions.csv').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: 'Processing status' })).toBeInTheDocument()
+  })
+
+  it('answers grounded Ask SCAN questions from connected store data', async () => {
+    const user = userEvent.setup()
+    fetchRetailerOverview.mockResolvedValue(overview)
+    render(<RetailerDashboard />)
+    await signIn(user)
+
+    await user.click(screen.getAllByRole('button', { name: 'Ask SCAN' })[0])
+    expect(await screen.findByRole('heading', { name: 'Store intelligence, on demand' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'How much value has SCAN created?' }))
+    expect(screen.getByText(/SCAN has measured ₼84.50 in commercial value this month/)).toBeInTheDocument()
   })
 
   it('returns to a recoverable login when retailer credentials are invalid', async () => {
@@ -416,7 +439,7 @@ describe('RetailerDashboard', () => {
 
     await signIn(user)
     await user.click(screen.getAllByRole('button', { name: 'Insights' })[0])
-    expect(await screen.findByRole('heading', { name: 'Store Insights' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Store insights' })).toBeInTheDocument()
     // 'TODAY' was removed from the period picker - resetting to it on sign-out would leave the
     // <select> matching no <option>, showing nothing selected while still querying period=TODAY.
     expect(screen.getByLabelText('Period')).toHaveValue('LAST_30_DAYS')
