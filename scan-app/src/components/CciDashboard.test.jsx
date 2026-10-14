@@ -216,10 +216,16 @@ describe('CciDashboard', () => {
     expect(kpis.getByText('29.9%')).toBeInTheDocument()
     expect(kpis.getByText('1,949')).toBeInTheDocument()
     expect(kpis.getByText('100% coverage')).toBeInTheDocument()
-    expect(kpis.getByText('Analysis ready')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'SCAN Commercial Brief' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Network activity' })).toBeInTheDocument()
-    expect(screen.getByText('Top opportunity')).toBeInTheDocument()
+    expect(kpis.getByText('2 stores')).toBeInTheDocument()
+    expect(kpis.queryByText('Product Mapping')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Network Performance' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Network Pulse' })).toBeInTheDocument()
+    const briefHeading = screen.getByRole('heading', { name: 'SCAN Brief' })
+    const activityHeading = screen.getByRole('heading', { name: 'Network activity' })
+    const opportunityLabel = screen.getByText('Top Commercial Opportunity')
+    expect(opportunityLabel.compareDocumentPosition(briefHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(briefHeading.compareDocumentPosition(activityHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Data Health' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Ask SCAN' }).length).toBeGreaterThan(0)
     expect(fetchAnalyticsContext).not.toHaveBeenCalled()
     expect(fetchOverview).not.toHaveBeenCalled()
@@ -505,9 +511,7 @@ describe('CciDashboard', () => {
     fetchInvestigations.mockResolvedValueOnce([]).mockResolvedValue([openInvestigation])
     await signIn(user)
 
-    const needsAttentionHeading = await screen.findByRole('heading', { name: /Sprite 500ml is down 50%/ })
-    const card = needsAttentionHeading.closest('article')
-    await user.click(within(card).getByRole('button', { name: 'Investigate' }))
+    await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
 
     expect(openProductInvestigation).toHaveBeenCalledWith(expect.objectContaining({
       productName: 'Sprite 500ml', retailerCode: 'KAGGLE',
@@ -679,7 +683,7 @@ describe('CciDashboard', () => {
   // Activations stay outside primary navigation, but active tests can now be opened from the
   // Opportunities workspace when the backend returns them.
 
-  it('reorders My Work to show field checks first after switching to the Field Sales role', async () => {
+  it('shows the field action queue after switching to the Field Sales role', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
     const openTask = {
@@ -701,7 +705,6 @@ describe('CciDashboard', () => {
     await user.selectOptions(screen.getByLabelText('I am'), 'FIELD_SALES')
 
     expect(setCommercialRole).toHaveBeenCalledWith(expect.objectContaining({ commercialRole: 'FIELD_SALES' }))
-    const heading = await screen.findByRole('heading', { name: 'Field checks waiting on you' })
-    expect(heading.compareDocumentPosition(screen.getByRole('heading', { name: 'Needs attention' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Field checks waiting on you' })).toBeInTheDocument()
   })
 })
