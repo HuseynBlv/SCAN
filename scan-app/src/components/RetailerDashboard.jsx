@@ -38,13 +38,13 @@ import {
   WorkspaceShell,
 } from './WorkspaceUI'
 import {
-  ActionCard as RetailActionCard,
   ActivityItem,
   Badge,
   BenchmarkIndicator,
   Card,
   IntelligenceCard,
   MetricCard,
+  MiniChart,
   SectionHeader,
 } from './RetailerUI'
 import './CciDashboard.css'
@@ -85,6 +85,7 @@ const OFFER_TYPE_META = {
 
 const ACTION_TYPE_META = {
   STOCK_RISK: { label: 'Stock risk', tone: 'warning' },
+  BASKET_OPPORTUNITY: { label: 'Basket opportunity', tone: 'red' },
   OPPORTUNITY: { label: 'Opportunity', tone: 'red' },
   INVENTORY: { label: 'Inventory', tone: 'neutral' },
   PERFORMANCE: { label: 'Performance', tone: 'success' },
@@ -534,32 +535,93 @@ function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
   )
 }
 
-function ActionModule({ action }) {
-  const meta = ACTION_TYPE_META[action.type]
+function ActionFeedCard({ action }) {
+  const [expanded, setExpanded] = useState(false)
+  const [primaryDone, setPrimaryDone] = useState(false)
+  const [secondaryDone, setSecondaryDone] = useState(false)
+  const meta = ACTION_TYPE_META[action.type] || { label: humanize(action.type), tone: 'neutral' }
+  const highPriority = action.priority === 'HIGH' || action.type === 'STOCK_RISK'
+  const activeAction = ['OPEN', 'IN_PROGRESS'].includes(action.status || 'OPEN')
+  const stateBadge = action.status === 'COMPLETED'
+    ? <Badge tone="success">Completed</Badge>
+    : action.status === 'IN_PROGRESS'
+      ? <Badge tone="warning">In progress</Badge>
+      : action.status === 'DISMISSED'
+        ? <Badge tone="neutral">Dismissed</Badge>
+        : highPriority ? <Badge tone="red">High priority</Badge> : <Badge tone="neutral">Review</Badge>
+  const primaryAction = action.primaryAction || (action.type === 'STOCK_RISK' ? 'Add to order list' : 'Create opportunity')
+  const secondaryAction = action.secondaryAction || (action.type === 'STOCK_RISK' ? 'Mark checked' : 'Dismiss')
   return (
-    <RetailActionCard
-      badge={`${meta.label} · ${action.scope === 'CCI' ? 'CCI' : 'Store'}`}
-      badgeTone={meta.tone}
-      description={action.explanation}
-      metricLabel={action.metricLabel}
-      metricValue={action.metricValue}
-      recommendation={action.recommendation}
-      title={action.title}
-    />
+    <Card as="article" className={`retailer-workflow-action ${highPriority ? 'is-high-priority' : ''}`}>
+      <header>
+        <div><Badge tone={meta.tone}>{meta.label}</Badge><span>{action.scope === 'CCI' ? 'CCI portfolio' : 'Your store'}</span></div>
+        {stateBadge}
+      </header>
+      <div className="retailer-workflow-action-body">
+        <div className="retailer-workflow-action-copy">
+          <h2>{action.displayTitle || action.title}</h2>
+          <div className="retailer-workflow-metric">
+            <strong>{action.metricValue}</strong>
+            {action.change ? <Badge tone={action.change.startsWith('+') ? 'red' : 'neutral'}>{action.change}</Badge> : null}
+            <span>{action.comparison || action.metricLabel}</span>
+          </div>
+          <p>{action.evidence || action.explanation}</p>
+        </div>
+        <MiniChart label={`${action.displayTitle || action.title} trend`} values={action.trend || [12, 14, 13, 16, 17, 19, 21]} />
+      </div>
+      <div className="retailer-workflow-recommendation"><span>SCAN recommends</span><p>{action.recommendation}</p></div>
+      {expanded ? <div className="retailer-workflow-why"><strong>Why this action?</strong><p>{action.why || action.explanation}</p></div> : null}
+      <footer>
+        {activeAction ? <button className="scan-button scan-button-primary" disabled={primaryDone} onClick={() => setPrimaryDone(true)} type="button">{primaryDone ? 'Added' : primaryAction}</button> : null}
+        {activeAction ? <button className="scan-button scan-button-light" disabled={secondaryDone} onClick={() => setSecondaryDone(true)} type="button">{secondaryDone ? (secondaryAction === 'Dismiss' ? 'Dismissed' : 'Checked') : secondaryAction}</button> : null}
+        <button className="scan-text-link" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
+      </footer>
+    </Card>
   )
 }
 
-function Actions({ data, actions, onNavigate }) {
+const ACTION_FILTERS = [
+  { id: 'OPEN', label: 'Open' },
+  { id: 'IN_PROGRESS', label: 'In progress' },
+  { id: 'COMPLETED', label: 'Completed' },
+  { id: 'DISMISSED', label: 'Dismissed' },
+]
+
+function Actions({ data, actions, onNavigate, workspace }) {
+  const [filter, setFilter] = useState('OPEN')
   const attention = attentionItems(data)
+  const counts = workspace?.counts || { open: actions.length, inProgress: 0, completed: 0, dismissed: 0, highPriority: actions.filter((action) => action.type === 'STOCK_RISK').length }
+  const countFor = (id) => counts[id === 'IN_PROGRESS' ? 'inProgress' : id.toLowerCase()] || 0
+  const visibleActions = actions.filter((action) => (action.status || 'OPEN') === filter)
+  const recentResult = workspace?.recentResult
+  const activity = workspace?.activity || []
   return (
-    <div className="scan-page-stack">
-      <PageIntro description="What happened, why it matters, and what you can do about it." eyebrow="Actions" title="Actions" />
+    <div className="scan-page-stack retailer-actions-workflow">
+      <PageIntro description="What happened, why it matters, and what you can do." eyebrow="Operating workflow" title="Actions" />
+      <div className="retailer-action-filters" role="tablist" aria-label="Action status">
+        {ACTION_FILTERS.map((item) => <button aria-selected={filter === item.id} className={filter === item.id ? 'is-active' : ''} key={item.id} onClick={() => setFilter(item.id)} role="tab" type="button">{item.label} <span>{countFor(item.id)}</span></button>)}
+      </div>
       {attention.length ? <AttentionBanner items={attention} onNavigate={onNavigate} /> : null}
-      {actions.length ? (
-        <div className="retailer-action-grid">{actions.map((action) => <ActionModule action={action} key={action.id} />)}</div>
-      ) : (
-        <EmptyState title="No actions right now">SCAN will surface a recommendation as soon as there is a real pattern worth acting on.</EmptyState>
-      )}
+      <div className="retailer-actions-layout">
+        <section className="retailer-action-feed" aria-label={`${humanize(filter)} action feed`}>
+          <SectionHeader description="Prioritized from the latest store signals" title={filter === 'OPEN' ? 'Action feed' : humanize(filter)} />
+          {visibleActions.length ? visibleActions.map((action) => <ActionFeedCard action={action} key={action.id} />) : <EmptyState compact title={`No ${humanize(filter).toLowerCase()} actions`}>Nothing is in this workflow state right now.</EmptyState>}
+        </section>
+        <aside className="retailer-action-rail">
+          <Card className="retailer-action-summary-card">
+            <SectionHeader title="Action summary" />
+            <dl><div><dt>Open</dt><dd>{counts.open}</dd></div><div><dt>High priority</dt><dd>{counts.highPriority}</dd></div><div><dt>Completed this month</dt><dd>{counts.completed}</dd></div></dl>
+          </Card>
+          <Card className="retailer-action-result-card">
+            <SectionHeader action={<Badge tone="success">Observed</Badge>} title="Recent result" />
+            {recentResult ? <><h3>{recentResult.title}</h3><div><span>{recentResult.before}</span><ScanIcon name="chevron" size={16} /><strong>{recentResult.after}</strong></div><b>{recentResult.change}</b><p>{recentResult.detail}</p></> : <EmptyState compact title="No measured result yet">Completed actions will be measured here.</EmptyState>}
+          </Card>
+          <Card className="retailer-action-activity-card">
+            <SectionHeader title="Action activity" />
+            {activity.length ? <ol>{activity.map((item) => <li key={`${item.date}-${item.title}`}><time>{item.date}</time><i /><strong>{item.title}</strong></li>)}</ol> : <p>No action activity yet.</p>}
+          </Card>
+        </aside>
+      </div>
     </div>
   )
 }
@@ -763,7 +825,7 @@ function Page({ activePage, data, engagement, engagementLoading, loading, onActi
   if (activePage === 'data') return <Data data={data} />
   if (engagementLoading || !engagement) return <LoadingState title="Loading your SCAN benefits…" description="Preparing offers, actions, and partner status." />
   if (activePage === 'opportunities') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
-  if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} />
+  if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} workspace={engagement.actionWorkspace} />
   if (activePage === 'partner') return <Partner partnerStatus={engagement.partnerStatus} />
   if (activePage === 'ask') return <AskScan data={data} engagement={engagement} />
   return <Home data={data} engagement={engagement} onNavigate={onNavigate} />

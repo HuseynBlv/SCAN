@@ -305,7 +305,7 @@ describe('RetailerDashboard', () => {
     expect(screen.getByText('0 opportunities')).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: 'Actions' })[0])
-    expect(await screen.findByText('No actions right now')).toBeInTheDocument()
+    expect(await screen.findByText('No open actions')).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: 'Partner' })[0])
     expect(await screen.findByText('No benefit history yet')).toBeInTheDocument()
@@ -325,7 +325,40 @@ describe('RetailerDashboard', () => {
     expect(await screen.findByText('Coca-Cola 500ml is selling 34% faster than usual')).toBeInTheDocument()
     expect(screen.getByText('24.3 units/day')).toBeInTheDocument()
     expect(screen.getByText('Consider adding stock to your next order and checking shelf availability.')).toBeInTheDocument()
-    expect(screen.getByText(/Stock risk · CCI/)).toBeInTheDocument()
+    expect(screen.getByText('Stock risk')).toBeInTheDocument()
+    expect(screen.getByText('CCI portfolio')).toBeInTheDocument()
+  })
+
+  it('presents actions as a compact operating workflow for the presentation account', async () => {
+    const user = userEvent.setup()
+    render(<RetailerDashboard />)
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    await screen.findByText('4 things deserve attention today.')
+    await user.click(screen.getAllByRole('button', { name: 'Actions' })[0])
+
+    expect(await screen.findByRole('heading', { name: 'Actions' })).toBeInTheDocument()
+    expect(screen.getByText('What happened, why it matters, and what you can do.')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Open 3/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /In progress 2/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Completed 8/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Dismissed 1/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Coca-Cola Zero velocity is unusually high' })).toBeInTheDocument()
+    expect(screen.getByText('+23%')).toBeInTheDocument()
+    expect(screen.getByText('184 high-fit baskets purchased Coca-Cola without Doritos.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Action summary' })).toBeInTheDocument()
+    expect(screen.getByText('+6 pts attachment')).toBeInTheDocument()
+    expect(screen.getByText('Observed after action')).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: 'Why this?' })[0])
+    expect(screen.getByText(/three consecutive trading days/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add to order list' }))
+    expect(screen.getByRole('button', { name: 'Added' })).toBeDisabled()
+    await user.click(screen.getByRole('tab', { name: /In progress 2/ }))
+    expect(await screen.findByRole('heading', { name: 'Weekend checkout placement test' })).toBeInTheDocument()
+    expect(screen.getAllByText('In progress').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('tab', { name: /Completed 8/ }))
+    expect(await screen.findByRole('heading', { name: 'Doritos checkout placement completed' })).toBeInTheDocument()
+    expect(screen.getAllByText('Completed').length).toBeGreaterThan(0)
   })
 
   it('surfaces a failed checkout feed in Store Pulse', async () => {
