@@ -147,7 +147,7 @@ function partnerStatus(overrides = {}) {
 async function signIn(user) {
   await user.type(screen.getByLabelText('Password'), 'retailer-secret')
   await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
-  return screen.findByRole('heading', { name: 'Your store is connected to SCAN' })
+  return screen.findByText('Sales today')
 }
 
 describe('RetailerDashboard', () => {
@@ -176,11 +176,15 @@ describe('RetailerDashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
 
-    expect(await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })).toBeInTheDocument()
+    expect(await screen.findByText('4 things deserve attention today.')).toBeInTheDocument()
     expect(screen.getAllByText('Nərgiz Market · Nizami')).toHaveLength(2)
     expect(screen.getByText('Presentation data')).toBeInTheDocument()
     expect(screen.getAllByText('Coca-Cola Zero 330ml').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('₼186.40').length).toBeGreaterThan(0)
+    expect(screen.getByText('₼2,847')).toBeInTheDocument()
+    expect(screen.getByText('312')).toBeInTheDocument()
+    expect(screen.getByText('₼9.12')).toBeInTheDocument()
+    expect(screen.getByText('2.3×')).toBeInTheDocument()
+    expect(screen.getByText('184 high-fit baskets without both products.')).toBeInTheDocument()
     expect(fetchRetailerOverview).not.toHaveBeenCalled()
     expect(fetchRetailerOffers).not.toHaveBeenCalled()
   })
@@ -194,7 +198,7 @@ describe('RetailerDashboard', () => {
     await user.type(username, 'scan-showcase')
     await user.type(screen.getByLabelText('Password'), 'Showcase2026!')
     await user.click(screen.getByRole('button', { name: 'Open my dashboard' }))
-    await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })
+    await screen.findByText('4 things deserve attention today.')
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
     expect(await screen.findByRole('heading', { name: 'Growth opportunities' })).toBeInTheDocument()
@@ -206,7 +210,7 @@ describe('RetailerDashboard', () => {
     expect(activateRetailerOffer).not.toHaveBeenCalled()
   })
 
-  it('leads with connection, benefits, and commercial offers rather than a sales dashboard', async () => {
+  it('leads with the current store operating state in a compact modular grid', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
     render(<RetailerDashboard />)
@@ -216,21 +220,15 @@ describe('RetailerDashboard', () => {
     expect(fetchRetailerOverview).toHaveBeenCalledWith(expect.objectContaining({
       username: 'scan-retailer', password: 'retailer-secret',
     }))
-    expect(screen.getAllByText('Connected').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Opportunities').length).toBeGreaterThan(0)
-    expect(screen.getByText('Partner level')).toBeInTheDocument()
-    expect(screen.getByText('GOLD')).toBeInTheDocument()
-    // Same currency symbol and decimal precision everywhere on the page - not "AZN 84.5" next
-    // to offer text reading "₼14.40".
-    expect(screen.getAllByText('₼84.50').length).toBeGreaterThan(0)
-    // SCAN Intelligence, not a giant sales chart, is the headline commercial moment.
-    expect(screen.getByText('SCAN Intelligence')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Coca-Cola Zero 330ml is your strongest next move' })).toBeInTheDocument()
-    expect(screen.getByText('₼14.40')).toBeInTheDocument()
-    expect(screen.getByText('+18%')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'SCAN benefits' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Data connection' })).toBeInTheDocument()
-    expect(screen.queryByText('Sales today')).not.toBeInTheDocument()
+    expect(screen.getByText('Sales today')).toBeInTheDocument()
+    expect(screen.getByText('Transactions')).toBeInTheDocument()
+    expect(screen.getByText('Average basket')).toBeInTheDocument()
+    expect(screen.getByText('Store pulse')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Detected changes' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Store activity' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Coca-Cola Zero 330ml' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sales movement' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Top products' })).toBeInTheDocument()
   })
 
   it('activates an offer with a loading state then a success checkmark, in place', async () => {
@@ -303,14 +301,15 @@ describe('RetailerDashboard', () => {
     render(<RetailerDashboard />)
     await signIn(user)
 
-    expect(screen.getByText('No personalized offers yet')).toBeInTheDocument()
-    expect(screen.getByText('SILVER')).toBeInTheDocument()
+    expect(screen.getByText('No opportunity yet')).toBeInTheDocument()
+    expect(screen.getByText('0 opportunities')).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: 'Actions' })[0])
     expect(await screen.findByText('No actions right now')).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: 'Partner' })[0])
     expect(await screen.findByText('No benefit history yet')).toBeInTheDocument()
+    expect(screen.getByText('Silver')).toBeInTheDocument()
     // Silver already includes personalized offers - there is no contradiction with Offers
     // already showing real offers for this same, Silver-level store.
     expect(screen.getByText('Standard personalized offers')).toBeInTheDocument()
@@ -329,7 +328,7 @@ describe('RetailerDashboard', () => {
     expect(screen.getByText(/Stock risk · CCI/)).toBeInTheDocument()
   })
 
-  it('surfaces a failed checkout feed as a Needs attention item on Home and Actions', async () => {
+  it('surfaces a failed checkout feed in Store Pulse', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue({
       ...overview,
@@ -338,8 +337,8 @@ describe('RetailerDashboard', () => {
     render(<RetailerDashboard />)
     await signIn(user)
 
-    expect(await screen.findByRole('heading', { name: 'Needs attention' })).toBeInTheDocument()
-    expect(screen.getByText('The latest file could not be imported.')).toBeInTheDocument()
+    expect(await screen.findByText('Needs attention')).toBeInTheDocument()
+    expect(screen.getByText('1 item needs attention')).toBeInTheDocument()
   })
 
   it('shows Partner standing based on participation requirements, not purchase volume', async () => {
@@ -425,7 +424,7 @@ describe('RetailerDashboard', () => {
     expect(screen.getByRole('heading', { name: 'Reading your latest sales…' })).toBeInTheDocument()
 
     await act(async () => resolveRequest(overview))
-    await screen.findByRole('heading', { name: 'Your store is connected to SCAN' })
+    await screen.findByText('Sales today')
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
     expect(screen.getByRole('button', { name: 'Open my dashboard' })).toBeInTheDocument()
   })
