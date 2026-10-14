@@ -220,10 +220,14 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('heading', { name: 'SCAN Commercial Brief' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Network activity' })).toBeInTheDocument()
     expect(screen.getByText('Top opportunity')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ask SCAN' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Ask SCAN' }).length).toBeGreaterThan(0)
     expect(fetchAnalyticsContext).not.toHaveBeenCalled()
     expect(fetchOverview).not.toHaveBeenCalled()
     expect(fetchNetworkOverview).not.toHaveBeenCalled()
+
+    await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
+    expect(await screen.findByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
+    expect(screen.getByText('Commercial opportunities detected from network changes and basket behavior.')).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: 'Stores' })[0])
     expect(await screen.findByRole('heading', { name: 'Every store in the network, ranked.' })).toBeInTheDocument()
@@ -232,6 +236,24 @@ describe('CciDashboard', () => {
     await user.click(screen.getAllByRole('button', { name: 'Products' })[0])
     expect(await screen.findByRole('heading', { name: 'CCI product performance across the network.' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Coca-Cola Zero 330ml' })).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: 'Data' })[0])
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Reporting network' })).toBeInTheDocument()
+  })
+
+  it('uses global search to open a network store directly', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<CciDashboard />)
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    await screen.findByRole('heading', { name: 'Network Overview' })
+
+    await user.type(screen.getByRole('textbox', { name: 'Search CCI workspace' }), 'Nizami')
+    const results = container.querySelector('.cci-ui-search-results')
+    expect(results).not.toBeNull()
+    await user.click(within(results).getByRole('button', { name: /Nərgiz Market · Nizami/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Nərgiz Market · Nizami' })).toBeInTheDocument()
   })
 
   it('renders the real daily trend on Overview and switches metric', async () => {
@@ -277,10 +299,12 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('heading', { name: 'Network Overview' })).toBeInTheDocument()
 
     const sections = [
-      ['Insights', "What's changing across your network."],
+      ['Opportunities', 'Opportunities'],
+      ['Investigations', 'Real questions, with real evidence.'],
       ['Stores', 'Every store in the network, ranked.'],
       ['Products', 'CCI product performance across the network.'],
-      ['AI Assistant', 'Ask about a product or an investigation.'],
+      ['Data', 'Data'],
+      ['Ask SCAN', 'Ask SCAN about a product or investigation.'],
       ['Overview', 'Network Overview'],
     ]
     for (const [buttonName, headingName] of sections) {
@@ -469,7 +493,7 @@ describe('CciDashboard', () => {
 
     expect(await screen.findByRole('heading', { name: 'No transaction data imported yet' }))
       .toBeInTheDocument()
-    screen.getAllByRole('button', { name: 'Insights' })
+    screen.getAllByRole('button', { name: 'Opportunities' })
       .forEach((button) => expect(button).toBeDisabled())
   })
 
@@ -565,7 +589,7 @@ describe('CciDashboard', () => {
     })
     await signIn(user)
 
-    await user.click(screen.getAllByRole('button', { name: 'AI Assistant' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Ask SCAN' })[0])
     await user.click(screen.getByRole('button', { name: 'A product' }))
     await user.type(screen.getByLabelText('Product'), 'Sprite 500ml')
     await user.click(screen.getByRole('button', { name: 'Ask' }))
@@ -589,7 +613,7 @@ describe('CciDashboard', () => {
     await screen.findByRole('heading', { name: 'Network Overview' })
     const formControls = () => container.querySelectorAll('.cci-copilot-form input, .cci-copilot-form select')
 
-    await user.click(screen.getAllByRole('button', { name: 'AI Assistant' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Ask SCAN' })[0])
     expect(screen.getByRole('button', { name: 'Ask' })).toBeEnabled()
     expect(formControls()).toHaveLength(0)
 
@@ -652,10 +676,8 @@ describe('CciDashboard', () => {
     expect(await screen.findByText('Not watching anything yet')).toBeInTheDocument()
   })
 
-  // Activations has no UI entry point in this redesign on purpose: the nav no longer exposes it,
-  // and nothing yet links to it from Overview/Insights/Products. Per the redesign spec, it stays
-  // out of the UI until a real end-to-end test-vs-control workflow exists - the component, its
-  // actions, and the backend remain in place (and backend-tested) for when that happens.
+  // Activations stay outside primary navigation, but active tests can now be opened from the
+  // Opportunities workspace when the backend returns them.
 
   it('reorders My Work to show field checks first after switching to the Field Sales role', async () => {
     const user = userEvent.setup()
