@@ -2098,3 +2098,127 @@
   .retailer-data-processing > header > i,
   .retailer-data-processing li.is-active > span i { animation: none; }
 }
+
+/* SCAN Intelligence operating drawer */
+.retailer-intelligence-trigger {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #d9d7d1;
+  border-radius: 11px;
+  background: #fff;
+  color: #1d1e1b;
+  font-size: .65rem;
+  font-weight: 690;
+}
+.retailer-intelligence-trigger svg { color: #f40009; }
+.retailer-intelligence-trigger:hover,
+.retailer-intelligence-trigger[aria-expanded='true'] { border-color: #c9c6bf; background: #f7f6f3; }
+
+.retailer-intelligence-layer { position: fixed; inset: 0; z-index: 60; }
+.retailer-intelligence-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: rgba(17, 17, 17, .38); animation: retailer-intelligence-fade 180ms ease-out both; }
+.retailer-intelligence-drawer {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(470px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid #dfddd7;
+  background: #f7f7f5;
+  color: #181916;
+  box-shadow: -20px 0 55px rgba(20, 20, 18, .14);
+  animation: retailer-intelligence-enter 240ms cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes retailer-intelligence-fade { from { opacity: 0; } }
+@keyframes retailer-intelligence-enter { from { transform: translateX(28px); opacity: .6; } }
+
+.retailer-intelligence-drawer-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; padding: 21px 22px 18px; border-bottom: 1px solid #dfddd7; background: #fff; }
+.retailer-intelligence-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.retailer-intelligence-brand > i { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; background: #f40009; color: #fff; }
+.retailer-intelligence-brand > div { min-width: 0; display: grid; gap: 3px; }
+.retailer-intelligence-brand strong { font-size: .8rem; letter-spacing: -.015em; }
+.retailer-intelligence-brand span { overflow: hidden; color: #73746f; font-size: .61rem; text-overflow: ellipsis; white-space: nowrap; }
+.retailer-intelligence-drawer-header > button { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 9px; background: #f1f0ec; color: #5d5e59; font-size: 1.15rem; }
+.retailer-intelligence-live { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; }
+.retailer-intelligence-live > span { width: 7px; height: 7px; border-radius: 50%; background: #32815b; box-shadow: 0 0 0 3px #dcebe1; }
+.retailer-intelligence-live strong { font-size: .59rem; font-weight: 680; }
+.retailer-intelligence-live small { color: #898a85; font-size: .56rem; }
+
+.retailer-intelligence-body { display: grid; gap: 13px; padding: 15px; overflow-y: auto; overscroll-behavior: contain; }
+.retailer-intelligence-proactive,
+.retailer-intelligence-context,
+.retailer-intelligence-ask,
+.retailer-intelligence-report,
+.retailer-intelligence-evidence-note { border: 1px solid #e2e0da; border-radius: 18px; background: #fff; box-shadow: 0 8px 24px rgba(25, 25, 23, .035); }
+.retailer-intelligence-proactive,
+.retailer-intelligence-report { position: relative; overflow: hidden; }
+.retailer-intelligence-proactive::before,
+.retailer-intelligence-report::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: #f40009; }
+.retailer-intelligence-proactive { padding: 18px; }
+.retailer-intelligence-proactive > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.retailer-intelligence-proactive > header span:not(.retail-badge) { color: #c51118; font-size: .54rem; font-weight: 760; letter-spacing: .09em; text-transform: uppercase; }
+.retailer-intelligence-proactive h2 { margin: 5px 0 0; font-size: 1.02rem; letter-spacing: -.035em; }
+.retailer-intelligence-proactive ol { margin: 15px 0 0; padding: 0; list-style: none; }
+.retailer-intelligence-proactive li { min-height: 52px; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 9px; border-top: 1px solid #eceae5; }
+.retailer-intelligence-proactive li > span { color: #aaa9a3; font-size: .58rem; font-variant-numeric: tabular-nums; }
+.retailer-intelligence-proactive li > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.retailer-intelligence-proactive li strong { overflow: hidden; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.retailer-intelligence-proactive li small { flex: 0 0 auto; color: #b20f16; font-size: .61rem; font-weight: 690; }
+.retailer-intelligence-proactive > button { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; padding: 0; border: 0; background: transparent; color: #1d1e1b; font-size: .61rem; font-weight: 700; }
+
+.retailer-intelligence-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 13px 15px; }
+.retailer-intelligence-context > span { grid-column: 1 / -1; color: #9a181d; font-size: .52rem; font-weight: 740; letter-spacing: .07em; text-transform: uppercase; }
+.retailer-intelligence-context strong { overflow: hidden; font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
+.retailer-intelligence-context small { color: #81827d; font-size: .56rem; }
+
+.retailer-intelligence-ask { padding: 11px; }
+.retailer-intelligence-ask form { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 7px 7px 7px 11px; border: 1px solid #dcd9d3; border-radius: 12px; background: #faf9f6; }
+.retailer-intelligence-ask form > svg { color: #f40009; }
+.retailer-intelligence-ask input { min-width: 0; min-height: 32px; border: 0; outline: 0; background: transparent; color: #1b1c19; font: inherit; font-size: .68rem; }
+.retailer-intelligence-ask form button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 9px; background: #1d1e1b; color: #fff; }
+.retailer-intelligence-ask > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.retailer-intelligence-ask > div button { min-height: 28px; padding: 0 9px; border: 1px solid #e1dfd9; border-radius: 9px; background: #fff; color: #585954; font-size: .56rem; }
+.retailer-intelligence-ask > div button:hover { border-color: #d08e91; color: #9e1117; }
+
+.retailer-intelligence-report { padding: 20px; }
+.retailer-intelligence-report > header > span { color: #b51117; font-size: .53rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.retailer-intelligence-report > header h2 { margin: 7px 0 0; font-size: 1.05rem; letter-spacing: -.035em; }
+.retailer-intelligence-report > header p { margin: 7px 0 0; color: #73746f; font-size: .62rem; line-height: 1.45; }
+.retailer-intelligence-report-items { display: grid; gap: 9px; margin-top: 16px; }
+.retailer-intelligence-report-items article { display: grid; grid-template-columns: minmax(0, 1fr) 100px; gap: 7px 12px; padding: 12px; border-radius: 13px; background: #f7f6f3; }
+.retailer-intelligence-report-items article > div { display: grid; align-content: start; gap: 3px; }
+.retailer-intelligence-report-items article > div span { color: #696a65; font-size: .56rem; }
+.retailer-intelligence-report-items article > div strong { font-size: .95rem; letter-spacing: -.035em; }
+.retailer-intelligence-report-items article > div small { color: #8a8b86; font-size: .52rem; }
+.retailer-intelligence-report-items .retail-mini-chart { width: 100px; height: 40px; margin: 0; align-self: center; }
+.retailer-intelligence-report-items article:nth-child(2) .retail-mini-chart polygon { fill: rgba(35, 36, 33, .06); }
+.retailer-intelligence-report-items article:nth-child(2) .retail-mini-chart polyline { stroke: #353632; }
+.retailer-intelligence-report-items article > p { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid #e3e1dc; color: #62635e; font-size: .58rem; line-height: 1.4; }
+.retailer-intelligence-report > .scan-button { min-height: 34px; margin-top: 14px; border-radius: 9px; font-size: .61rem; }
+
+.retailer-intelligence-evidence-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 9px; padding: 13px 14px; color: #70716c; }
+.retailer-intelligence-evidence-note svg { color: #3c7657; }
+.retailer-intelligence-evidence-note p { margin: 0; font-size: .57rem; line-height: 1.45; }
+.retailer-intelligence-evidence-note p strong { color: #32332f; }
+.retailer-intelligence-evidence-note > span { grid-column: 2; color: #8a8b86; font-size: .53rem; }
+
+.retailer-action-intelligence-link { display: inline-flex; align-items: center; gap: 5px; color: #a91016 !important; }
+.retailer-product-intelligence-link { width: fit-content; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 0; border: 0; background: transparent; color: #aa1117; font-size: .56rem; font-weight: 680; }
+
+@media (max-width: 640px) {
+  .retailer-intelligence-trigger { width: 34px; justify-content: center; padding: 0; }
+  .retailer-intelligence-trigger span { display: none; }
+  .retailer-intelligence-drawer { width: 100%; }
+  .retailer-intelligence-drawer-header { padding: 17px 16px 14px; }
+  .retailer-intelligence-body { padding: 11px; }
+  .retailer-intelligence-report-items article { grid-template-columns: minmax(0, 1fr) 88px; }
+  .retailer-intelligence-report-items .retail-mini-chart { width: 88px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retailer-intelligence-backdrop,
+  .retailer-intelligence-drawer { animation: none; }
+}

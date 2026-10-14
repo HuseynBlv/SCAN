@@ -455,16 +455,42 @@ describe('RetailerDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'Actions' })).toBeInTheDocument()
   })
 
-  it('answers grounded Ask SCAN questions from connected store data', async () => {
+  it('opens SCAN Intelligence globally and renders answers as structured reports', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
     render(<RetailerDashboard />)
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Ask SCAN' })[0])
-    expect(await screen.findByRole('heading', { name: 'Store intelligence, on demand' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'How much value has SCAN created?' }))
-    expect(screen.getByText(/SCAN has measured ₼84.50 in commercial value this month/)).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'SCAN Intelligence' })).toBeInTheDocument()
+    expect(screen.getByText('Live store model')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '3 things stand out' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Ask about this store' })).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: 'What changed today?' }))
+    expect(screen.getByRole('heading', { name: 'What changed today?' })).toBeInTheDocument()
+    expect(screen.getByText(/Three material changes/)).toBeInTheDocument()
+    expect(screen.getAllByText('31% → 24%').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Review priority action/ })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'SCAN Intelligence' })).not.toBeInTheDocument()
+  })
+
+  it('opens context-aware intelligence from an action', async () => {
+    const user = userEvent.setup()
+    render(<RetailerDashboard />)
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    await screen.findByText('4 things deserve attention today.')
+    await user.click(screen.getAllByRole('button', { name: 'Actions' })[0])
+    await user.click(screen.getByRole('button', { name: /Ask SCAN about Coca-Cola Zero velocity/ }))
+
+    expect(await screen.findByText('Current context')).toBeInTheDocument()
+    expect(screen.getAllByText('Coca-Cola Zero velocity is unusually high').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Why this action?' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'How urgent is it?' }))
+    expect(screen.getByText('Action evidence')).toBeInTheDocument()
+    expect(screen.getByText('21.3/day')).toBeInTheDocument()
   })
 
   it('returns to a recoverable login when retailer credentials are invalid', async () => {

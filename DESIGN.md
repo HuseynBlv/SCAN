@@ -315,6 +315,18 @@ decision or help establish data trust.
 - **Easing:** enter `cubic-bezier(0.2, 0.8, 0.2, 1)`; exit `ease-in`; movement `ease-in-out`.
 - Respect `prefers-reduced-motion`. Never animate KPI numbers in a way that delays reading.
 
+## SCAN Intelligence
+
+- Expose Intelligence through a compact `Ask SCAN` header control and a 420–480px right-side
+  operating drawer. It is a persistent workspace capability, not a separate chat destination.
+- Lead with proactive store signals, current scope, and source freshness before the ask field.
+- Render answers as concise intelligence reports: metric blocks, evidence trends, status badges,
+  and operational links. Avoid conversational bubbles, assistant avatars, gradients, and sparkles.
+- Preserve product, action, and opportunity context when the drawer opens from those surfaces so
+  suggested questions and evidence stay specific to the retailer's current task.
+- Use Coca-Cola red as a restrained accent and identify live store-model status with a labeled
+  green indicator. Every claim must remain grounded in deterministic presentation or store data.
+
 ## Accessibility
 
 - Meet WCAG AA contrast for all text, controls, chart labels, and focus states.
