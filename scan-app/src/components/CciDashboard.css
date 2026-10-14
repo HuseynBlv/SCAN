@@ -314,6 +314,60 @@
   .portal-switch-links { margin: 24px; }
 }
 
+/* Compact CCI operating-system shell */
+.scan-workspace-cci { grid-template-columns: 206px minmax(0, 1fr); background: #f7f7f5; }
+.scan-workspace-cci .scan-sidebar { padding: 22px 12px 15px; }
+.scan-workspace-cci .scan-sidebar nav { gap: 3px; margin-top: 30px; }
+.scan-workspace-cci .scan-sidebar nav button { min-height: 40px; padding: 0 11px; border-radius: 10px; font-size: .75rem; }
+.scan-workspace-cci .scan-sidebar nav button.is-active { background: #292927; box-shadow: inset 3px 0 0 var(--scan-red); }
+.scan-workspace-cci .scan-sidebar footer { gap: 12px; }
+.scan-workspace-cci .scan-main { padding: 16px 24px 48px; }
+.scan-workspace-cci .scan-view { max-width: 1480px; margin-top: 20px; }
+.scan-workspace-cci .scan-page-stack { gap: 14px; }
+.scan-workspace-cci .scan-page-intro { min-height: 0; padding: 0 2px 2px; }
+.scan-workspace-cci .scan-page-intro h2 { max-width: 860px; font-size: clamp(1.9rem, 3vw, 2.55rem); line-height: 1.02; }
+.scan-workspace-cci .scan-page-intro p { margin-top: 7px; font-size: .8rem; }
+.scan-workspace-cci .scan-panel { padding: 20px; border-color: #e5e3df; border-radius: 20px; box-shadow: 0 8px 28px rgba(23, 23, 20, .025); }
+
+.cci-global-toolbar { position: relative; z-index: 20; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 7px 0 13px; border-bottom: 1px solid var(--scan-border); }
+.cci-global-toolbar-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.cci-global-toolbar .scan-segmented { flex: 0 0 auto; }
+.cci-global-toolbar .scan-button { min-height: 40px; }
+.cci-global-toolbar .scan-data-freshness { white-space: nowrap; }
+
+.cci-foundation-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cci-opportunity-workspace { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, .7fr); gap: 14px; align-items: start; }
+.cci-opportunity-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cci-opportunity-cards > :first-child { grid-column: 1 / -1; }
+.cci-ui-ranked-list { display: grid; }
+.cci-activation-link { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 0; border: 0; border-top: 1px solid var(--scan-border); background: transparent; color: var(--scan-ink); text-align: left; }
+.cci-activation-link:first-child { border-top: 0; }
+.cci-activation-link strong,.cci-activation-link small { display: block; }
+.cci-activation-link strong { font-size: .78rem; }
+.cci-activation-link small { margin-top: 4px; color: var(--scan-muted); font-size: .65rem; }
+.cci-data-page .cci-ui-table { overflow: hidden; }
+
+@media (max-width: 1180px) {
+  .cci-global-toolbar { align-items: flex-start; flex-direction: column; }
+  .cci-global-toolbar .cci-ui-search { width: min(100%, 560px); }
+  .cci-global-toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .cci-opportunity-workspace { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .scan-workspace-cci .scan-main { padding: 14px 16px 40px; }
+  .cci-foundation-kpis,.cci-opportunity-cards { grid-template-columns: 1fr; }
+  .cci-opportunity-cards > :first-child { grid-column: auto; }
+  .scan-workspace-cci .scan-mobile-nav { overflow-x: auto; justify-content: flex-start; }
+  .scan-workspace-cci .scan-mobile-nav button { flex: 0 0 auto; }
+}
+
+@media (max-width: 720px) {
+  .cci-global-toolbar-actions .scan-data-freshness,.cci-global-toolbar-actions .cci-presentation-badge { order: -1; }
+  .cci-global-toolbar-actions .scan-segmented { width: 100%; }
+  .cci-global-toolbar-actions .scan-segmented button { flex: 1; }
+}
+
 @media (max-width: 420px) {
   .cci-login-shell { padding: 0; }
   .cci-login-card { min-height: 100vh; border: 0; border-radius: 0; }
