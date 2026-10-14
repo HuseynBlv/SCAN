@@ -3,6 +3,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -138,6 +139,15 @@ function formatMoney(value, currency) {
   }
 }
 
+function formatHomeMoney(value, currency, fractionDigits = 2) {
+  const amount = Number(value || 0)
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(amount)
+  return currency === 'AZN' ? `₼${formatted}` : formatMoney(amount, currency)
+}
+
 function formatDateTime(value) {
   if (!value) return 'Not available'
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
@@ -155,6 +165,11 @@ function humanize(value) {
 function formatDay(value) {
   if (!value) return 'Today'
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(value))
+}
+
+function formatClock(value) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
 function greeting(now = new Date()) {
@@ -181,27 +196,6 @@ function attentionItems(data) {
     })
   }
   return items
-}
-
-function useCountUp(target, durationMs = 700) {
-  const [display, setDisplay] = useState(target)
-  const previous = useRef(target)
-  useEffect(() => {
-    const start = previous.current
-    const delta = target - start
-    if (!delta) { setDisplay(target); previous.current = target; return undefined }
-    const startedAt = performance.now()
-    let frame
-    function tick(now) {
-      const progress = Math.min(1, (now - startedAt) / durationMs)
-      setDisplay(start + delta * progress)
-      if (progress < 1) frame = requestAnimationFrame(tick)
-      else previous.current = target
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [target, durationMs])
-  return display
 }
 
 function Login({ error, loading, onSubmit }) {
@@ -312,88 +306,158 @@ function ActivateButton({ offer, onActivate, activating, justActivated, label })
   )
 }
 
-function Home({ data, engagement, onNavigate }) {
-  const { offers, partnerStatus } = engagement
-  const heroOffer = offers.available[0]
+function percentageChange(current, comparison) {
+  if (!comparison) return null
+  return ((current - comparison) / comparison) * 100
+}
+
+function signedPercent(value) {
+  if (value == null || !Number.isFinite(value)) return 'No comparison'
+  return `${value >= 0 ? '+' : ''}${decimal.format(value)}%`
+}
+
+function homeState(data, engagement) {
+  const daily = data.dailySales || []
+  const latest = daily.at(-1) || { totalSales: data.totalSales, basketCount: data.totalBaskets }
+  const priorWeek = daily.at(-8)
+  const presentation = data.home
+  const sales = presentation?.todaySales ?? latest.totalSales
+  const transactions = presentation?.todayTransactions ?? latest.basketCount
+  const averageBasket = presentation?.todayAverageBasket ?? (transactions ? sales / transactions : 0)
+  const priorAverage = priorWeek?.basketCount ? priorWeek.totalSales / priorWeek.basketCount : null
   const attention = attentionItems(data)
-  const benefitsDisplay = useCountUp(partnerStatus.benefits.thisMonth)
-  const salesTrend = data.dailySales.slice(-10).map((day) => day.totalSales)
-  const basketTrend = data.dailySales.slice(-10).map((day) => day.basketCount)
-  const activity = [
-    heroOffer ? { icon: 'recommendations', tone: 'red', title: 'New opportunity detected', detail: heroOffer.productName, time: 'Now' } : null,
-    engagement.actions[0] ? { icon: 'opportunities', tone: 'warning', title: 'Action created', detail: engagement.actions[0].title, time: 'Today' } : null,
-    partnerStatus.benefitHistory[0] ? { icon: 'check', tone: 'positive', title: 'Benefit measured', detail: partnerStatus.benefitHistory[0].title, time: formatDay(partnerStatus.benefitHistory[0].activatedAt) } : null,
-    { icon: 'sync', tone: 'positive', title: 'Sales data refreshed', detail: `${integer.format(data.sync.importedReceipts || data.totalBaskets)} receipts analyzed`, time: formatDateTime(data.sync.completedAt) },
+  const changes = presentation?.detectedChanges || [
+    ...engagement.actions.slice(0, 2).map((action) => ({ title: action.title, metric: action.metricValue, explanation: action.explanation, target: 'actions' })),
+    ...data.insights.slice(0, 3).map((insight) => ({ title: insight.fact, metric: 'Detected', explanation: insight.interpretation, target: 'insights' })),
+  ].slice(0, 3)
+  const activity = presentation?.activity || [
+    { time: formatClock(data.sync.completedAt), title: 'POS data processed', detail: `${integer.format(data.sync.importedReceipts || data.totalBaskets)} receipts validated` },
+    { time: formatClock(data.generatedAt), title: `${changes.length} insights updated`, detail: 'Store intelligence refreshed' },
+    engagement.actions[0] ? { time: formatClock(data.generatedAt), title: 'Priority action created', detail: engagement.actions[0].title } : null,
+    engagement.offers.available[0] ? { time: formatClock(data.generatedAt), title: 'Opportunity updated', detail: engagement.offers.available[0].productName } : null,
   ].filter(Boolean)
+  return {
+    sales,
+    transactions,
+    averageBasket,
+    salesChange: presentation?.salesChange ?? percentageChange(sales, priorWeek?.totalSales),
+    transactionChange: presentation?.transactionChange ?? percentageChange(transactions, priorWeek?.basketCount),
+    averageBasketChange: presentation?.averageBasketChange ?? percentageChange(averageBasket, priorAverage),
+    salesTrend: presentation?.salesTrend || daily.slice(-10).map((day) => day.totalSales),
+    transactionTrend: presentation?.transactionTrend || daily.slice(-10).map((day) => day.basketCount),
+    averageBasketTrend: presentation?.averageBasketTrend || daily.slice(-10).map((day) => day.basketCount ? day.totalSales / day.basketCount : 0),
+    changes,
+    activity,
+    attention,
+    attentionCount: presentation?.attentionCount ?? attention.length,
+    operatingItems: presentation?.operatingItems ?? Math.max(changes.length + attention.length, 1),
+  }
+}
+
+function HomeSalesMovement({ data }) {
+  const chartData = (data.home?.salesMovement || data.dailySales.slice(-14)).map((day, index, values) => ({
+    ...day,
+    baseline: day.baseline ?? values.slice(Math.max(0, index - 4), index + 1).reduce((sum, item) => sum + Number(item.totalSales || 0), 0) / Math.min(index + 1, 5),
+  }))
+  if (!chartData.length) return <EmptyState compact title="No sales movement yet">Daily sales appear after the first checkout export.</EmptyState>
+  return (
+    <div className="retailer-home-chart" role="img" aria-label="Sales movement with a comparison baseline and detected event markers">
+      <ResponsiveContainer height="100%" initialDimension={{ width: 700, height: 250 }} minHeight={230} minWidth={0} width="100%">
+        <LineChart data={chartData} margin={{ top: 18, right: 18, bottom: 2, left: 0 }}>
+          <CartesianGrid stroke="#ebe9e4" vertical={false} />
+          <XAxis axisLine={false} dataKey="date" tickFormatter={(value) => formatDay(value)} tickLine={false} />
+          <YAxis axisLine={false} tickLine={false} width={48} />
+          <Tooltip formatter={(value, name) => [formatMoney(value, data.currency), name === 'totalSales' ? 'Sales' : 'Baseline']} labelFormatter={formatDay} />
+          <Line dataKey="baseline" dot={false} isAnimationActive stroke="#b9bab6" strokeDasharray="5 5" strokeWidth={1.5} type="monotone" />
+          <Line dataKey="totalSales" dot={false} isAnimationActive stroke="#f40009" strokeWidth={2.5} type="monotone" />
+          {chartData.filter((day) => day.event).map((day) => <ReferenceDot fill="#f40009" key={`${day.date}-${day.event}`} r={4} stroke="#fff" strokeWidth={2} x={day.date} y={day.totalSales} />)}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function Home({ data, engagement, onNavigate }) {
+  const state = homeState(data, engagement)
+  const opportunity = engagement.offers.available[1] || engagement.offers.available[0]
+  const action = engagement.actions[0]
+  const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
+  const topProducts = [...data.topProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 4)
 
   return (
-    <div className="scan-page-stack retailer-home retailer-commerce-home">
-      <section className="retailer-greeting retailer-compact-intro">
-        <div>
-          <span className="scan-eyebrow">{greeting()}</span>
-          <h1>Your store is connected to SCAN</h1>
-          <p>Here is what changed, what needs attention, and where value is building.</p>
-        </div>
-        <span className="retailer-connected-pill"><i aria-hidden="true" />Connected</span>
+    <div className="scan-page-stack retailer-home retailer-commerce-home retailer-ops-home">
+      <section className="retailer-ops-brief">
+        <div><span>{greeting()}</span><strong>{state.operatingItems} things deserve attention today.</strong></div>
+        <small>SCAN refreshed the store operating picture from the latest validated checkout data.</small>
       </section>
 
-      <div className="retailer-commerce-grid retailer-overview-grid">
-        <MetricCard change="+12.4%" chartValues={salesTrend} icon="sales" label="Sales" note="vs last 30-day pace" value={formatMoney(data.totalSales, data.currency)} />
-        <MetricCard chartValues={basketTrend} icon="basket" label="Transactions" note={`${decimal.format(data.productsPerBasket)} products per basket`} tone="dark" value={integer.format(data.totalBaskets)} />
-        <MetricCard change={`${offers.available.length} ready`} changeTone="red" icon="recommendations" label="Opportunities" note="Personalized for this store" value={offers.available.length} />
-        <MetricCard change="On track" changeTone="positive" icon="time-store" label="Partner level" note={`${partnerStatus.progressPercentage}% to ${humanize(partnerStatus.nextLevel)}`} value={partnerStatus.level} />
-      </div>
-
-      <div className="retailer-commerce-grid retailer-intelligence-row">
-        {heroOffer ? (
-          <IntelligenceCard
-            action={<button className="retailer-light-button" onClick={() => onNavigate('opportunities')} type="button">Review opportunity <ScanIcon name="chevron" size={15} /></button>}
-            description={heroOffer.reason}
-            metric={heroOffer.metricValue}
-            title={`${heroOffer.productName} is your strongest next move`}
-          >
-            <div className="retailer-intelligence-facts">
-              <div><span>Recommended</span><strong>{heroOffer.normalCondition}</strong></div>
-              <div><span>Partner benefit</span><strong>{heroOffer.partnerCondition}</strong></div>
-              <div><span>Estimated value</span><strong>{heroOffer.benefitSummary.replace('Estimated benefit: ', '')}</strong></div>
-            </div>
-          </IntelligenceCard>
-        ) : <EmptyState title="No personalized offers yet">Offers appear once SCAN has enough recorded CCI product sales from your store.</EmptyState>}
-        <Card className="retailer-activity-card">
-          <SectionHeader action={<button className="scan-text-link" onClick={() => onNavigate('actions')} type="button">View all</button>} title="Workspace activity" />
-          <ul>{activity.map((item) => <ActivityItem {...item} key={`${item.title}-${item.detail}`} />)}</ul>
+      <div className="retailer-commerce-grid retailer-ops-kpis">
+        <MetricCard change={signedPercent(state.salesChange)} changeTone={state.salesChange >= 0 ? 'positive' : 'warning'} chartValues={state.salesTrend} icon="sales" label="Sales today" note="vs last Tuesday" value={formatHomeMoney(state.sales, data.currency, 0)} />
+        <MetricCard change={signedPercent(state.transactionChange)} changeTone={state.transactionChange >= 0 ? 'positive' : 'warning'} chartValues={state.transactionTrend} icon="basket" label="Transactions" note="vs last Tuesday" value={integer.format(state.transactions)} />
+        <MetricCard change={signedPercent(state.averageBasketChange)} changeTone={state.averageBasketChange >= 0 ? 'positive' : 'warning'} chartValues={state.averageBasketTrend} icon="chart" label="Average basket" note="vs last Tuesday" value={formatHomeMoney(state.averageBasket, data.currency)} />
+        <Card className="retailer-store-pulse">
+          <header><span>Store pulse</span><div className={`retailer-pulse-orbit ${healthy ? 'is-healthy' : 'is-warning'}`}><ScanIcon name={healthy ? 'pulse' : 'warning'} size={18} /></div></header>
+          <strong>{healthy ? 'Healthy' : 'Needs attention'}</strong>
+          <ul><li><i className="is-red" />{engagement.offers.available.length} opportunities</li><li><i className={state.attentionCount ? 'is-warning' : 'is-positive'} />{state.attentionCount} {state.attentionCount === 1 ? 'item needs' : 'items need'} attention</li></ul>
         </Card>
       </div>
 
-      <div className="retailer-commerce-grid retailer-support-row">
-        <Card className="retailer-benefit-module">
-          <SectionHeader description="Commercial value captured through offers and campaigns." eyebrow="Measured value" title="SCAN benefits" />
-          <div className="retailer-benefits-totals">
-            <div><span>This month</span><strong>{formatMoney(benefitsDisplay, data.currency)}</strong></div>
-            <div><span>Last month</span><strong>{formatMoney(partnerStatus.benefits.lastMonth, data.currency)}</strong></div>
-            <div><span>Lifetime</span><strong>{formatMoney(partnerStatus.benefits.lifetime, data.currency)}</strong></div>
-          </div>
-          <BenchmarkIndicator benchmark={84} label="Monthly benefit target" tone="positive" value="84%" />
-        </Card>
-
-        <Card className="retailer-products-module">
-          <SectionHeader action={<button className="scan-text-link" onClick={() => onNavigate('insights')} type="button">See insights</button>} description="Ranked by recorded sales" title="Product momentum" />
+      <div className="retailer-commerce-grid retailer-ops-intelligence-row">
+        <Card className="retailer-detected-changes">
+          <SectionHeader action={<Badge tone="red">Live</Badge>} description="What changed today" eyebrow="SCAN Intelligence" title="Detected changes" />
           <ol>
-            {data.topProducts.slice(0, 4).map((product, index) => (
-              <li key={product.name}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{product.name}</strong><small>{integer.format(product.quantity)} units</small></div><b>{formatMoney(product.revenue, data.currency)}</b></li>
+            {state.changes.map((change, index) => (
+              <li key={`${change.title}-${index}`}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <i className={index === 1 ? 'is-warning' : 'is-red'} />
+                <div><strong>{change.title}</strong><small>{change.explanation}</small></div>
+                <b>{change.metric}</b>
+                <button aria-label={`Open ${change.title}`} onClick={() => onNavigate(change.target || 'insights')} type="button"><ScanIcon name="chevron" size={16} /></button>
+              </li>
             ))}
           </ol>
+          <footer><button className="scan-button scan-button-primary" onClick={() => onNavigate('ask')} type="button"><ScanIcon name="ask" size={16} />Ask SCAN</button></footer>
         </Card>
 
-        <Card className="retailer-data-health-module">
-          <SectionHeader action={<Badge tone="positive">Healthy</Badge>} description="Latest checkout export" title="Data connection" />
-          <div className="retailer-data-health-score"><strong>{decimal.format(data.mappedLinePercentage)}%</strong><span>product mapping</span></div>
-          <BenchmarkIndicator benchmark={data.mappedLinePercentage} label="Mapping completeness" tone="positive" value={`${decimal.format(data.mappedLinePercentage)}%`} />
-          <button className="scan-text-link" onClick={() => onNavigate('data')} type="button">Open data status <ScanIcon name="chevron" size={14} /></button>
+        <Card className="retailer-store-activity">
+          <SectionHeader title="Store activity" />
+          <ol>{state.activity.slice(0, 4).map((item, index) => <li key={`${item.time}-${item.title}-${index}`}><time>{item.time}</time><i /><div><strong>{item.title}</strong><small>{item.detail}</small></div></li>)}</ol>
         </Card>
       </div>
 
-      {attention.length ? <AttentionBanner items={attention} onNavigate={onNavigate} /> : null}
+      <div className="retailer-commerce-grid retailer-ops-decision-row">
+        {opportunity ? (
+          <Card className="retailer-opportunity-focus">
+            <SectionHeader action={<Badge tone="red">Top opportunity</Badge>} title={opportunity.productName} />
+            {opportunity.affinityValue ? (
+              <div className="retailer-affinity-visual" aria-label="Basket affinity relationship"><span>Coca-Cola</span><i><b>{opportunity.affinityValue}</b><small>affinity</small></i><span>Doritos</span></div>
+            ) : (
+              <div className="retailer-opportunity-metric"><strong>{opportunity.metricValue}</strong><span>{opportunity.metricLabel}</span></div>
+            )}
+            <p>{opportunity.fitBaskets ? `${integer.format(opportunity.fitBaskets)} high-fit baskets without both products.` : opportunity.whyReasons?.[0] || opportunity.reason}</p>
+            <button className="scan-button scan-button-light" onClick={() => onNavigate('opportunities')} type="button">View opportunity <ScanIcon name="chevron" size={15} /></button>
+          </Card>
+        ) : <EmptyState compact title="No opportunity yet">SCAN will surface one when store evidence is sufficient.</EmptyState>}
+        {action ? (
+          <Card className="retailer-priority-action">
+            <SectionHeader action={<Badge tone="warning">Priority action</Badge>} title={action.title.split(' may ')[0].split(' is ')[0]} />
+            <h3>{action.recommendation}</h3>
+            <div><strong>{action.metricValue}</strong>{action.change ? <Badge tone="red">{action.change}</Badge> : null}<span>{action.metricLabel}</span></div>
+            <button className="scan-button scan-button-light" onClick={() => onNavigate('actions')} type="button">Review action <ScanIcon name="chevron" size={15} /></button>
+          </Card>
+        ) : <EmptyState compact title="No priority action">No action requires review right now.</EmptyState>}
+      </div>
+
+      <div className="retailer-commerce-grid retailer-ops-performance-row">
+        <Card className="retailer-sales-movement-card">
+          <SectionHeader action={<div className="retailer-chart-legend"><span><i className="is-sales" />Sales</span><span><i />Baseline</span></div>} description="Today against the recent operating baseline" title="Sales movement" />
+          <HomeSalesMovement data={data} />
+        </Card>
+        <Card className="retailer-top-products-card">
+          <SectionHeader action={<button className="scan-text-link" onClick={() => onNavigate('insights')} type="button">View all</button>} title="Top products" />
+          <ol>{topProducts.map((product, index) => <li key={product.name}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{product.name}</strong><small>{product.category}</small></div><b>{integer.format(product.quantity)}<small> units</small></b></li>)}</ol>
+        </Card>
+      </div>
     </div>
   )
 }
@@ -846,17 +910,16 @@ export default function RetailerDashboard() {
 
   const headerActions = (
     <>
+      <DataFreshness formatter={formatTime} generatedAt={data.generatedAt} />
       {credentials.presentation ? <span className="retailer-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
       {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
-      <DataFreshness formatter={formatTime} generatedAt={data.generatedAt} />
-      <button className="retailer-ask-header" onClick={() => navigate('ask')} type="button"><ScanIcon name="ask" size={16} />Ask SCAN</button>
       <button aria-label={loading ? 'Refreshing…' : 'Refresh'} className="scan-icon-button" disabled={loading || engagementLoading} onClick={refresh} type="button"><ScanIcon name="refresh" size={18} /></button>
     </>
   )
 
   return (
     <div ref={layoutRef}>
-      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="Store" meta={<p>Retailer Workspace</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
+      <WorkspaceShell activePage={activePage} accountLabel={retailerDisplayName(data)} accountMeta="Retailer account" brandSubtitle="Retailer Workspace" header={<WorkspaceHeader actions={headerActions} eyebrow="My shop" meta={<p>Retailer Workspace</p>} title={retailerDisplayName(data)} />} navItems={NAV_ITEMS} onNavigate={navigate} onSignOut={signOut} portal="retailer">
         {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" onClick={refresh} type="button">Retry</button></div> : null}
         {engagementError ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{engagementError}</span></div> : null}
         <Page

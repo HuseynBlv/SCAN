@@ -19,6 +19,15 @@ describe('presentationRetailer', () => {
     expect(overview.retailerCode).toBe('PRESENTATION')
     expect(overview.topProducts).toHaveLength(8)
     expect(overview.dailySales).toHaveLength(30)
+    expect(overview.home).toMatchObject({
+      todaySales: 2847,
+      todayTransactions: 312,
+      todayAverageBasket: 9.12,
+      operatingItems: 4,
+    })
+    expect(overview.home.detectedChanges).toHaveLength(3)
+    expect(overview.home.activity).toHaveLength(4)
+    expect(overview.home.salesMovement).toHaveLength(14)
     expect(overview.sync.errors).toEqual([])
     expect(engagement.offers.available).toHaveLength(3)
     expect(engagement.actions).toHaveLength(3)

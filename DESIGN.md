@@ -169,14 +169,15 @@
 
 ### Retailer workspace
 
-1. Compact status intro: connection state and one sentence explaining what changed.
-2. Four integrated metrics with micro visualizations: sales, transactions, opportunities, and
-   Partner level. These establish context but do not overpower the page.
-3. One large SCAN Intelligence module paired with workspace activity. Detection, action creation,
-   completion, and measured results should feel like one continuous system.
-4. SCAN benefits, product momentum, and data health form a compact supporting grid.
-5. Deeper analytics live under Insights. Connection evidence lives under Data. Only genuine feed
-   failures become needs-attention items.
+1. A compact attention line states how many operating items deserve review today.
+2. Sales Today, Transactions, and Average Basket compare the latest day with the same weekday one
+   week earlier when that baseline exists. A qualitative Store Pulse summarizes opportunities and
+   genuine feed attention without inventing a health score.
+3. One large SCAN Intelligence module pairs the day's detected changes with a narrow activity
+   timeline, so detection, processing, and recommendation updates read as one continuous system.
+4. The top opportunity and priority action sit together as the immediate decision layer.
+5. Sales movement closes the operating view with a recent baseline, event markers, and the compact
+   top-products list. Deeper analytics remain under Insights and connection evidence under Data.
 
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.

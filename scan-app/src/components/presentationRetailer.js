@@ -46,8 +46,17 @@ export function presentationOverview(period = 'LAST_30_DAYS') {
   const scale = days / 30
   const sales = Math.round(68420 * scale)
   const baskets = Math.round(2768 * scale)
-  const now = new Date().toISOString()
+  const refreshedAt = new Date()
+  refreshedAt.setHours(8, 36, 0, 0)
+  const now = refreshedAt.toISOString()
   const periodStart = new Date(Date.now() - days * 86400000).toISOString()
+
+  const trend = dailySales(days)
+  const homeMovement = trend.slice(-14).map((day, index) => ({
+    ...day,
+    baseline: Math.round(day.totalSales * (.94 + ((index % 3) * .018))),
+    event: index === 5 ? 'Cooler replenished' : index === 10 ? 'Weekend opportunity updated' : null,
+  }))
 
   return {
     generatedAt: now,
@@ -86,7 +95,32 @@ export function presentationOverview(period = 'LAST_30_DAYS') {
       { segment: 'WEEKEND', basketCount: Math.round(baskets * .31), sharePercentage: 31 },
     ],
     stores: [{ storeId: 'NIZAMI-01', basketCount: baskets, cciBasketCount: Math.round(baskets * .49), totalSales: sales, averageBasketValue: sales / baskets }],
-    dailySales: dailySales(days),
+    dailySales: trend,
+    home: {
+      todaySales: 2847,
+      salesChange: 12.4,
+      todayTransactions: 312,
+      transactionChange: 8.1,
+      todayAverageBasket: 9.12,
+      averageBasketChange: 5.3,
+      salesTrend: [2210, 2360, 2290, 2515, 2640, 2475, 2720, 2847],
+      transactionTrend: [268, 281, 274, 293, 301, 289, 306, 312],
+      averageBasketTrend: [8.24, 8.39, 8.36, 8.58, 8.77, 8.56, 8.89, 9.12],
+      attentionCount: 1,
+      operatingItems: 4,
+      detectedChanges: [
+        { title: 'Coca-Cola Zero velocity', metric: '+23%', explanation: 'Sales velocity is above the four-week baseline.', target: 'actions' },
+        { title: 'Doritos attachment', metric: '31% → 24%', explanation: 'Fewer Coca-Cola baskets include Doritos today.', target: 'opportunities' },
+        { title: 'Evening basket value', metric: '+8.4%', explanation: 'Baskets after 18:00 are outperforming the daily average.', target: 'insights' },
+      ],
+      activity: [
+        { time: '23:33', title: 'POS data processed', detail: '312 receipts validated' },
+        { time: '23:34', title: '3 insights updated', detail: 'Store intelligence refreshed' },
+        { time: '23:34', title: 'Stock velocity warning created', detail: 'Coca-Cola Zero 330ml' },
+        { time: '23:35', title: 'Weekend opportunity updated', detail: 'Coca-Cola + Doritos' },
+      ],
+      salesMovement: homeMovement,
+    },
     insights: [
       { fact: 'Zero-sugar beverages grew 18% versus the previous period.', interpretation: 'Demand is shifting toward low-sugar choices.', recommendedAction: 'Keep cold availability high before the evening peak.' },
       { fact: 'Weekend baskets are 12% larger than weekday baskets.', interpretation: 'Shoppers add more snacks and drinks on Friday through Sunday.', recommendedAction: 'Build a weekend bundle near the checkout.' },
@@ -120,8 +154,9 @@ export function presentationEngagement() {
           metricLabel: 'Growth vs previous 30 days', metricValue: '+18%', normalCondition: 'Order 5 cases', partnerCondition: '12% campaign discount', estimatedBenefitAzn: 48.6, benefitSummary: 'Estimated benefit: ₼48.60', expiresAt: expires, status: 'AVAILABLE',
         },
         {
-          offerKey: 'SHOWCASE-WEEKEND-BUNDLE', offerType: 'WEEKEND_ACTIVATION', title: 'Weekend refreshment bundle', productName: 'Coca-Cola + Doritos bundle', category: 'Basket growth',
+          offerKey: 'SHOWCASE-WEEKEND-BUNDLE', offerType: 'WEEKEND_ACTIVATION', title: 'Weekend refreshment bundle', productName: 'Coca-Cola + Doritos', category: 'Basket growth',
           reason: 'Weekend baskets are 12% larger when beverages and snacks are purchased together.',
+          affinityValue: '2.3×', fitBaskets: 184,
           whyReasons: ['Beverages and snacks appeared together in 284 baskets.', 'Friday evening is the strongest conversion window.'],
           metricLabel: 'Expected basket lift', metricValue: '+12%', normalCondition: 'Run Friday–Sunday', partnerCondition: 'Free display materials', estimatedBenefitAzn: 72, benefitSummary: 'Estimated benefit: ₼72.00', expiresAt: expires, status: 'AVAILABLE',
         },
@@ -136,7 +171,7 @@ export function presentationEngagement() {
       completed: [],
     },
     actions: [
-      { id: 'showcase-stock', type: 'STOCK_RISK', scope: 'CCI', title: 'Coca-Cola Zero may sell out before Friday evening', explanation: 'Current sales velocity is 23% above the four-week baseline and demand peaks before the weekend.', recommendation: 'Add two cases to the next order and check cooler availability by 17:00 Friday.', metricLabel: 'Recent sales velocity', metricValue: '21.3 units/day' },
+      { id: 'showcase-stock', type: 'STOCK_RISK', scope: 'CCI', title: 'Coca-Cola Zero may sell out before Friday evening', explanation: 'Current sales velocity is 23% above the four-week baseline and demand peaks before the weekend.', recommendation: 'Availability check recommended before 17:00 Friday.', metricLabel: 'Recent sales velocity', metricValue: '21.3 units/day', change: '+23%' },
       { id: 'showcase-basket', type: 'OPPORTUNITY', scope: 'STORE', title: 'A checkout bundle could grow weekend baskets', explanation: 'Coca-Cola and Doritos are already purchased together frequently, but only 38% of qualifying baskets include both.', recommendation: 'Place a weekend bundle message at the checkout and track conversion for two weeks.', metricLabel: 'Estimated basket lift', metricValue: '+12%' },
       { id: 'showcase-performance', type: 'PERFORMANCE', scope: 'STORE', title: 'Evening execution is outperforming the network', explanation: 'This store converts more beverage baskets between 18:00 and 21:00 than similar connected stores.', recommendation: 'Keep the current cooler plan and protect availability during the evening handover.', metricLabel: 'Network advantage', metricValue: '+8.4 pts' },
     ],
