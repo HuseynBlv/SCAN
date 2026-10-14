@@ -179,7 +179,7 @@ async function signIn(user) {
   await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
   await user.type(screen.getByLabelText('Password'), 'demo-secret')
   await user.click(screen.getByRole('button', { name: 'Open workspace' }))
-  return screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+  return screen.findByRole('heading', { name: 'Network Overview' })
 }
 
 describe('CciDashboard', () => {
@@ -207,11 +207,20 @@ describe('CciDashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
 
-    expect(await screen.findByRole('heading', { name: 'SCAN commercial workspace' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Network Overview' })).toBeInTheDocument()
     expect(screen.getByText('Presentation data')).toBeInTheDocument()
     expect(screen.getByText(/6 stores reporting/)).toBeInTheDocument()
     expect(screen.getAllByText('Coca-Cola Zero 330ml').length).toBeGreaterThan(0)
-    expect(screen.getByText('Zero velocity is outpacing availability')).toBeInTheDocument()
+    expect(screen.getByText('Zero velocity accelerating')).toBeInTheDocument()
+    const kpis = within(screen.getByRole('region', { name: 'Network KPIs' }))
+    expect(kpis.getByText('29.9%')).toBeInTheDocument()
+    expect(kpis.getByText('1,949')).toBeInTheDocument()
+    expect(kpis.getByText('100% coverage')).toBeInTheDocument()
+    expect(kpis.getByText('Analysis ready')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'SCAN Commercial Brief' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Network activity' })).toBeInTheDocument()
+    expect(screen.getByText('Top opportunity')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ask SCAN' })).toBeInTheDocument()
     expect(fetchAnalyticsContext).not.toHaveBeenCalled()
     expect(fetchOverview).not.toHaveBeenCalled()
     expect(fetchNetworkOverview).not.toHaveBeenCalled()
@@ -261,18 +270,18 @@ describe('CciDashboard', () => {
     }))
 
     await act(async () => resolveFirstRequest(overview))
-    expect(await screen.findByRole('heading', { name: 'SCAN commercial workspace' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Network Overview' })).toBeInTheDocument()
     expect(screen.getByText('Demo data')).toBeInTheDocument()
     expect(screen.getByText(/not current CCI market evidence/)).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Overview' })[0]).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('heading', { name: /Here.s what changed across your retail network/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Network Overview' })).toBeInTheDocument()
 
     const sections = [
       ['Insights', "What's changing across your network."],
       ['Stores', 'Every store in the network, ranked.'],
       ['Products', 'CCI product performance across the network.'],
       ['AI Assistant', 'Ask about a product or an investigation.'],
-      ['Overview', /Here.s what changed across your retail network/],
+      ['Overview', 'Network Overview'],
     ]
     for (const [buttonName, headingName] of sections) {
       await user.click(screen.getAllByRole('button', { name: buttonName })[0])
@@ -418,7 +427,7 @@ describe('CciDashboard', () => {
     await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open workspace' }))
-    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+    await screen.findByRole('heading', { name: 'Network Overview' })
 
     expect(screen.queryByText('Switch retailer')).not.toBeInTheDocument()
     expect(container.querySelector('.cci-retailer-menu')).not.toBeInTheDocument()
@@ -434,11 +443,11 @@ describe('CciDashboard', () => {
     await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open workspace' }))
-    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+    await screen.findByRole('heading', { name: 'Network Overview' })
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Retailer access denied.')
-    expect(screen.queryByRole('heading', { name: 'SCAN commercial workspace' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Network Overview' })).not.toBeInTheDocument()
   })
 
   it('shows onboarding instead of derived intelligence when no baskets exist', async () => {
@@ -577,7 +586,7 @@ describe('CciDashboard', () => {
     await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open workspace' }))
-    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+    await screen.findByRole('heading', { name: 'Network Overview' })
     const formControls = () => container.querySelectorAll('.cci-copilot-form input, .cci-copilot-form select')
 
     await user.click(screen.getAllByRole('button', { name: 'AI Assistant' })[0])
@@ -662,7 +671,7 @@ describe('CciDashboard', () => {
     await user.type(screen.getByLabelText('Username'), 'scan-demo-cci')
     await user.type(screen.getByLabelText('Password'), 'demo-secret')
     await user.click(screen.getByRole('button', { name: 'Open workspace' }))
-    await screen.findByRole('heading', { name: 'SCAN commercial workspace' })
+    await screen.findByRole('heading', { name: 'Network Overview' })
 
     expect(screen.queryByRole('heading', { name: 'Field checks waiting on you' })).not.toBeInTheDocument()
 
