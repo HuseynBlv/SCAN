@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -19,6 +19,7 @@ import {
 } from '../services/retailerApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
+import RetailerIntelligenceDrawer from './RetailerIntelligenceDrawer'
 import {
   isPresentationCredentials,
   PRESENTATION_PASSWORD,
@@ -41,7 +42,6 @@ import {
   Badge,
   BenchmarkIndicator,
   Card,
-  IntelligenceCard,
   MetricCard,
   MiniChart,
   SectionHeader,
@@ -59,7 +59,6 @@ const NAV_ITEMS = [
   { id: 'insights', label: 'Insights', icon: 'chart' },
   { id: 'data', label: 'Data', icon: 'database' },
   { id: 'partner', label: 'Partner', icon: 'time-store' },
-  { id: 'ask', label: 'Ask SCAN', icon: 'ask', featured: true },
 ]
 
 const PERIODS = [
@@ -387,7 +386,7 @@ function HomeSalesMovement({ data }) {
   )
 }
 
-function Home({ data, engagement, onNavigate }) {
+function Home({ data, engagement, onNavigate, onOpenIntelligence }) {
   const state = homeState(data, engagement)
   const opportunity = engagement.offers.available[1] || engagement.offers.available[0]
   const action = engagement.actions[0]
@@ -426,7 +425,7 @@ function Home({ data, engagement, onNavigate }) {
               </li>
             ))}
           </ol>
-          <footer><button className="scan-button scan-button-primary" onClick={() => onNavigate('ask')} type="button"><ScanIcon name="ask" size={16} />Ask SCAN</button></footer>
+          <footer><button className="scan-button scan-button-primary" onClick={(event) => onOpenIntelligence(null, event.currentTarget)} type="button"><ScanIcon name="ask" size={16} />Ask SCAN</button></footer>
         </Card>
 
         <Card className="retailer-store-activity">
@@ -559,7 +558,7 @@ function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
   )
 }
 
-function ActionFeedCard({ action }) {
+function ActionFeedCard({ action, onOpenIntelligence }) {
   const [expanded, setExpanded] = useState(false)
   const [primaryDone, setPrimaryDone] = useState(false)
   const [secondaryDone, setSecondaryDone] = useState(false)
@@ -599,6 +598,7 @@ function ActionFeedCard({ action }) {
         {activeAction ? <button className="scan-button scan-button-primary" disabled={primaryDone} onClick={() => setPrimaryDone(true)} type="button">{primaryDone ? 'Added' : primaryAction}</button> : null}
         {activeAction ? <button className="scan-button scan-button-light" disabled={secondaryDone} onClick={() => setSecondaryDone(true)} type="button">{secondaryDone ? (secondaryAction === 'Dismiss' ? 'Dismissed' : 'Checked') : secondaryAction}</button> : null}
         <button className="scan-text-link" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
+        <button aria-label={`Ask SCAN about ${action.displayTitle || action.title}`} className="scan-text-link retailer-action-intelligence-link" onClick={(event) => onOpenIntelligence({ type: 'action', label: action.displayTitle || action.title }, event.currentTarget)} type="button"><ScanIcon name="ask" size={14} />Ask SCAN</button>
       </footer>
     </Card>
   )
@@ -611,7 +611,7 @@ const ACTION_FILTERS = [
   { id: 'DISMISSED', label: 'Dismissed' },
 ]
 
-function Actions({ data, actions, onNavigate, workspace }) {
+function Actions({ data, actions, onNavigate, onOpenIntelligence, workspace }) {
   const [filter, setFilter] = useState('OPEN')
   const attention = attentionItems(data)
   const counts = workspace?.counts || { open: actions.length, inProgress: 0, completed: 0, dismissed: 0, highPriority: actions.filter((action) => action.type === 'STOCK_RISK').length }
@@ -629,7 +629,7 @@ function Actions({ data, actions, onNavigate, workspace }) {
       <div className="retailer-actions-layout">
         <section className="retailer-action-feed" aria-label={`${humanize(filter)} action feed`}>
           <SectionHeader description="Prioritized from the latest store signals" title={filter === 'OPEN' ? 'Action feed' : humanize(filter)} />
-          {visibleActions.length ? visibleActions.map((action) => <ActionFeedCard action={action} key={action.id} />) : <EmptyState compact title={`No ${humanize(filter).toLowerCase()} actions`}>Nothing is in this workflow state right now.</EmptyState>}
+          {visibleActions.length ? visibleActions.map((action) => <ActionFeedCard action={action} key={action.id} onOpenIntelligence={onOpenIntelligence} />) : <EmptyState compact title={`No ${humanize(filter).toLowerCase()} actions`}>Nothing is in this workflow state right now.</EmptyState>}
         </section>
         <aside className="retailer-action-rail">
           <Card className="retailer-action-summary-card">
@@ -713,7 +713,7 @@ function Partner({ partnerStatus }) {
   )
 }
 
-function ProductList({ data, products, search }) {
+function ProductList({ data, onOpenIntelligence, products, search }) {
   if (!products.length) return search
     ? <EmptyState compact title="No matching products">Try another product name.</EmptyState>
     : <EmptyState compact title="No product sales">No products were sold in this period.</EmptyState>
@@ -722,7 +722,7 @@ function ProductList({ data, products, search }) {
       {products.map((product, index) => (
         <li key={`${product.name}-${product.category}`}>
           <span className="retailer-product-rank">{String(index + 1).padStart(2, '0')}</span>
-          <div><strong title={product.name}>{product.name}</strong><small>{product.category}</small></div>
+          <div><strong title={product.name}>{product.name}</strong><small>{product.category}</small><button aria-label={`Ask SCAN about ${product.name}`} className="retailer-product-intelligence-link" onClick={(event) => onOpenIntelligence({ type: 'product', label: product.name }, event.currentTarget)} type="button"><ScanIcon name="ask" size={13} />Ask SCAN</button></div>
           <dl><div><dt>Sales</dt><dd>{formatMoney(product.revenue, data.currency)}</dd></div><div><dt>Transactions</dt><dd>{integer.format(product.basketCount)}</dd></div><div><dt>Units</dt><dd>{decimal.format(product.quantity)}</dd></div></dl>
         </li>
       ))}
@@ -730,7 +730,7 @@ function ProductList({ data, products, search }) {
   )
 }
 
-function Insights({ data, loading, onPeriodChange, period }) {
+function Insights({ data, loading, onOpenIntelligence, onPeriodChange, period }) {
   const [search, setSearch] = useState('')
   const products = data.topProducts.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(search.trim().toLowerCase()))
   const shortPeriod = period === 'LAST_7_DAYS'
@@ -751,7 +751,7 @@ function Insights({ data, loading, onPeriodChange, period }) {
       </div>
       <section className="retailer-simple-section retailer-products-section">
         <header><div><h2>Best-selling products</h2><p>Top products by recorded sales</p></div>{data.topProducts.length > 6 ? <label className="retailer-product-search"><span className="sr-only">Search products</span><ScanIcon name="explore" size={18} /><input onChange={(event) => setSearch(event.target.value)} placeholder="Search products" type="search" value={search} /></label> : null}</header>
-        <ProductList data={data} products={products} search={search.trim()} />
+        <ProductList data={data} onOpenIntelligence={onOpenIntelligence} products={products} search={search.trim()} />
       </section>
       <div className="retailer-product-secondary">
         <section className="retailer-simple-section retailer-unavailable-section"><header><h2>Slow-moving products</h2><StatusBadge tone="neutral">See Actions</StatusBadge></header><p>Products selling more slowly than usual are now surfaced as Inventory actions, with the specific comparison behind each one.</p></section>
@@ -863,65 +863,28 @@ function Data({ data, onNavigate, presentation }) {
   )
 }
 
-const ASK_SUGGESTIONS = [
-  'What changed in my store?',
-  'Which product should I focus on?',
-  'How much value has SCAN created?',
-]
-
-function answerQuestion(question, data, engagement) {
-  const normalized = question.toLowerCase()
-  if (normalized.includes('value') || normalized.includes('benefit')) {
-    return `SCAN has measured ${formatMoney(engagement.partnerStatus.benefits.thisMonth, data.currency)} in commercial value this month and ${formatMoney(engagement.partnerStatus.benefits.lifetime, data.currency)} over the life of the connection.`
-  }
-  if (normalized.includes('product') || normalized.includes('focus')) {
-    const product = data.topProducts[0]
-    return product ? `${product.name} is the strongest recorded product in this period, with ${integer.format(product.quantity)} units and ${formatMoney(product.revenue, data.currency)} in sales. Review the related opportunity before changing an order.` : 'There is not enough product evidence to answer that reliably yet.'
-  }
-  if (normalized.includes('changed') || normalized.includes('store')) {
-    const insight = data.insights[0]
-    return insight ? `${insight.fact} ${insight.interpretation} Recommended next step: ${insight.recommendedAction}` : `SCAN analyzed ${integer.format(data.totalBaskets)} transactions, but no material change is available for this period.`
-  }
-  return 'I cannot answer that reliably from the connected store data yet. Try one of the grounded questions below.'
-}
-
-function AskScan({ data, engagement }) {
-  const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState('')
-  function ask(value) {
-    const next = value.trim()
-    if (!next) return
-    setQuestion(next)
-    setAnswer(answerQuestion(next, data, engagement))
-  }
-  return (
-    <div className="scan-page-stack retailer-ask-page">
-      <PageIntro description="Ask grounded questions about this store's connected data." eyebrow="Ask SCAN" title="Store intelligence, on demand" />
-      <IntelligenceCard description="Answers are calculated from the same validated sales, offers, actions, and benefit records shown throughout the workspace." title={answer ? question : 'What would you like to understand?'}>
-        {answer ? <p className="retailer-ask-answer">{answer}</p> : null}
-        <form className="retailer-ask-form" onSubmit={(event) => { event.preventDefault(); ask(question) }}>
-          <ScanIcon name="ask" size={18} />
-          <input aria-label="Ask SCAN a question" onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about sales, products, opportunities, or benefits" value={question} />
-          <button type="submit">Ask SCAN</button>
-        </form>
-      </IntelligenceCard>
-      <section className="retailer-question-grid" aria-label="Suggested questions">
-        {ASK_SUGGESTIONS.map((suggestion) => <button key={suggestion} onClick={() => ask(suggestion)} type="button"><span>{suggestion}</span><ScanIcon name="chevron" size={16} /></button>)}
-      </section>
-    </div>
-  )
-}
-
-function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onPeriodChange, period, activatingKey, justActivatedKey, presentation }) {
+function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onOpenIntelligence, onPeriodChange, period, activatingKey, justActivatedKey, presentation }) {
   if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
-  if (activePage === 'insights') return <Insights data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
+  if (activePage === 'insights') return <Insights data={data} loading={loading} onOpenIntelligence={onOpenIntelligence} onPeriodChange={onPeriodChange} period={period} />
   if (activePage === 'data') return <Data data={data} onNavigate={onNavigate} presentation={presentation} />
   if (engagementLoading || !engagement) return <LoadingState title="Loading your SCAN benefits…" description="Preparing offers, actions, and partner status." />
   if (activePage === 'opportunities') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
-  if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} workspace={engagement.actionWorkspace} />
+  if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} workspace={engagement.actionWorkspace} />
   if (activePage === 'partner') return <Partner partnerStatus={engagement.partnerStatus} />
-  if (activePage === 'ask') return <AskScan data={data} engagement={engagement} />
-  return <Home data={data} engagement={engagement} onNavigate={onNavigate} />
+  return <Home data={data} engagement={engagement} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} />
+}
+
+function intelligenceContextForPage(activePage, data, engagement) {
+  if (activePage === 'actions' && engagement?.actions?.length) {
+    const action = engagement.actions.find((item) => (item.status || 'OPEN') === 'OPEN') || engagement.actions[0]
+    return { type: 'action', label: action.displayTitle || action.title }
+  }
+  if (activePage === 'opportunities' && engagement?.offers?.available?.length) {
+    const offer = engagement.offers.available.find((item) => item.affinityValue) || engagement.offers.available[0]
+    return { type: 'opportunity', label: offer.productName }
+  }
+  if (activePage === 'insights' && data.topProducts?.length) return { type: 'product', label: data.topProducts[0].name }
+  return null
 }
 
 export default function RetailerDashboard() {
@@ -936,8 +899,11 @@ export default function RetailerDashboard() {
   const [activatingKey, setActivatingKey] = useState(null)
   const [justActivatedKey, setJustActivatedKey] = useState(null)
   const [activePage, setActivePage] = useState('home')
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false)
+  const [intelligenceContext, setIntelligenceContext] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const layoutRef = useRef(null)
+  const intelligenceReturnFocus = useRef(null)
 
   usePretextLayout(layoutRef, `${activePage}:${period}:${data?.generatedAt || 'login'}:${engagement ? 'ready' : 'loading'}`)
 
@@ -1049,9 +1015,19 @@ export default function RetailerDashboard() {
     setLoading(true)
   }
   function navigate(nextPage) { setActivePage(nextPage) }
+  const openIntelligence = useCallback((context, source) => {
+    intelligenceReturnFocus.current = source || document.activeElement
+    setIntelligenceContext(context || null)
+    setIntelligenceOpen(true)
+  }, [])
+  const closeIntelligence = useCallback(() => {
+    setIntelligenceOpen(false)
+    window.requestAnimationFrame(() => intelligenceReturnFocus.current?.focus?.())
+  }, [])
   function signOut() {
     setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('LAST_30_DAYS'); setActivePage('home')
     setEngagement(null); setEngagementLoading(false); setEngagementError(''); setActivatingKey(null); setJustActivatedKey(null)
+    setIntelligenceOpen(false); setIntelligenceContext(null)
   }
 
   if (!credentials || (!data && error)) {
@@ -1068,6 +1044,7 @@ export default function RetailerDashboard() {
       <DataFreshness formatter={formatTime} generatedAt={data.generatedAt} />
       {credentials.presentation ? <span className="retailer-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
       {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
+      <button aria-controls="retailer-intelligence-drawer" aria-expanded={intelligenceOpen} aria-label="Ask SCAN" className="retailer-intelligence-trigger" onClick={(event) => openIntelligence(intelligenceContextForPage(activePage, data, engagement), event.currentTarget)} type="button"><ScanIcon name="ask" size={16} /><span>Ask SCAN</span></button>
       <button aria-label={loading ? 'Refreshing…' : 'Refresh'} className="scan-icon-button" disabled={loading || engagementLoading} onClick={refresh} type="button"><ScanIcon name="refresh" size={18} /></button>
     </>
   )
@@ -1087,11 +1064,13 @@ export default function RetailerDashboard() {
           loading={loading}
           onActivate={activateOffer}
           onNavigate={navigate}
+          onOpenIntelligence={openIntelligence}
           onPeriodChange={changePeriod}
           period={period}
           presentation={credentials.presentation}
         />
       </WorkspaceShell>
+      {intelligenceOpen ? <RetailerIntelligenceDrawer context={intelligenceContext} data={data} onClose={closeIntelligence} onNavigate={navigate} open /> : null}
     </div>
   )
 }
