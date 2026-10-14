@@ -2147,7 +2147,7 @@
 .retailer-intelligence-live strong { font-size: .59rem; font-weight: 680; }
 .retailer-intelligence-live small { color: #898a85; font-size: .56rem; }
 
-.retailer-intelligence-body { display: grid; gap: 13px; padding: 15px; overflow-y: auto; overscroll-behavior: contain; }
+.retailer-intelligence-body { min-height: 0; display: grid; flex: 1 1 auto; grid-auto-rows: max-content; align-content: start; gap: 13px; padding: 15px; overflow-y: auto; overscroll-behavior: contain; }
 .retailer-intelligence-proactive,
 .retailer-intelligence-context,
 .retailer-intelligence-ask,

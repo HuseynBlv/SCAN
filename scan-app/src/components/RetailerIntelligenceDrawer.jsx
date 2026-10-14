@@ -142,10 +142,19 @@ export default function RetailerIntelligenceDrawer({ context, data, onClose, onN
 
   useEffect(() => {
     if (!open) return undefined
+    const previousBodyOverflow = document.body.style.overflow
+    const previousRootOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
     const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 180)
     const handleKeyDown = (event) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', handleKeyDown)
-    return () => { window.clearTimeout(focusTimer); window.removeEventListener('keydown', handleKeyDown) }
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousRootOverflow
+      window.clearTimeout(focusTimer)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [context, onClose, open])
 
   function ask(value) {
