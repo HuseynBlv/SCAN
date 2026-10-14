@@ -463,6 +463,8 @@ describe('RetailerDashboard', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Ask SCAN' })[0])
     expect(await screen.findByRole('dialog', { name: 'SCAN Intelligence' })).toBeInTheDocument()
+    expect(document.body).toHaveStyle({ overflow: 'hidden' })
+    expect(document.documentElement).toHaveStyle({ overflow: 'hidden' })
     expect(screen.getByText('Live store model')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '3 things stand out' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Ask about this store' })).toHaveFocus())
@@ -475,6 +477,8 @@ describe('RetailerDashboard', () => {
 
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'SCAN Intelligence' })).not.toBeInTheDocument()
+    expect(document.body.style.overflow).toBe('')
+    expect(document.documentElement.style.overflow).toBe('')
   })
 
   it('opens context-aware intelligence from an action', async () => {
