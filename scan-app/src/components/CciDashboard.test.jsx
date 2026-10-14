@@ -243,6 +243,20 @@ describe('CciDashboard', () => {
     expect(await screen.findByRole('heading', { name: 'CCI product performance across the network.' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Coca-Cola Zero 330ml' })).toBeInTheDocument()
 
+    await user.click(screen.getAllByRole('button', { name: 'Investigations' })[0])
+    expect(await screen.findByRole('heading', { name: 'Investigations' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Investigation workflow summary' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Fanta Orange 500ml is down 7.3%' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Investigating1/ }))
+    expect(screen.getByRole('heading', { name: 'In Progress' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Waiting on Field' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Watching1/ }))
+    expect(screen.getByLabelText('Search watchlist')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Completed1/ }))
+    expect(screen.getByRole('heading', { name: 'Recently Completed' })).toBeInTheDocument()
+    expect(screen.getByText('Attachment improved from 22% to 28% after placement.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Prepare Executive Review' })).toBeInTheDocument()
+
     await user.click(screen.getAllByRole('button', { name: 'Data' })[0])
     expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Reporting network' })).toBeInTheDocument()
@@ -306,7 +320,7 @@ describe('CciDashboard', () => {
 
     const sections = [
       ['Opportunities', 'Opportunities'],
-      ['Investigations', 'Real questions, with real evidence.'],
+      ['Investigations', 'Investigations'],
       ['Stores', 'Every store in the network, ranked.'],
       ['Products', 'CCI product performance across the network.'],
       ['Data', 'Data'],
@@ -567,15 +581,18 @@ describe('CciDashboard', () => {
     fetchInvestigations.mockResolvedValue([openInvestigation, closedPastCase])
     await signIn(user)
 
-    // Reach the investigation list (with search) the way the redesign intends: investigation is
-    // an action/detail, not a nav destination, so go in through a real investigation and back out.
+    // Return from detail to the workflow board, then filter the active investigation queue.
     await user.click(await screen.findByRole('button', { name: /Sprite 500ml is down 50%/ }))
     await user.click(await screen.findByRole('button', { name: 'Back to investigations' }))
-    expect(await screen.findByText('Sprite 500ml is down 40%')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Investigating1/ }))
+    expect(await screen.findByText('Sprite 500ml is down 50%')).toBeInTheDocument()
 
     await user.type(screen.getByLabelText('Search investigations'), '50%')
     expect(screen.getByText('Sprite 500ml is down 50%')).toBeInTheDocument()
     expect(screen.queryByText('Sprite 500ml is down 40%')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Completed1/ }))
+    expect(screen.getByText('Sprite 500ml is down 40%')).toBeInTheDocument()
   })
 
   it('answers a Copilot question about a product network-wide, using only real tool output', async () => {

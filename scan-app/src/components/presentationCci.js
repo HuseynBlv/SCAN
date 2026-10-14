@@ -119,10 +119,40 @@ export function presentationCciProductDetail(productName, periodDays = 30) {
 }
 
 export function presentationCciIntelligence() {
+  const zeroInvestigation = {
+    id: 'presentation-zero-evening', title: 'Coca-Cola Zero evening growth',
+    question: 'What is driving Coca-Cola Zero growth in Nizami and Gənclik?',
+    subjectType: 'PRODUCT', subjectName: 'Coca-Cola Zero 330ml', periodDays: 30,
+    status: 'IN_PROGRESS', ownerLabel: 'Aysel M. · Commercial', createdBy: CCI_PRESENTATION_USERNAME,
+    createdAt: isoDate(3), updatedAt: isoDate(0), closedAt: null,
+    hypotheses: [{ id: 'zero-evening-demand', statement: 'Evening cooler demand is driving the acceleration.', supportingEvidence: 'The strongest lift is between 18:00 and 21:00 in Nizami and Gənclik.', contradictingEvidence: null, confidence: 'HIGH', status: 'CONFIRMED', createdAt: isoDate(2) }],
+    notes: [{ id: 'zero-system-note', authorUsername: 'SCAN', body: 'Velocity is 22.9% above the prior period across the connected retail network.', system: true, createdAt: isoDate(3) }],
+  }
+  const completedInvestigation = {
+    id: 'presentation-doritos-result', title: 'Doritos checkout attachment test',
+    question: 'Did checkout placement improve attachment in Coca-Cola baskets?',
+    subjectType: 'PRODUCT', subjectName: 'Coca-Cola 500ml', periodDays: 30,
+    status: 'CLOSED', ownerLabel: 'Trade Marketing', createdBy: CCI_PRESENTATION_USERNAME,
+    createdAt: isoDate(12), updatedAt: isoDate(4), closedAt: isoDate(4),
+    hypotheses: [{ id: 'doritos-placement', statement: 'Checkout proximity improves attachment.', supportingEvidence: 'Attachment increased from 22% to 28% during the observed test window.', contradictingEvidence: null, confidence: 'HIGH', status: 'CONFIRMED', createdAt: isoDate(10) }],
+    notes: [
+      { id: 'doritos-system-note', authorUsername: 'SCAN', body: 'A weekend checkout placement test was observed in two stores.', system: true, createdAt: isoDate(12) },
+      { id: 'doritos-result-note', authorUsername: 'Aysel M.', body: 'Attachment improved from 22% to 28% after placement.', system: false, createdAt: isoDate(4) },
+    ],
+  }
   return {
-    investigations: [], fieldTasks: [], activations: [],
-    movers: productMovers().slice(0, 5),
-    watchlist: [{ id: 'watch-zero', productName: 'Coca-Cola Zero 330ml', createdAt: isoDate(8) }],
+    investigations: [zeroInvestigation, completedInvestigation],
+    fieldTasks: [
+      { id: 'presentation-field-zero', investigationId: zeroInvestigation.id, title: 'Check evening cooler availability', reason: 'Confirm that availability can support the 18:00–21:00 demand peak.', assignedTo: 'Kamran A. · Field Sales', dueAt: isoDate(-2), status: 'OPEN', createdBy: CCI_PRESENTATION_USERNAME, createdAt: isoDate(1), updatedAt: isoDate(0), stores: [{ id: 'field-zero-nizami', externalStoreId: 'Nərgiz Market · Nizami', completed: false }, { id: 'field-zero-genclik', externalStoreId: 'Bravo · Gənclik', completed: false }] },
+      { id: 'presentation-field-doritos', investigationId: completedInvestigation.id, title: 'Verify weekend checkout placement', reason: 'Confirm execution before reading the attachment result.', assignedTo: 'Leyla R. · Field Sales', dueAt: isoDate(6), status: 'COMPLETED', createdBy: CCI_PRESENTATION_USERNAME, createdAt: isoDate(9), updatedAt: isoDate(5), stores: [{ id: 'field-doritos-nizami', externalStoreId: 'Nərgiz Market · Nizami', completed: true, hasIssue: false, note: 'Placement executed as planned.' }] },
+    ],
+    activations: [],
+    movers: productMovers().slice(0, 5).map((mover) => {
+      if (mover.productName === 'Coca-Cola Zero 330ml') return { ...mover, reason: 'Growth is concentrated in Nizami and Gənclik.', suggestedNextStep: 'Check evening cooler availability before weekend peak.' }
+      if (mover.productName === 'Fanta Orange 500ml') return { ...mover, reason: 'The decline is visible across three reporting stores.', suggestedNextStep: 'Review distribution and availability before the next field cycle.' }
+      return mover
+    }),
+    watchlist: [{ id: 'watch-zero', productName: 'Coca-Cola Zero 330ml', reason: 'Track whether evening acceleration persists.', createdAt: isoDate(8), updatedAt: isoDate(0) }],
     watchlistChanges: [{ productName: 'Coca-Cola Zero 330ml', recentBaskets: 638, priorBaskets: 519, basketChangePct: 22.9 }],
   }
 }
