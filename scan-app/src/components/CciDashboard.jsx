@@ -42,6 +42,18 @@ import {
 } from '../services/intelligenceApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
+import {
+  CCI_PRESENTATION_PASSWORD,
+  CCI_PRESENTATION_USERNAME,
+  isCciPresentationCredentials,
+  presentationCciAnswer,
+  presentationCciData,
+  presentationCciIntelligence,
+  presentationCciMeetingBrief,
+  presentationCciNetwork,
+  presentationCciProductDetail,
+  presentationCciStoreDetail,
+} from './presentationCci'
 import { usePretextLayout } from './usePretextLayout'
 import {
   ChartPanel,
@@ -138,6 +150,12 @@ function Login({ error, loading, onSubmit }) {
     onSubmit({ username: username.trim(), password })
   }
 
+  function openPresentation() {
+    setUsername(CCI_PRESENTATION_USERNAME)
+    setPassword(CCI_PRESENTATION_PASSWORD)
+    onSubmit({ username: CCI_PRESENTATION_USERNAME, password: CCI_PRESENTATION_PASSWORD })
+  }
+
   return (
     <main className="cci-login-shell">
       <section className="cci-login-card" aria-labelledby="cci-login-title">
@@ -154,6 +172,11 @@ function Login({ error, loading, onSubmit }) {
           <p className="cci-login-context"><strong>Retailer access is assigned to this account.</strong> SCAN opens only approved aggregate data after sign-in.</p>
           {error ? <div className="cci-form-error" role="alert">{error}</div> : null}
           <button className="cci-primary-button" disabled={loading} type="submit">{loading ? 'Connecting…' : 'Open workspace'}</button>
+          <div className="cci-presentation-access">
+            <span>Presentation mode</span>
+            <p>Explore a complete CCI network with realistic synthetic store, product, and opportunity intelligence.</p>
+            <button disabled={loading} onClick={openPresentation} type="button">Open presentation account <span aria-hidden="true">→</span></button>
+          </div>
         </form>
         <div className="portal-switch-links">
           <a className="portal-switch-link" href="/?portal=retailer">Retailer owner portal <span aria-hidden="true">→</span></a>
@@ -2131,6 +2154,18 @@ export default function CciDashboard() {
 
   const loadIntelligence = useCallback(async (creds, signal) => {
     if (!creds) return
+    if (creds.presentation) {
+      const snapshot = presentationCciIntelligence()
+      setInvestigations(snapshot.investigations)
+      setFieldTasks(snapshot.fieldTasks)
+      setMovers(snapshot.movers)
+      setWatchlist(snapshot.watchlist)
+      setWatchlistChanges(snapshot.watchlistChanges)
+      setActivations(snapshot.activations)
+      setIntelligenceLoading(false)
+      setIntelligenceError('')
+      return
+    }
     setIntelligenceLoading(true)
     setIntelligenceError('')
     try {
@@ -2163,6 +2198,20 @@ export default function CciDashboard() {
   // on the legacy single-retailer refresh cycle below.
   const loadNetwork = useCallback(async (creds, days, signal) => {
     if (!creds) return
+    if (creds.presentation) {
+      const snapshot = presentationCciNetwork(days)
+      setNetworkOverview(snapshot.overview)
+      setNetworkStores(snapshot.stores)
+      setNetworkProductMovers(snapshot.products)
+      setNetworkCategoryMovers(snapshot.categories)
+      setNetworkBrief(snapshot.brief)
+      setNetworkTrend(snapshot.trend)
+      setNetworkLoading(false)
+      setNetworkError('')
+      setNetworkTrendLoading(false)
+      setNetworkTrendError('')
+      return
+    }
     setNetworkLoading(true)
     setNetworkError('')
     setNetworkTrendLoading(true)
@@ -2198,6 +2247,14 @@ export default function CciDashboard() {
 
   useEffect(() => {
     if (!credentials) return undefined
+    if (credentials.presentation) {
+      Promise.resolve().then(() => {
+        setData(presentationCciData())
+        setLoading(false)
+        loadIntelligence(credentials)
+      })
+      return undefined
+    }
     const controller = new AbortController()
     fetchOverview({ ...credentials, signal: controller.signal })
       .then((overview) => { if (!controller.signal.aborted) setData(overview) })
@@ -2226,6 +2283,12 @@ export default function CciDashboard() {
     const controller = new AbortController()
     Promise.resolve().then(() => {
       if (!credentials || !selectedStore) { setStoreDetail(null); return }
+      if (credentials.presentation) {
+        setStoreDetail(presentationCciStoreDetail(selectedStore, periodDays))
+        setStoreDetailLoading(false)
+        setStoreDetailError('')
+        return
+      }
       setStoreDetailLoading(true)
       setStoreDetailError('')
       fetchStoreDetail({ ...credentials, ...selectedStore, periodDays, signal: controller.signal })
@@ -2244,6 +2307,12 @@ export default function CciDashboard() {
     const controller = new AbortController()
     Promise.resolve().then(() => {
       if (!credentials || !selectedProductName) { setProductDetail(null); return }
+      if (credentials.presentation) {
+        setProductDetail(presentationCciProductDetail(selectedProductName, periodDays))
+        setProductDetailLoading(false)
+        setProductDetailError('')
+        return
+      }
       setProductDetailLoading(true)
       setProductDetailError('')
       fetchProductDetail({ product: selectedProductName, periodDays, ...credentials, signal: controller.signal })
@@ -2265,6 +2334,12 @@ export default function CciDashboard() {
     const controller = new AbortController()
     Promise.resolve().then(() => {
       if (!credentials || !compareStore) { setCompareStoreDetail(null); return }
+      if (credentials.presentation) {
+        setCompareStoreDetail(presentationCciStoreDetail(compareStore, periodDays))
+        setCompareStoreLoading(false)
+        setCompareStoreError('')
+        return
+      }
       setCompareStoreLoading(true)
       setCompareStoreError('')
       fetchStoreDetail({ ...credentials, ...compareStore, periodDays, signal: controller.signal })
@@ -2283,6 +2358,12 @@ export default function CciDashboard() {
     const controller = new AbortController()
     Promise.resolve().then(() => {
       if (!credentials || !compareProductName) { setCompareProductDetail(null); return }
+      if (credentials.presentation) {
+        setCompareProductDetail(presentationCciProductDetail(compareProductName, periodDays))
+        setCompareProductLoading(false)
+        setCompareProductError('')
+        return
+      }
       setCompareProductLoading(true)
       setCompareProductError('')
       fetchProductDetail({ product: compareProductName, periodDays, ...credentials, signal: controller.signal })
@@ -2302,6 +2383,14 @@ export default function CciDashboard() {
     setData(null)
     setError('')
     setLoading(true)
+    if (isCciPresentationCredentials(accountCredentials)) {
+      setCommercialRole('COMMERCIAL')
+      setCredentials({ ...accountCredentials, retailerCode: 'NARGIZ', presentation: true })
+      setData(presentationCciData())
+      setLoading(false)
+      setRefreshKey((value) => value + 1)
+      return
+    }
     try {
       const access = await fetchAnalyticsContext(accountCredentials)
       setCommercialRole(access.commercialRole === 'FIELD_SALES' ? 'FIELD_SALES' : 'COMMERCIAL')
@@ -2329,6 +2418,7 @@ export default function CciDashboard() {
   async function changeCommercialRole(nextRole) {
     const previous = commercialRole
     setCommercialRole(nextRole)
+    if (credentials.presentation) return
     try {
       await putCommercialRole({ ...credentials, commercialRole: nextRole })
     } catch {
@@ -2342,11 +2432,25 @@ export default function CciDashboard() {
     return result
   }
 
+  async function startPresentationInvestigation(productName) {
+    const created = {
+      id: `presentation-${productName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`,
+      title: `${productName}: what changed?`, question: `What changed for ${productName}?`,
+      subjectType: 'PRODUCT', subjectName: productName, periodDays: DEFAULT_PERIOD_DAYS,
+      status: 'IN_PROGRESS', ownerLabel: 'Commercial Team', createdBy: CCI_PRESENTATION_USERNAME,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), closedAt: null,
+      hypotheses: [{ id: 'presentation-demand', statement: 'The change is concentrated in evening demand.', supportingEvidence: 'The strongest movement occurs between 18:00 and 21:00.', contradictingEvidence: null, confidence: 'HIGH', status: 'OPEN', createdAt: new Date().toISOString() }],
+      notes: [{ id: 'presentation-note', authorUsername: 'SCAN', body: 'Presentation evidence is based on the connected synthetic retail network.', system: true, createdAt: new Date().toISOString() }],
+    }
+    setInvestigations((current) => current.some((item) => item.id === created.id) ? current : [created, ...current])
+    return created
+  }
+
   const actions = useMemo(() => ({
     selectInvestigation: setSelectedInvestigationId,
-    startProductInvestigation: (productName) => withReload(() => openProductInvestigation({ ...credentials, productName, periodDays: DEFAULT_PERIOD_DAYS })),
+    startProductInvestigation: (productName) => credentials.presentation ? startPresentationInvestigation(productName) : withReload(() => openProductInvestigation({ ...credentials, productName, periodDays: DEFAULT_PERIOD_DAYS })),
     startProductInvestigationFromWork: async (productName) => {
-      const created = await withReload(() => openProductInvestigation({ ...credentials, productName, periodDays: DEFAULT_PERIOD_DAYS }))
+      const created = credentials.presentation ? await startPresentationInvestigation(productName) : await withReload(() => openProductInvestigation({ ...credentials, productName, periodDays: DEFAULT_PERIOD_DAYS }))
       setSelectedInvestigationId(created.id)
       setActivePage('investigate')
     },
@@ -2361,14 +2465,29 @@ export default function CciDashboard() {
     // An investigation belongs to one retailer, so that question still goes through the
     // per-retailer endpoint; a product or general question is answered network-wide instead,
     // using whichever retailer's workspace is currently open only to authenticate the request.
-    askCopilot: (payload) => (payload.contextType === 'INVESTIGATION'
+    askCopilot: (payload) => credentials.presentation ? Promise.resolve(presentationCciAnswer(payload.subjectName)) : (payload.contextType === 'INVESTIGATION'
       ? askCopilot({ ...credentials, ...payload })
       : askNetworkCopilot({ ...credentials, ...payload })),
     askCopilotAboutProduct: (productName) => { setCopilotContext({ contextType: 'PRODUCT', subjectName: productName }); setActivePage('copilot') },
     askCopilotAboutInvestigation: (investigationId) => { setCopilotContext({ contextType: 'INVESTIGATION', investigationId }); setActivePage('copilot') },
-    prepareBrief: (template) => fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),
-    followProduct: (productName) => withReload(() => followProduct({ ...credentials, productName })),
-    unfollowProduct: (itemId) => withReload(() => unfollowProduct({ ...credentials, itemId })),
+    prepareBrief: (template) => credentials.presentation ? Promise.resolve(presentationCciMeetingBrief(template)) : fetchMeetingBrief({ ...credentials, template, periodDays: 7 }),
+    followProduct: (productName) => {
+      if (!credentials.presentation) return withReload(() => followProduct({ ...credentials, productName }))
+      const item = { id: `presentation-watch-${Date.now()}`, productName, createdAt: new Date().toISOString() }
+      const detail = presentationCciProductDetail(productName, DEFAULT_PERIOD_DAYS)
+      setWatchlist((current) => [...current.filter((entry) => entry.productName !== productName), item])
+      setWatchlistChanges((current) => [...current.filter((entry) => entry.productName !== productName), { productName, category: detail.category, recentBaskets: detail.recentBaskets, priorBaskets: detail.priorBaskets, basketChangePct: detail.basketChangePct }])
+      return Promise.resolve(item)
+    },
+    unfollowProduct: (itemId) => {
+      if (!credentials.presentation) return withReload(() => unfollowProduct({ ...credentials, itemId }))
+      setWatchlist((current) => {
+        const removed = current.find((item) => item.id === itemId)
+        if (removed) setWatchlistChanges((changes) => changes.filter((item) => item.productName !== removed.productName))
+        return current.filter((item) => item.id !== itemId)
+      })
+      return Promise.resolve(null)
+    },
     selectActivation: setSelectedActivationId,
     createActivation: (payload) => withReload(() => createActivation({ ...credentials, ...payload })),
     // A brief/insight item's action is either "go look at the stores page" (no single product to
@@ -2378,7 +2497,7 @@ export default function CciDashboard() {
       if (!item) { setCopilotContext({ contextType: 'GENERAL' }); setActivePage('copilot'); return }
       if (item.actionType === 'STORES') { setActivePage('stores'); return }
       if (item.actionType === 'PRODUCT' && item.actionTarget) {
-        const created = await withReload(() => openProductInvestigation({ ...credentials, productName: item.actionTarget, periodDays: DEFAULT_PERIOD_DAYS }))
+        const created = credentials.presentation ? await startPresentationInvestigation(item.actionTarget) : await withReload(() => openProductInvestigation({ ...credentials, productName: item.actionTarget, periodDays: DEFAULT_PERIOD_DAYS }))
         setSelectedInvestigationId(created.id)
         setActivePage('investigate')
       }
@@ -2406,6 +2525,7 @@ export default function CciDashboard() {
                 <div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. These results validate the SCAN workflow and are not current CCI market evidence.</p></div>
               </details>
             ) : null}
+            {credentials.presentation ? <span className="cci-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
             <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
             <button className="scan-button scan-button-light cci-refresh-button" disabled={loading} onClick={refresh} type="button"><ScanIcon name="refresh" size={17} /><span>{loading ? 'Refreshing…' : 'Refresh'}</span></button>
               <details className="cci-user-menu">

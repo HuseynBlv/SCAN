@@ -201,6 +201,30 @@ describe('CciDashboard', () => {
     expect(screen.getByRole('link', { name: /Retailer onboarding/ })).toHaveAttribute('href', '/?portal=onboarding')
   })
 
+  it('opens a complete presentation account without calling the backend', async () => {
+    const user = userEvent.setup()
+    render(<CciDashboard />)
+
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+
+    expect(await screen.findByRole('heading', { name: 'SCAN commercial workspace' })).toBeInTheDocument()
+    expect(screen.getByText('Presentation data')).toBeInTheDocument()
+    expect(screen.getByText(/6 stores reporting/)).toBeInTheDocument()
+    expect(screen.getAllByText('Coca-Cola Zero 330ml').length).toBeGreaterThan(0)
+    expect(screen.getByText('Zero velocity is outpacing availability')).toBeInTheDocument()
+    expect(fetchAnalyticsContext).not.toHaveBeenCalled()
+    expect(fetchOverview).not.toHaveBeenCalled()
+    expect(fetchNetworkOverview).not.toHaveBeenCalled()
+
+    await user.click(screen.getAllByRole('button', { name: 'Stores' })[0])
+    expect(await screen.findByRole('heading', { name: 'Every store in the network, ranked.' })).toBeInTheDocument()
+    expect(screen.getAllByText('Nərgiz Market · Nizami').length).toBeGreaterThan(0)
+
+    await user.click(screen.getAllByRole('button', { name: 'Products' })[0])
+    expect(await screen.findByRole('heading', { name: 'CCI product performance across the network.' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Coca-Cola Zero 330ml' })).toBeInTheDocument()
+  })
+
   it('renders the real daily trend on Overview and switches metric', async () => {
     const user = userEvent.setup()
     fetchOverview.mockResolvedValue(overview)
