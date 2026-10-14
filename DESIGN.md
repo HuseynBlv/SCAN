@@ -189,6 +189,18 @@
 4. A narrow supporting rail summarizes workload, the most recent measured result, and action
    activity so retailers can see that recommendations lead to observable outcomes.
 
+### Retailer Opportunities
+
+1. Recommended leads with the strongest basket-growth opportunity rather than a uniform offer
+   grid. The featured module combines affinity, current joint purchase rate, missed baskets,
+   recommendation, and available CCI support in one readable story.
+2. A compact relationship diagram explains the paired products without relying on generic product
+   photography or decorative imagery.
+3. Supporting CCI offers use smaller product modules with the observed signal, Partner benefit,
+   estimated value, and one clear activation control.
+4. Basket Growth, CCI Offers, and Completed tabs separate opportunity mechanics. Completed items
+   become compact outcome rows rather than retaining the full promotional-card treatment.
+
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.
 
