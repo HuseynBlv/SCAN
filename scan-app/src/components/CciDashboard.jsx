@@ -70,7 +70,6 @@ import {
 } from './WorkspaceUI'
 import {
   ActivityTimeline,
-  InvestigationCard,
   KpiCard,
   OpportunityCard as CciOpportunityCard,
   RankedListCard,
@@ -241,7 +240,7 @@ const MEETING_TEMPLATES = [
   { value: 'MONTHLY_COMMERCIAL_REVIEW', label: 'Monthly Commercial Review' },
 ]
 
-function MeetingBriefPanel({ onPrepare }) {
+function MeetingBriefPanel({ onPrepare, compact = false }) {
   const [template, setTemplate] = useState('WEEKLY_SALES_REVIEW')
   const [brief, setBrief] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -256,12 +255,12 @@ function MeetingBriefPanel({ onPrepare }) {
   }
 
   return (
-    <section className="cci-home-section cci-meeting-brief">
+    <section className={`cci-home-section cci-meeting-brief${compact ? ' is-compact' : ''}`}>
       <header className="cci-home-section-heading">
-        <div><span className="scan-eyebrow">Meeting prep</span><h2>Prepare a review</h2></div>
+        <div><span className="scan-eyebrow">Meeting prep</span><h2>{compact ? 'Prepare Executive Review' : 'Prepare a review'}</h2>{compact ? <p>Turn current investigations and field results into a decision-ready agenda.</p> : null}</div>
         <div className="cci-meeting-controls">
           <select onChange={(event) => setTemplate(event.target.value)} value={template}>
-            {MEETING_TEMPLATES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            {MEETING_TEMPLATES.filter((item) => !compact || ['WEEKLY_SALES_REVIEW', 'MONTHLY_COMMERCIAL_REVIEW', 'CATEGORY_REVIEW'].includes(item.value)).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
           <button className="scan-button scan-button-dark" disabled={loading} onClick={prepare} type="button">{loading ? 'Preparing…' : 'Prepare'}</button>
         </div>
@@ -783,13 +782,116 @@ function InvestigationDetail({
   )
 }
 
+const INVESTIGATION_TABS = [
+  { value: 'needs', label: 'Needs Attention' },
+  { value: 'investigating', label: 'Investigating' },
+  { value: 'field', label: 'Waiting on Field' },
+  { value: 'watching', label: 'Watching' },
+  { value: 'completed', label: 'Completed' },
+]
+
+function InvestigationCandidate({ mover, onAsk, onStart, onWatch, watched }) {
+  const [busy, setBusy] = useState('')
+  const rising = mover.basketChangePct >= 0
+  const magnitude = `${rising ? '+' : '−'}${decimal.format(Math.abs(mover.basketChangePct))}%`
+  const reason = mover.reason || `${integer.format(mover.recentBaskets)} baskets in the current period versus ${integer.format(mover.priorBaskets)} previously.`
+  const nextStep = mover.suggestedNextStep || (rising ? 'Validate availability where demand is accelerating.' : 'Check distribution and shelf availability in affected stores.')
+
+  async function run(kind, action) {
+    setBusy(kind)
+    try { await action() } finally { setBusy('') }
+  }
+
+  return (
+    <article className="cci-investigation-candidate">
+      <header><StatusBadge tone={rising ? 'success' : 'warning'}>{rising ? 'Growth signal' : 'Performance risk'}</StatusBadge><strong className={rising ? 'is-up' : 'is-down'}>{magnitude}</strong></header>
+      <div><span>{mover.category || 'CCI product'}</span><h3>{mover.productName} is {rising ? 'up' : 'down'} {decimal.format(Math.abs(mover.basketChangePct))}%</h3></div>
+      <dl><div><dt>Why it is here</dt><dd>{reason}</dd></div><div><dt>Suggested next step</dt><dd>{nextStep}</dd></div></dl>
+      <footer>
+        <button className="scan-button scan-button-dark" disabled={Boolean(busy)} onClick={() => run('start', () => onStart(mover.productName))} type="button">{busy === 'start' ? 'Starting…' : 'Start investigation'}</button>
+        <button className="scan-button scan-button-light" onClick={() => onAsk(mover.productName)} type="button">Ask SCAN</button>
+        {!watched ? <button className="scan-button scan-button-quiet" disabled={Boolean(busy)} onClick={() => run('watch', () => onWatch(mover.productName))} type="button">{busy === 'watch' ? 'Adding…' : 'Watch'}</button> : <StatusBadge tone="neutral">Watching</StatusBadge>}
+      </footer>
+    </article>
+  )
+}
+
+function InvestigationQueue({ investigations, fieldTasks, onSelect, searchText, fieldOnly = false }) {
+  const needle = searchText.trim().toLowerCase()
+  const visibleInvestigations = investigations.filter((item) => !needle || `${item.title} ${item.question}`.toLowerCase().includes(needle))
+  const visibleTasks = fieldTasks.filter((task) => task.status !== 'COMPLETED' && (!needle || `${task.title} ${task.reason} ${task.assignedTo}`.toLowerCase().includes(needle)))
+  return (
+    <div className={`cci-investigation-queues${fieldOnly ? ' is-field-only' : ''}`}>
+      {!fieldOnly ? <section className="scan-panel cci-queue-panel">
+        <header className="scan-panel-header"><div><h3>In Progress</h3><p>Commercial questions being actively investigated.</p></div><StatusBadge tone="warning">{visibleInvestigations.length}</StatusBadge></header>
+        {visibleInvestigations.length ? <div className="cci-queue-list">{visibleInvestigations.map((item) => (
+          <button key={item.id} onClick={() => onSelect(item.id)} type="button"><span><StatusBadge tone="warning">Investigating</StatusBadge><strong>{item.title}</strong><small>{item.ownerLabel || 'Commercial Team'} · {formatRelativeTime(item.updatedAt)}</small></span><ScanIcon name="chevron" size={17} /></button>
+        ))}</div> : <EmptyState compact title="No investigations match">Start from a detected change or adjust the search.</EmptyState>}
+      </section> : null}
+      <section className="scan-panel cci-queue-panel">
+        <header className="scan-panel-header"><div><h3>Waiting on Field</h3><p>Checks assigned to store and field teams.</p></div><StatusBadge tone={visibleTasks.length ? 'warning' : 'success'}>{visibleTasks.length}</StatusBadge></header>
+        {visibleTasks.length ? <div className="cci-field-queue">{visibleTasks.map((task) => {
+          const checked = task.stores.filter((store) => store.completed).length
+          return <article key={task.id}><header><strong>{task.title}</strong><StatusBadge tone="warning">{humanize(task.status)}</StatusBadge></header><p>{task.reason}</p><dl><div><dt>Assigned</dt><dd>{task.assignedTo || 'Field Sales'}</dd></div><div><dt>Due</dt><dd>{task.dueAt ? formatDateTime(task.dueAt) : 'No due date'}</dd></div><div><dt>Stores</dt><dd>{checked}/{task.stores.length} checked</dd></div></dl>{task.investigationId ? <button className="scan-button scan-button-light" onClick={() => onSelect(task.investigationId)} type="button">Open investigation</button> : null}</article>
+        })}</div> : <EmptyState compact title="No field checks waiting">Assigned checks will appear here with owner and due date.</EmptyState>}
+      </section>
+    </div>
+  )
+}
+
+function InvestigationWatchlist({ watchlist, watchlistChanges, productOptions, onFollow, onUnfollow }) {
+  const [query, setQuery] = useState('')
+  const [productName, setProductName] = useState('')
+  const [busy, setBusy] = useState('')
+  const visible = watchlist.filter((item) => item.productName.toLowerCase().includes(query.trim().toLowerCase()))
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!productName.trim()) return
+    setBusy('follow')
+    try { await onFollow(productName.trim()); setProductName('') } finally { setBusy('') }
+  }
+
+  async function unfollow(item) {
+    setBusy(item.id)
+    try { await onUnfollow(item.id) } finally { setBusy('') }
+  }
+
+  return (
+    <section className="scan-panel cci-investigation-watchlist">
+      <header className="scan-panel-header"><div><h3>Watchlist</h3><p>Products and signals followed by the commercial team.</p></div><StatusBadge tone="neutral">{watchlist.length}</StatusBadge></header>
+      <div className="cci-watchlist-tools"><label><span className="sr-only">Search watchlist</span><input aria-label="Search watchlist" onChange={(event) => setQuery(event.target.value)} placeholder="Search followed items…" value={query} /></label><form onSubmit={submit}><input aria-label="Follow a product" list="investigation-watch-products" onChange={(event) => setProductName(event.target.value)} placeholder="Add product…" value={productName} /><datalist id="investigation-watch-products">{productOptions.map((name) => <option key={name} value={name} />)}</datalist><button className="scan-button scan-button-dark" disabled={busy === 'follow' || !productName.trim()} type="submit">Follow</button></form></div>
+      {visible.length ? <div className="cci-watchlist-table"><div className="cci-watchlist-table-head"><span>Name</span><span>Recent change</span><span>Reason followed</span><span>Last update</span><span /></div>{visible.map((item) => {
+        const change = watchlistChanges.find((entry) => entry.productName === item.productName)
+        return <article key={item.id}><strong>{item.productName}</strong><b className={(change?.basketChangePct || 0) >= 0 ? 'is-up' : 'is-down'}>{change ? `${change.basketChangePct >= 0 ? '+' : ''}${decimal.format(change.basketChangePct)}%` : 'Awaiting data'}</b><span>{item.reason || 'Commercial team watchlist'}</span><small>{formatRelativeTime(item.updatedAt || item.createdAt)}</small><button aria-label={`Unfollow ${item.productName}`} disabled={busy === item.id} onClick={() => unfollow(item)} type="button">{busy === item.id ? 'Removing…' : 'Unfollow'}</button></article>
+      })}</div> : <EmptyState compact title="No followed items match">Try another search or add a product to the watchlist.</EmptyState>}
+    </section>
+  )
+}
+
+function CompletedInvestigations({ investigations, fieldTasks, onSelect, searchText }) {
+  const needle = searchText.trim().toLowerCase()
+  const rows = investigations.filter((item) => item.status === 'CLOSED' && (!needle || `${item.title} ${item.question}`.toLowerCase().includes(needle)))
+  return (
+    <TableCard description="Decisions, evidence, and measured outcomes retained for future reviews." title="Recently Completed">
+      {rows.length ? <div className="scan-table-wrap"><table className="scan-table"><thead><tr><th>Investigation</th><th>Outcome</th><th>Observed result</th><th>Completed</th><th /></tr></thead><tbody>{rows.map((item) => {
+        const humanNotes = item.notes.filter((note) => !note.system)
+        const result = humanNotes[humanNotes.length - 1]?.body || item.hypotheses.find((hypothesis) => hypothesis.status === 'CONFIRMED')?.supportingEvidence || 'Result recorded in the investigation.'
+        const completedChecks = fieldTasks.filter((task) => task.investigationId === item.id && task.status === 'COMPLETED').length
+        return <tr key={item.id}><td><strong>{item.title}</strong><small>{item.question}</small></td><td><StatusBadge tone="success">Closed</StatusBadge></td><td>{result}{completedChecks ? <small>{completedChecks} field check{completedChecks === 1 ? '' : 's'} completed</small> : null}</td><td>{formatDateTime(item.closedAt || item.updatedAt)}</td><td><button className="scan-button scan-button-light" onClick={() => onSelect(item.id)} type="button">Open result</button></td></tr>
+      })}</tbody></table></div> : <EmptyState compact title="No completed investigations match">Completed work will build the team’s evidence history here.</EmptyState>}
+    </TableCard>
+  )
+}
+
 function Investigate({
-  investigations, fieldTasks, data, selectedInvestigationId, onSelect, onBack, productOptions,
+  investigations, fieldTasks, movers, watchlist, watchlistChanges, data, selectedInvestigationId, onSelect, onBack, productOptions,
   onStartProduct, onStartGeneral, onAddNote, onConfirmHypothesis, onRejectHypothesis, onClose, onReopen,
-  onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot, loading, loadError,
+  onCreateFieldTask, onRecordFieldTaskResult, onAskCopilot, onAskProduct, onFollow, onUnfollow, onPrepareBrief, loading, loadError,
 }) {
   const [showStartForm, setShowStartForm] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const [activeTab, setActiveTab] = useState('needs')
   const selected = investigations.find((item) => item.id === selectedInvestigationId)
 
   if (selected) {
@@ -812,13 +914,24 @@ function Investigate({
     )
   }
 
+  const inProgress = investigations.filter((item) => item.status !== 'CLOSED')
+  const completed = investigations.filter((item) => item.status === 'CLOSED')
+  const openFieldTasks = fieldTasks.filter((task) => task.status !== 'COMPLETED')
+  const completedThisMonth = completed.filter((item) => {
+    const closed = new Date(item.closedAt || item.updatedAt)
+    const now = new Date()
+    return closed.getMonth() === now.getMonth() && closed.getFullYear() === now.getFullYear()
+  })
+  const investigatedProducts = new Set(inProgress.map((item) => item.subjectName).filter(Boolean))
+  const candidates = movers.filter((mover) => !investigatedProducts.has(mover.productName)).slice(0, 6)
+
   return (
     <div className="scan-page-stack">
       <PageIntro
         aside={<button className="scan-button scan-button-dark" onClick={() => setShowStartForm((value) => !value)} type="button">{showStartForm ? 'Cancel' : 'Start investigation'}</button>}
-        description="A business investigation workspace: what changed, why it might have changed, and what to do next."
-        eyebrow="Investigate"
-        title="Real questions, with real evidence."
+        description="Field checks, watchlists, and commercial follow-ups."
+        eyebrow="Commercial workflow"
+        title="Investigations"
       />
       {loadError ? <div className="scan-inline-notice scan-inline-error" role="alert">{loadError}</div> : null}
       {showStartForm ? (
@@ -831,24 +944,22 @@ function Investigate({
           />
         </section>
       ) : null}
-      {investigations.length ? (
-        <label className="cci-investigation-search">Search investigations
-          <input onChange={(event) => setSearchText(event.target.value)} placeholder="Search by title or question…" value={searchText} />
-        </label>
-      ) : null}
-      {loading ? <p className="cci-work-loading">Loading investigations…</p> : investigations.length ? (
-        (() => {
-          const needle = searchText.trim().toLowerCase()
-          const visible = needle
-            ? investigations.filter((item) => item.title.toLowerCase().includes(needle) || item.question.toLowerCase().includes(needle))
-            : investigations
-          return visible.length ? (
-            <div className="cci-investigation-list">
-              {visible.map((item) => <InvestigationCard investigation={item} key={item.id} onOpen={onSelect} />)}
-            </div>
-          ) : <EmptyState compact title="No investigations match that search">Try a different word from the title or question.</EmptyState>
-        })()
-      ) : <EmptyState title="No active investigations">Start from a commercial question, or investigate a detected change from My Work.</EmptyState>}
+      <section aria-label="Investigation workflow summary" className="cci-investigation-summary">
+        <KpiCard change="Detected commercial changes" label="Needs attention" tone={candidates.length ? 'warning' : 'success'} value={integer.format(candidates.length)}><span className="cci-summary-meter"><i style={{ width: `${Math.min(100, candidates.length * 16)}%` }} /></span></KpiCard>
+        <KpiCard change="Owned by commercial team" label="In progress" tone="neutral" value={integer.format(inProgress.length)}><span className="cci-summary-dots">{Array.from({ length: Math.max(4, inProgress.length) }, (_, index) => <i className={index < inProgress.length ? 'is-active' : ''} key={index} />)}</span></KpiCard>
+        <KpiCard change="Assigned field checks" label="Waiting on field" tone={openFieldTasks.length ? 'warning' : 'success'} value={integer.format(openFieldTasks.length)}><span className="cci-summary-meter is-amber"><i style={{ width: `${Math.min(100, openFieldTasks.length * 24)}%` }} /></span></KpiCard>
+        <KpiCard change="Evidence retained" label="Completed this month" tone="success" value={integer.format(completedThisMonth.length)}><span className="cci-summary-meter is-green"><i style={{ width: `${Math.min(100, completedThisMonth.length * 18)}%` }} /></span></KpiCard>
+      </section>
+      <nav aria-label="Investigation views" className="cci-investigation-tabs">{INVESTIGATION_TABS.map((tab) => <button aria-current={activeTab === tab.value ? 'page' : undefined} key={tab.value} onClick={() => { setActiveTab(tab.value); setSearchText('') }} type="button">{tab.label}<span>{tab.value === 'needs' ? candidates.length : tab.value === 'investigating' ? inProgress.length : tab.value === 'field' ? openFieldTasks.length : tab.value === 'watching' ? watchlist.length : completed.length}</span></button>)}</nav>
+      {loading ? <p className="cci-work-loading">Loading investigations…</p> : (
+        <div className="cci-investigation-workflow">
+          {activeTab === 'needs' ? (candidates.length ? <section className="cci-candidate-grid">{candidates.map((mover) => <InvestigationCandidate key={mover.productName} mover={mover} onAsk={onAskProduct} onStart={async (productName) => { const created = await onStartProduct(productName); onSelect(created.id) }} onWatch={onFollow} watched={watchlist.some((item) => item.productName === mover.productName)} />)}</section> : <EmptyState title="No changes need triage">Every detected change is already being investigated or watched.</EmptyState>) : null}
+          {['investigating', 'field'].includes(activeTab) ? <><label className="cci-investigation-search">Search investigations<input onChange={(event) => setSearchText(event.target.value)} placeholder="Search by title, question, owner, or field task…" value={searchText} /></label><InvestigationQueue fieldOnly={activeTab === 'field'} fieldTasks={activeTab === 'field' ? openFieldTasks : fieldTasks} investigations={inProgress} onSelect={onSelect} searchText={searchText} /></> : null}
+          {activeTab === 'watching' ? <InvestigationWatchlist onFollow={onFollow} onUnfollow={onUnfollow} productOptions={productOptions} watchlist={watchlist} watchlistChanges={watchlistChanges} /> : null}
+          {activeTab === 'completed' ? <><label className="cci-investigation-search">Search investigations<input onChange={(event) => setSearchText(event.target.value)} placeholder="Search completed investigations…" value={searchText} /></label><CompletedInvestigations fieldTasks={fieldTasks} investigations={investigations} onSelect={onSelect} searchText={searchText} /></> : null}
+        </div>
+      )}
+      <MeetingBriefPanel compact onPrepare={onPrepareBrief} />
     </div>
   )
 }
@@ -2029,22 +2140,29 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
         data={data}
         fieldTasks={intelligence.fieldTasks}
         investigations={intelligence.investigations}
+        movers={intelligence.movers}
         loadError={intelligence.error}
         loading={intelligence.loading}
         onAddNote={actions.addNote}
         onAskCopilot={actions.askCopilotAboutInvestigation}
+        onAskProduct={actions.askCopilotAboutProduct}
         onBack={() => actions.selectInvestigation(null)}
         onClose={actions.closeInvestigation}
         onConfirmHypothesis={actions.confirmHypothesis}
         onCreateFieldTask={actions.createFieldTask}
         onRecordFieldTaskResult={actions.recordFieldTaskResult}
+        onFollow={actions.followProduct}
+        onPrepareBrief={actions.prepareBrief}
         onRejectHypothesis={actions.rejectHypothesis}
         onReopen={actions.reopenInvestigation}
         onSelect={actions.selectInvestigation}
         onStartGeneral={actions.startGeneralInvestigation}
         onStartProduct={actions.startProductInvestigation}
+        onUnfollow={actions.unfollowProduct}
         productOptions={productOptions}
         selectedInvestigationId={intelligence.selectedInvestigationId}
+        watchlist={intelligence.watchlist}
+        watchlistChanges={intelligence.watchlistChanges}
       />
     )
   }
