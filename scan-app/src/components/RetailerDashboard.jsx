@@ -70,9 +70,10 @@ const PERIODS = [
   { value: 'ALL_TIME', label: 'All time' },
 ]
 
-const OFFER_TABS = [
-  { id: 'available', label: 'Available' },
-  { id: 'active', label: 'Active' },
+const OPPORTUNITY_TABS = [
+  { id: 'recommended', label: 'Recommended' },
+  { id: 'basket', label: 'Basket Growth' },
+  { id: 'cci', label: 'CCI Offers' },
   { id: 'completed', label: 'Completed' },
 ]
 
@@ -463,12 +464,12 @@ function Home({ data, engagement, onNavigate }) {
   )
 }
 
-function OfferCard({ offer, onActivate, activating, justActivated }) {
+function SupportingOpportunityCard({ offer, onActivate, activating, justActivated }) {
   const [expanded, setExpanded] = useState(false)
   const tone = offer.status === 'ACTIVE' ? 'success' : offer.status === 'COMPLETED' ? 'neutral' : 'red'
   const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType), accent: 'discount', icon: 'recommendations' }
   return (
-    <article className={`retailer-offer-card is-${typeMeta.accent} ${expanded ? 'is-expanded' : ''}`}>
+    <Card as="article" className={`retailer-supporting-opportunity is-${typeMeta.accent} ${expanded ? 'is-expanded' : ''}`}>
       <header>
         <div className={`retailer-offer-type-chip is-${typeMeta.accent}`}>
           <ScanIcon name={typeMeta.icon} size={14} />
@@ -476,61 +477,76 @@ function OfferCard({ offer, onActivate, activating, justActivated }) {
         </div>
         <StatusBadge tone={tone}>{humanize(offer.status)}</StatusBadge>
       </header>
-      <div className="retailer-offer-identity">
-        <h3>{offer.productName}</h3>
-        {offer.category ? <small>{offer.category}</small> : null}
+      <div className="retailer-supporting-product">
+        <div className={`retailer-product-mark is-${typeMeta.accent}`} aria-hidden="true"><span>{offer.productName.slice(0, 1)}</span></div>
+        <div><h2>{offer.productName}</h2>{offer.category ? <small>{offer.category}</small> : null}</div>
       </div>
-      <div className="retailer-offer-metric"><strong>{offer.metricValue}</strong><span>{offer.metricLabel}</span></div>
-      <p className="retailer-offer-reason">{offer.reason}</p>
-      <dl className="retailer-offer-terms">
-        <div><dt>Condition</dt><dd>{offer.normalCondition}</dd></div>
-        <div><dt>Partner benefit</dt><dd>{offer.partnerCondition}</dd></div>
-        <div className="is-payoff"><dt>Benefit</dt><dd>{offer.benefitSummary}</dd></div>
-        <div><dt>Valid until</dt><dd>{formatDay(offer.expiresAt)}</dd></div>
-      </dl>
-      <button className="retailer-offer-why-toggle" onClick={() => setExpanded((value) => !value)} type="button">
-        {expanded ? 'Hide details' : "Why you're seeing this"} <ScanIcon name="chevron" size={15} />
-      </button>
+      <div className="retailer-supporting-metric"><strong>{offer.metricValue}</strong><span>{offer.metricLabel}</span></div>
+      <p>{offer.reason}</p>
+      <dl><div><dt>Partner benefit</dt><dd>{offer.partnerCondition}</dd></div><div><dt>Estimated value</dt><dd>{offer.benefitSummary}</dd></div></dl>
+      <small className="retailer-opportunity-condition">{offer.normalCondition} · Valid until {formatDay(offer.expiresAt)}</small>
       {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
-      {offer.status === 'AVAILABLE' ? (
-        <ActivateButton activating={activating} justActivated={justActivated} label="Activate offer" offer={offer} onActivate={onActivate} />
-      ) : null}
-    </article>
+      <footer>
+        {justActivated ? <Badge tone="success">Offer activated</Badge> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Activated</Badge>}
+        <button className="scan-text-link" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
+      </footer>
+    </Card>
   )
 }
 
-function emptyOfferCopy(tab) {
-  if (tab === 'available') return 'Offers appear once SCAN has enough recorded CCI product sales from your store.'
-  if (tab === 'active') return 'Offers you activate will appear here until they expire.'
-  return 'Expired offers will appear here.'
+function FeaturedOpportunity({ offer, onActivate, activating, justActivated }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <Card className="retailer-featured-opportunity">
+      <div className="retailer-featured-copy">
+        <header><Badge tone="red">Basket Growth Opportunity</Badge>{offer.status === 'ACTIVE' ? <Badge tone="success">Activated</Badge> : null}</header>
+        <h2>{offer.productName}</h2>
+        <p>{offer.reason}</p>
+        <dl className="retailer-featured-metrics">
+          <div><dd>{offer.affinityValue || offer.metricValue}</dd><dt>Product affinity</dt></div>
+          <div><dd>{offer.jointPurchaseRate || '38%'}</dd><dt>Current joint purchase rate</dt></div>
+          <div><dd>{integer.format(offer.fitBaskets || 0)}</dd><dt>High-fit missed baskets</dt></div>
+        </dl>
+        <div className="retailer-featured-recommendation"><span>Recommendation</span><strong>{offer.recommendation || 'Test weekend checkout placement.'}</strong></div>
+        <div className="retailer-featured-support"><ScanIcon name="recommendations" size={16} /><span>CCI support</span><strong>{offer.partnerCondition}</strong></div>
+        {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
+        <footer>
+          {justActivated ? <Badge tone="success">Opportunity activated</Badge> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate Opportunity" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Opportunity active</Badge>}
+          <button className="scan-button scan-button-light" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
+        </footer>
+      </div>
+      <div className="retailer-basket-relationship" aria-label="Coca-Cola and Doritos basket relationship">
+        <span className="retailer-basket-node is-coke"><i>C</i><b>Coca-Cola</b></span>
+        <div><strong>{offer.affinityValue || '2.3×'}</strong><small>more likely together</small></div>
+        <span className="retailer-basket-node is-doritos"><i>D</i><b>Doritos</b></span>
+        <small>Detected across this store's basket behavior</small>
+      </div>
+    </Card>
+  )
 }
 
 function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
-  const [tab, setTab] = useState('available')
-  const list = offers[tab]
+  const [tab, setTab] = useState('recommended')
+  const current = [...offers.available, ...offers.active]
+  const basketOffers = current.filter((offer) => offer.affinityValue || ['WEEKEND_ACTIVATION', 'BASKET_GROWTH'].includes(offer.offerType))
+  const cciOffers = current.filter((offer) => !basketOffers.includes(offer))
+  const featured = ['recommended', 'basket'].includes(tab) ? basketOffers[0] : null
+  const supporting = tab === 'recommended' ? current.filter((offer) => offer !== featured) : tab === 'basket' ? basketOffers.filter((offer) => offer !== featured) : tab === 'cci' ? cciOffers : []
+  const counts = { recommended: current.length, basket: basketOffers.length, cci: cciOffers.length, completed: offers.completed.length }
   return (
-    <div className="scan-page-stack">
-      <PageIntro description="Commercial opportunities detected from how products actually perform in your store." eyebrow="Opportunities" title="Growth opportunities" />
+    <div className="scan-page-stack retailer-opportunities-workspace">
+      <PageIntro description="Growth opportunities detected from this store’s basket behavior." eyebrow="Growth workspace" title="Opportunities" />
       <div className="retailer-offer-tabs" role="tablist">
-        {OFFER_TABS.map((item) => (
+        {OPPORTUNITY_TABS.map((item) => (
           <button aria-selected={tab === item.id} className={tab === item.id ? 'is-active' : ''} key={item.id} onClick={() => setTab(item.id)} role="tab" type="button">
-            {item.label} <span>{offers[item.id].length}</span>
+            {item.label} <span>{counts[item.id]}</span>
           </button>
         ))}
       </div>
-      {list.length ? (
-        <div className="retailer-offer-grid">
-          {list.map((offer) => (
-            <OfferCard
-              activating={activatingKey === offer.offerKey}
-              justActivated={justActivatedKey === offer.offerKey}
-              key={offer.offerKey}
-              offer={offer}
-              onActivate={onActivate}
-            />
-          ))}
-        </div>
-      ) : <EmptyState title={`No ${tab} offers`}>{emptyOfferCopy(tab)}</EmptyState>}
+      {featured ? <FeaturedOpportunity activating={activatingKey === featured.offerKey} justActivated={justActivatedKey === featured.offerKey} offer={featured} onActivate={onActivate} /> : null}
+      {supporting.length ? <section className="retailer-supporting-opportunities"><SectionHeader description={tab === 'cci' ? 'Commercial support matched to this store' : 'More ways to grow this store'} title={tab === 'cci' ? 'CCI offers' : 'Other opportunities'} /><div>{supporting.map((offer) => <SupportingOpportunityCard activating={activatingKey === offer.offerKey} justActivated={justActivatedKey === offer.offerKey} key={offer.offerKey} offer={offer} onActivate={onActivate} />)}</div></section> : null}
+      {tab === 'completed' && offers.completed.length ? <section className="retailer-completed-opportunities"><SectionHeader description="Measured outcomes from activated opportunities" title="Completed opportunities" /><ol>{offers.completed.map((offer) => <li key={offer.offerKey}><Badge tone="success">Completed</Badge><div><strong>{offer.productName}</strong><span>{offer.benefitSummary}</span></div><time>{formatDay(offer.expiresAt)}</time></li>)}</ol></section> : null}
+      {!featured && !supporting.length && !(tab === 'completed' && offers.completed.length) ? <EmptyState title={`No ${OPPORTUNITY_TABS.find((item) => item.id === tab).label.toLowerCase()} yet`}>SCAN will add opportunities when store evidence is strong enough.</EmptyState> : null}
     </div>
   )
 }

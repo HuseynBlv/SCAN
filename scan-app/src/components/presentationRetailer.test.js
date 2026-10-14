@@ -30,6 +30,10 @@ describe('presentationRetailer', () => {
     expect(overview.home.salesMovement).toHaveLength(14)
     expect(overview.sync.errors).toEqual([])
     expect(engagement.offers.available).toHaveLength(3)
+    expect(engagement.offers.completed).toHaveLength(1)
+    expect(engagement.offers.available.find((offer) => offer.affinityValue)).toMatchObject({
+      jointPurchaseRate: '38%', fitBaskets: 184, recommendation: 'Test weekend checkout placement.',
+    })
     expect(engagement.actions).toHaveLength(7)
     expect(engagement.actionWorkspace).toMatchObject({
       counts: { open: 3, inProgress: 2, completed: 8, dismissed: 1, highPriority: 2 },

@@ -142,6 +142,7 @@ export function presentationOverview(period = 'LAST_30_DAYS') {
 export function presentationEngagement() {
   const now = new Date()
   const expires = new Date(now.getTime() + 12 * 86400000).toISOString()
+  const completedAt = new Date(now.getTime() - 4 * 86400000).toISOString()
   const generatedAt = now.toISOString()
   return {
     offers: {
@@ -156,7 +157,7 @@ export function presentationEngagement() {
         {
           offerKey: 'SHOWCASE-WEEKEND-BUNDLE', offerType: 'WEEKEND_ACTIVATION', title: 'Weekend refreshment bundle', productName: 'Coca-Cola + Doritos', category: 'Basket growth',
           reason: 'Weekend baskets are 12% larger when beverages and snacks are purchased together.',
-          affinityValue: '2.3×', fitBaskets: 184,
+          affinityValue: '2.3×', jointPurchaseRate: '38%', fitBaskets: 184, recommendation: 'Test weekend checkout placement.',
           whyReasons: ['Beverages and snacks appeared together in 284 baskets.', 'Friday evening is the strongest conversion window.'],
           metricLabel: 'Expected basket lift', metricValue: '+12%', normalCondition: 'Run Friday–Sunday', partnerCondition: 'Free display materials', estimatedBenefitAzn: 72, benefitSummary: 'Estimated benefit: ₼72.00', expiresAt: expires, status: 'AVAILABLE',
         },
@@ -168,7 +169,11 @@ export function presentationEngagement() {
         },
       ],
       active: [],
-      completed: [],
+      completed: [{
+        offerKey: 'SHOWCASE-FANTA-COMPLETED', offerType: 'WEEKEND_ACTIVATION', title: 'Fanta display activation', productName: 'Fanta Orange 500ml', category: 'Beverages',
+        reason: 'The checkout display completed its measurement window.', whyReasons: ['Attachment improved throughout the four-day activation.'],
+        metricLabel: 'Attachment gain', metricValue: '+5 pts', normalCondition: 'Completed', partnerCondition: 'Display materials supplied', estimatedBenefitAzn: 38.4, benefitSummary: 'Measured value: ₼38.40', expiresAt: completedAt, status: 'COMPLETED',
+      }],
     },
     actions: [
       { id: 'showcase-stock', status: 'OPEN', priority: 'HIGH', type: 'STOCK_RISK', scope: 'CCI', title: 'Coca-Cola Zero may sell out before Friday evening', displayTitle: 'Coca-Cola Zero velocity is unusually high', explanation: 'Current sales velocity is 23% above the four-week baseline and demand peaks before the weekend.', evidence: 'Demand is accelerating ahead of the Friday evening peak.', why: 'Velocity has stayed above its four-week baseline for three consecutive trading days.', recommendation: 'Check availability before Friday evening.', metricLabel: 'Recent sales velocity', metricValue: '21.3 units/day', change: '+23%', comparison: 'vs 4-week baseline', primaryAction: 'Add to order list', secondaryAction: 'Mark checked', trend: [14.8, 15.4, 16.1, 17.6, 18.2, 19.7, 21.3] },

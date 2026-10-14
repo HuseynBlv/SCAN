@@ -201,12 +201,20 @@ describe('RetailerDashboard', () => {
     await screen.findByText('4 things deserve attention today.')
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
-    expect(await screen.findByRole('heading', { name: 'Growth opportunities' })).toBeInTheDocument()
-    await user.click(screen.getAllByRole('button', { name: 'Activate offer' })[0])
+    expect(await screen.findByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Recommended 3/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Basket Growth 1/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Completed 1/ })).toBeInTheDocument()
+    expect(screen.getByText('38%')).toBeInTheDocument()
+    expect(screen.getByText('184')).toBeInTheDocument()
+    expect(screen.getByText('Free display materials')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Activate Opportunity' }))
 
-    expect(screen.getByRole('tab', { name: /Available 2/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('tab', { name: /Active 1/ }))
-    expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
+    expect(screen.getByText('Opportunity activated')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Coca-Cola + Doritos' })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /Completed 1/ }))
+    expect(screen.getByText('Fanta Orange 500ml')).toBeInTheDocument()
+    expect(screen.getByText('Measured value: ₼38.40')).toBeInTheDocument()
     expect(activateRetailerOffer).not.toHaveBeenCalled()
   })
 
@@ -240,11 +248,11 @@ describe('RetailerDashboard', () => {
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
-    expect(await screen.findByRole('heading', { name: 'Growth opportunities' })).toBeInTheDocument()
-    expect(screen.getByText('Order 3 cases')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
+    expect(screen.getByText(/Order 3 cases/)).toBeInTheDocument()
     expect(screen.getByText('Volume offer')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Activate offer' }))
+    await user.click(screen.getByRole('button', { name: 'Activate' }))
     expect(screen.getByRole('button', { name: 'Activating…' })).toBeDisabled()
 
     await act(async () => resolveActivation(offer({ status: 'ACTIVE' })))
@@ -264,10 +272,10 @@ describe('RetailerDashboard', () => {
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
-    await user.click(await screen.findByRole('button', { name: 'Activate offer' }))
+    await user.click(await screen.findByRole('button', { name: 'Activate' }))
 
     expect(await screen.findByText('This offer is no longer available. Refresh to see current offers.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Activate offer' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Activate' })).toBeEnabled()
   })
 
   it('shows why a retailer is seeing an offer only when asked', async () => {
@@ -278,7 +286,7 @@ describe('RetailerDashboard', () => {
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
 
     expect(screen.queryByText(/It was purchased in 80 separate baskets/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Why you're seeing this/ }))
+    await user.click(screen.getByRole('button', { name: 'Why this?' }))
     expect(screen.getByText(/It was purchased in 80 separate baskets/)).toBeInTheDocument()
   })
 
