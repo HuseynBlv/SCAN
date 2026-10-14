@@ -3,6 +3,8 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -1131,13 +1133,6 @@ function Activations({ activations, data, loading, loadError, selectedActivation
  * CCI account can see, with no retailerCode parameter anywhere. A store is only unique within its
  * own retailer, so a store row always carries retailerCode alongside externalStoreId. */
 
-function timeOfDayGreeting() {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'morning'
-  if (hour < 18) return 'afternoon'
-  return 'evening'
-}
-
 function changeNote(change, unit) {
   if (change === null || change === undefined || Number.isNaN(change)) return 'No prior-period comparison yet'
   if (Math.abs(change) < 0.05) return 'No change vs previous period'
@@ -1174,45 +1169,85 @@ function briefTypeLabel(type) {
   return humanize(type)
 }
 
-function NetworkKpiRow({ overview }) {
-  if (!overview) return null
-  const items = [
-    { label: 'CCI penetration', value: `${decimal.format(overview.cciPenetrationPct)}%`, note: changeNote(overview.penetrationPointChange, 'pp') },
-    { label: 'CCI baskets', value: integer.format(overview.cciBaskets), note: `${integer.format(overview.totalBaskets)} total baskets` },
-    { label: 'Stores reporting', value: integer.format(overview.storesReporting), note: `Last ${overview.periodDays} days` },
-    { label: 'Product mapping', value: `${decimal.format(overview.dataCoveragePct)}%`, note: overview.dataCoveragePct < 90 ? 'Interpret companion insights cautiously' : 'Coverage supports analysis' },
-  ]
-  return <MetricStrip items={items} label="Network KPIs" />
+function MiniBars({ values, tone = 'red' }) {
+  const usable = values.filter((value) => Number.isFinite(Number(value))).map(Number)
+  const maximum = Math.max(...usable, 1)
+  return (
+    <div aria-hidden="true" className={`cci-kpi-bars is-${tone} ${usable.length === 1 ? 'is-single' : ''}`.trim()}>
+      {usable.slice(-10).map((value, index) => <i key={index} style={usable.length === 1 ? { width: `${Math.min(100, Math.max(0, value))}%` } : { height: `${Math.max(18, (value / maximum) * 100)}%` }} />)}
+    </div>
+  )
 }
 
-function CommercialBrief({ brief, loading, onAction }) {
+function NetworkKpiRow({ overview, stores = [], trend = [] }) {
+  if (!overview) return null
+  const reporting = stores.filter((store) => store.status !== 'NOT_REPORTING').length
+  const coverage = overview.reportingCoveragePct ?? (stores.length ? (reporting / stores.length) * 100 : null)
+  const penetrationValues = trend.map((point) => point.cciPenetrationPct)
+  const basketValues = trend.map((point) => point.cciBaskets)
+  const items = [
+    { label: 'CCI Penetration', value: `${decimal.format(overview.cciPenetrationPct)}%`, note: changeNote(overview.penetrationPointChange, ' pp'), values: penetrationValues, tone: 'red' },
+    { label: 'CCI Baskets', value: integer.format(overview.cciBaskets), note: overview.cciBasketChangePct === undefined ? `${integer.format(overview.totalBaskets)} total baskets` : `${overview.cciBasketChangePct >= 0 ? '+' : ''}${decimal.format(overview.cciBasketChangePct)}%`, values: basketValues, tone: 'dark' },
+    { label: 'Stores Reporting', value: integer.format(overview.storesReporting), note: coverage === null ? `Last ${overview.periodDays} days` : `${decimal.format(coverage)}% coverage`, values: stores.map((store) => store.recentBaskets), tone: 'green' },
+    { label: 'Product Mapping', value: `${decimal.format(overview.dataCoveragePct)}%`, note: overview.dataCoveragePct < 90 ? 'Review needed' : 'Analysis ready', values: [overview.dataCoveragePct], tone: 'amber' },
+  ]
   return (
-    <section className="scan-panel cci-commercial-brief">
-      <header className="scan-panel-header">
-        <div>
-          <h3>SCAN Commercial Brief</h3>
-          <p>{loading ? 'Scanning the network for real changes…' : brief.length ? `${brief.length} thing${brief.length === 1 ? '' : 's'} deserve attention` : 'Nothing deserves attention right now'}</p>
-        </div>
-      </header>
-      {loading ? null : brief.length ? (
-        <ol className="cci-brief-list">
-          {brief.map((item, index) => (
-            <li key={`${item.type}-${index}`}>
-              <StatusBadge tone={briefTone(item.type)}>{briefTypeLabel(item.type)}</StatusBadge>
-              <div>
-                <strong>{item.title}</strong>
+    <section aria-label="Network KPIs" className="cci-network-kpis">
+      {items.map((item) => (
+        <article className="cci-network-kpi" key={item.label}>
+          <span>{item.label}</span>
+          <div><strong>{item.value}</strong><small className={item.note.startsWith('+') ? 'is-positive' : ''}>{item.note}</small></div>
+          <MiniBars tone={item.tone} values={item.values} />
+        </article>
+      ))}
+    </section>
+  )
+}
+
+function CommandBrief({ brief, loading, onAction }) {
+  return (
+    <section className="scan-panel cci-command-brief">
+      <header className="scan-panel-header"><div><h3>SCAN Commercial Brief</h3><p>{loading ? 'Recalculating commercial signals…' : `${brief.length} things deserve attention`}</p></div></header>
+      {!loading && brief.length ? (
+        <ol className="cci-command-signal-list">
+          {brief.slice(0, 3).map((item, index) => (
+            <li key={`${item.type}-${item.title}-${index}`}>
+              <span className="cci-signal-rank">{String(index + 1).padStart(2, '0')}</span>
+              <div className="cci-command-signal-body">
+                <div className="cci-command-signal-meta"><StatusBadge tone={briefTone(item.type)}>{item.severity || briefTypeLabel(item.type)}</StatusBadge><span>{item.signalCode || briefTypeLabel(item.type)}</span></div>
+                <div className="cci-command-signal-title"><h4>{item.title}</h4>{item.magnitude ? <strong>{item.magnitude}</strong> : null}</div>
                 <p>{item.description}</p>
-                {item.actionTarget || item.actionType === 'STORES' ? (
-                  <button className="cci-brief-action" onClick={() => onAction(item)} type="button">{item.actionLabel} →</button>
-                ) : null}
+                <dl>
+                  {item.affectedLabel ? <div><dt>Affected</dt><dd>{item.affectedLabel}</dd></div> : null}
+                  {item.productLabel ? <div><dt>Products</dt><dd>{item.productLabel}</dd></div> : null}
+                  {item.recommendation ? <div className="is-recommendation"><dt>SCAN recommendation</dt><dd>{item.recommendation}</dd></div> : null}
+                </dl>
+                {(item.actionTarget || item.actionType === 'STORES') ? <button className="scan-button scan-button-light" onClick={() => onAction(item)} type="button">{item.actionLabel} <ScanIcon name="chevron" size={15} /></button> : null}
               </div>
             </li>
           ))}
         </ol>
-      ) : (
-        <EmptyState compact title="No significant changes detected">CCI penetration remained stable across the network for this period, and no product moved enough to flag.</EmptyState>
-      )}
-      <footer className="cci-brief-footer"><button className="scan-button scan-button-light" onClick={() => onAction(null)} type="button">Ask SCAN about these changes →</button></footer>
+      ) : loading ? null : <EmptyState compact title="No material changes">The network is operating within its recent baseline.</EmptyState>}
+    </section>
+  )
+}
+
+function NetworkActivity({ overview, brief, stores }) {
+  const base = overview?.generatedAt ? new Date(overview.generatedAt) : new Date()
+  const time = (offset) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(base.getTime() + offset * 60000))
+  const attention = stores.filter((store) => store.status === 'NEEDS_ATTENTION').length
+  const opportunity = brief.find((item) => item.type === 'OPPORTUNITY')
+  const items = [
+    [0, `${overview?.storesReporting || 0} stores updated`],
+    [1, `${brief.length} commercial signals recalculated`],
+    [2, brief[0]?.signalCode ? `${brief[0].signalCode} alert created` : 'Network signal created'],
+    [2, `${attention} stores entered “needs attention”`],
+    [3, opportunity?.signalCode ? `${opportunity.signalCode} updated` : 'Opportunity scan updated'],
+  ]
+  return (
+    <section className="scan-panel cci-network-activity">
+      <header className="scan-panel-header"><div><h3>Network activity</h3><p>Latest model and data events</p></div><StatusBadge tone="success">Live</StatusBadge></header>
+      <ol>{items.map(([offset, label], index) => <li key={`${label}-${index}`}><time>{time(overview?.presentation ? offset : 0)}</time><i aria-hidden="true" /><span>{label}</span></li>)}</ol>
     </section>
   )
 }
@@ -1223,12 +1258,16 @@ const MOVER_TABS = [
   { value: 'categories', label: 'Categories' },
 ]
 
-function MoverRow({ label, meta, changePct }) {
+function MoverRow({ label, meta, changePct, priorValue, recentValue }) {
   const up = changePct >= 0
   return (
     <div className="cci-mover-row">
       <div><strong>{label}</strong>{meta ? <small>{meta}</small> : null}</div>
-      <span className={`cci-mover-change ${up ? 'is-up' : 'is-down'}`}>{up ? '↑' : '↓'} {decimal.format(Math.abs(changePct))}%</span>
+      <div className="cci-mover-evidence">
+        <MiniBars tone={up ? 'green' : 'red'} values={[priorValue ?? 1, recentValue ?? (1 + changePct / 100)]} />
+        <span className={`cci-mover-change ${up ? 'is-up' : 'is-down'}`}>{up ? '↑' : '↓'} {decimal.format(Math.abs(changePct))}{meta?.includes('store') ? ' pp' : '%'}</span>
+        <StatusBadge tone={up ? 'success' : 'warning'}>{up ? 'Momentum' : 'Watch'}</StatusBadge>
+      </div>
     </div>
   )
 }
@@ -1236,10 +1275,10 @@ function MoverRow({ label, meta, changePct }) {
 function BiggestMovers({ productMovers, storeMovers, categoryMovers, onOpenProduct }) {
   const [tab, setTab] = useState('products')
   const rows = tab === 'products'
-    ? productMovers.slice(0, 6).map((item) => ({ key: item.productName, label: item.productName, meta: item.category, changePct: item.basketChangePct, onOpen: () => onOpenProduct(item.productName) }))
+    ? productMovers.slice(0, 6).map((item) => ({ key: item.productName, label: item.productName, meta: item.category, changePct: item.basketChangePct, priorValue: item.priorBaskets, recentValue: item.recentBaskets, onOpen: () => onOpenProduct(item.productName) }))
     : tab === 'stores'
-      ? storeMovers.slice(0, 6).map((item) => ({ key: storeKey(item), label: item.externalStoreId, meta: item.retailerCode, changePct: item.penetrationPointChange, onOpen: null }))
-      : categoryMovers.slice(0, 6).map((item) => ({ key: item.category, label: item.category, meta: null, changePct: item.basketChangePct, onOpen: null }))
+      ? storeMovers.slice(0, 6).map((item) => ({ key: storeKey(item), label: item.externalStoreId, meta: `${item.retailerCode} · store`, changePct: item.penetrationPointChange, priorValue: item.recentPenetrationPct - item.penetrationPointChange, recentValue: item.recentPenetrationPct, onOpen: null }))
+      : categoryMovers.slice(0, 6).map((item) => ({ key: item.category, label: item.category, meta: null, changePct: item.basketChangePct, priorValue: item.priorBaskets, recentValue: item.recentBaskets, onOpen: null }))
 
   return (
     <section className="scan-panel cci-biggest-movers">
@@ -1251,62 +1290,12 @@ function BiggestMovers({ productMovers, storeMovers, categoryMovers, onOpenProdu
         <div className="cci-mover-list">
           {rows.map((row) => (row.onOpen ? (
             <button className="cci-mover-row-button" key={row.key} onClick={row.onOpen} type="button">
-              <MoverRow changePct={row.changePct} label={row.label} meta={row.meta} />
+              <MoverRow changePct={row.changePct} label={row.label} meta={row.meta} priorValue={row.priorValue} recentValue={row.recentValue} />
             </button>
-          ) : <div key={row.key}><MoverRow changePct={row.changePct} label={row.label} meta={row.meta} /></div>))}
+          ) : <div key={row.key}><MoverRow changePct={row.changePct} label={row.label} meta={row.meta} priorValue={row.priorValue} recentValue={row.recentValue} /></div>))}
         </div>
       ) : <EmptyState compact title="No significant movers">Nothing crossed the meaningful-change threshold this period.</EmptyState>}
     </section>
-  )
-}
-
-function StorePerformancePreview({ stores, onNavigate, onOpenStore }) {
-  const top = stores.slice(0, 5)
-  return (
-    <ChartPanel action={<button className="scan-link-button" onClick={() => onNavigate('stores')} type="button">View all stores →</button>} description="Ranked by CCI penetration across the network." title="Store performance">
-      {top.length ? (
-        <div className="scan-table-wrap">
-          <table className="scan-table">
-            <thead><tr><th>Store</th><th>CCI penetration</th><th>Change</th><th>CCI baskets</th><th>Status</th></tr></thead>
-            <tbody>
-              {top.map((store) => (
-                <tr className="cci-clickable-row" key={storeKey(store)} onClick={() => onOpenStore(store)}>
-                  <td>{store.externalStoreId} <small>{store.retailerCode}</small></td>
-                  <td>{decimal.format(store.recentPenetrationPct)}%</td>
-                  <td className={store.penetrationPointChange >= 0 ? 'is-up' : 'is-down'}>{store.penetrationPointChange >= 0 ? '+' : ''}{decimal.format(store.penetrationPointChange)}pp</td>
-                  <td>{integer.format(store.recentCciBaskets)}</td>
-                  <td><StatusBadge tone={storeStatusTone(store.status)}>{storeStatusLabel(store.status)}</StatusBadge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <EmptyState compact title="No store data yet">No baskets recorded for the selected period.</EmptyState>}
-    </ChartPanel>
-  )
-}
-
-function ProductPerformancePreview({ products, onNavigate, onOpenProduct }) {
-  const top = [...products].sort((a, b) => b.recentBaskets - a.recentBaskets).slice(0, 5)
-  return (
-    <ChartPanel action={<button className="scan-link-button" onClick={() => onNavigate('products')} type="button">View all products →</button>} description="Ranked by current CCI basket volume." title="Product performance">
-      {top.length ? (
-        <div className="scan-table-wrap">
-          <table className="scan-table">
-            <thead><tr><th>Product</th><th>CCI baskets</th><th>Change</th></tr></thead>
-            <tbody>
-              {top.map((product) => (
-                <tr className="cci-clickable-row" key={product.productName} onClick={() => onOpenProduct(product.productName)}>
-                  <td>{product.productName} <small>{product.category}</small></td>
-                  <td>{integer.format(product.recentBaskets)}</td>
-                  <td className={product.basketChangePct >= 0 ? 'is-up' : 'is-down'}>{product.basketChangePct >= 0 ? '+' : ''}{decimal.format(product.basketChangePct)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <EmptyState compact title="No product data yet">No CCI products met the minimum sample size this period.</EmptyState>}
-    </ChartPanel>
   )
 }
 
@@ -1320,18 +1309,20 @@ const TREND_METRICS = [
 // adding them here would mean silently summing across currencies, the same reason network-wide
 // revenue is never shown as a single money figure. A day with zero baskets simply has no point
 // rather than a fabricated 0%.
-function TrendChart({ trend, loading, error }) {
+function TrendChart({ trend, loading, error, overview }) {
   const [metric, setMetric] = useState('penetration')
   const dataKey = metric === 'penetration' ? 'penetration' : 'baskets'
   const formatValue = metric === 'penetration' ? (value) => `${decimal.format(value)}%` : (value) => integer.format(value)
-  const data = trend.map((point) => ({ date: point.date, penetration: point.cciPenetrationPct, baskets: point.cciBaskets }))
+  const data = trend.map((point) => ({ date: point.date, penetration: point.cciPenetrationPct, baskets: point.cciBaskets, previous: point.previousCciPenetrationPct, event: point.event }))
+  const hasPreviousTrend = metric === 'penetration' && data.some((point) => Number.isFinite(point.previous))
   const accessibleSummary = data.slice(-8).map((point) => `${point.date}: ${formatValue(point[dataKey])}`).join('; ')
 
   return (
     <ChartPanel
       action={<SegmentedControl label="Trend metric" onChange={setMetric} options={TREND_METRICS} value={metric} />}
-      description="Real daily numbers across the network for the selected period."
-      title="CCI Performance"
+      className="cci-network-performance"
+      description="Current network movement with prior-period context and commercial events."
+      title="CCI Penetration"
     >
       {loading ? <p className="cci-work-loading">Loading trend…</p> : error ? (
         <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div>
@@ -1343,7 +1334,10 @@ function TrendChart({ trend, loading, error }) {
               <XAxis axisLine={false} dataKey="date" tickFormatter={(value) => `${value}`.slice(5)} tickLine={false} />
               <YAxis axisLine={false} tickFormatter={formatValue} tickLine={false} width={54} />
               <Tooltip formatter={(value) => formatValue(value)} />
+              {metric === 'penetration' && !hasPreviousTrend && Number.isFinite(overview?.priorCciPenetrationPct) ? <ReferenceLine label={{ value: 'Previous period', fill: '#777', fontSize: 11, position: 'insideTopRight' }} stroke="#aaa8a2" strokeDasharray="5 5" y={overview.priorCciPenetrationPct} /> : null}
+              {hasPreviousTrend ? <Line dataKey="previous" dot={false} isAnimationActive={false} name="Previous period" stroke="#aaa8a2" strokeDasharray="5 5" strokeWidth={1.7} type="monotone" /> : null}
               <Line dataKey={dataKey} dot={data.length < 20} isAnimationActive stroke="#e41e2b" strokeWidth={2.5} type="monotone" />
+              {metric === 'penetration' ? data.filter((point) => point.event).map((point) => <ReferenceDot fill="#fff" key={`${point.date}-${point.event}`} label={{ value: point.event, fill: '#6f7175', fontSize: 10, position: 'top' }} r={4} stroke="#e41e2b" strokeWidth={2} x={point.date} y={point.penetration} />) : null}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1352,9 +1346,36 @@ function TrendChart({ trend, loading, error }) {
   )
 }
 
+function OverviewOpportunity({ opportunity, onAction }) {
+  return (
+    <section className="scan-panel cci-overview-opportunity">
+      <header><div><span className="scan-eyebrow">Top opportunity</span><h3>{opportunity?.title || 'No opportunity above threshold'}</h3></div><StatusBadge tone="success">Scenario</StatusBadge></header>
+      {opportunity ? <>
+        <div className="cci-opportunity-metrics">
+          <div><strong>{opportunity.magnitude || 'Detected'}</strong><span>Product affinity</span></div>
+          <div><strong>{opportunity.affectedLabel || 'Network-wide'}</strong><span>Missed high-fit baskets</span></div>
+        </div>
+        <div className="cci-scenario-estimate"><span>Estimated opportunity</span><strong>{opportunity.scenarioEstimate || 'Build a test to estimate lift'}</strong><small>Scenario estimate · validate with a controlled activation</small></div>
+        <button className="scan-button scan-button-dark" onClick={() => onAction(opportunity)} type="button">Build test <ScanIcon name="chevron" size={16} /></button>
+      </> : <p>SCAN will surface a buildable commercial test when the evidence clears the opportunity threshold.</p>}
+    </section>
+  )
+}
+
+function AttentionStores({ stores, onOpenStore, onNavigate }) {
+  const attention = stores.filter((store) => store.status === 'NEEDS_ATTENTION').sort((a, b) => a.penetrationPointChange - b.penetrationPointChange).slice(0, 3)
+  return (
+    <section className="scan-panel cci-attention-stores">
+      <header className="scan-panel-header"><div><h3>Stores needing attention</h3><p>Largest penetration declines</p></div><StatusBadge tone="warning">{attention.length} flagged</StatusBadge></header>
+      {attention.length ? <div>{attention.map((store) => <button key={storeKey(store)} onClick={() => onOpenStore(store)} type="button"><span><strong>{store.externalStoreId}</strong><small>{store.retailerCode}</small></span><b>{decimal.format(store.penetrationPointChange)} pp</b><ScanIcon name="chevron" size={16} /></button>)}</div> : <EmptyState compact title="No stores need attention">All reporting stores are within their recent operating range.</EmptyState>}
+      <button className="scan-button scan-button-light" onClick={() => onNavigate('stores')} type="button">Review stores <ScanIcon name="chevron" size={15} /></button>
+    </section>
+  )
+}
+
 function OverviewPage({
   overview, stores, productMovers, categoryMovers, brief, trend, trendLoading, trendError, loading, error,
-  periodDays, onPeriodChange, onNavigate, onBriefAction, onAskAboutProduct, onOpenStore, onOpenProduct, myWork,
+  periodDays, onPeriodChange, onNavigate, onBriefAction, onOpenStore, onOpenProduct, myWork,
 }) {
   const storeMovers = useMemo(
     () => [...stores].sort((a, b) => Math.abs(b.penetrationPointChange) - Math.abs(a.penetrationPointChange)),
@@ -1362,27 +1383,30 @@ function OverviewPage({
   )
 
   return (
-    <div className="scan-page-stack cci-overview">
-      <section className="cci-discovery-hero">
-        <span className="scan-eyebrow">Overview</span>
-        <h2>Good {timeOfDayGreeting()}. Here&rsquo;s what changed across your retail network.</h2>
+    <div className="scan-page-stack cci-overview cci-command-center">
+      <section className="cci-overview-controls">
         <p>{overview ? `${integer.format(overview.storesReporting)} stores reporting · ${integer.format(overview.cciBaskets)} CCI baskets · ${formatRelativeTime(overview.generatedAt)}` : 'Loading network coverage…'}</p>
         <SegmentedControl label="Period" onChange={onPeriodChange} options={PERIOD_OPTIONS} value={periodDays} />
       </section>
 
       {error ? <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div> : null}
 
-      <NetworkKpiRow overview={overview} />
+      <NetworkKpiRow overview={overview} stores={stores} trend={trend} />
 
-      <TrendChart error={trendError} loading={trendLoading} trend={trend} />
-
-      <div className="scan-two-column cci-overview-columns">
-        <CommercialBrief brief={brief} loading={loading} onAction={onBriefAction} />
-        <BiggestMovers categoryMovers={categoryMovers} onOpenProduct={onAskAboutProduct} productMovers={productMovers} storeMovers={storeMovers} />
+      <div className="cci-command-grid">
+        <CommandBrief brief={brief} loading={loading} onAction={onBriefAction} />
+        <NetworkActivity brief={brief} overview={overview} stores={stores} />
       </div>
 
-      <StorePerformancePreview onNavigate={onNavigate} onOpenStore={onOpenStore} stores={stores} />
-      <ProductPerformancePreview onNavigate={onNavigate} onOpenProduct={onOpenProduct} products={productMovers} />
+      <div className="cci-performance-grid">
+        <TrendChart error={trendError} loading={trendLoading} overview={overview} trend={trend} />
+        <BiggestMovers categoryMovers={categoryMovers} onOpenProduct={onOpenProduct} productMovers={productMovers} storeMovers={storeMovers} />
+      </div>
+
+      <div className="cci-opportunity-grid">
+        <OverviewOpportunity onAction={onBriefAction} opportunity={brief.find((item) => item.type === 'OPPORTUNITY')} />
+        <AttentionStores onNavigate={onNavigate} onOpenStore={onOpenStore} stores={stores} />
+      </div>
 
       {myWork}
     </div>
@@ -2527,6 +2551,7 @@ export default function CciDashboard() {
             ) : null}
             {credentials.presentation ? <span className="cci-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
             <DataFreshness formatter={formatDateTime} generatedAt={data.generatedAt} />
+            <button className="scan-button scan-button-dark cci-ask-scan-button" onClick={() => setActivePage('copilot')} type="button"><ScanIcon name="ask" size={17} /><span>Ask SCAN</span></button>
             <button className="scan-button scan-button-light cci-refresh-button" disabled={loading} onClick={refresh} type="button"><ScanIcon name="refresh" size={17} /><span>{loading ? 'Refreshing…' : 'Refresh'}</span></button>
               <details className="cci-user-menu">
                 <summary aria-label="CCI workspace menu">CCI</summary>
@@ -2544,7 +2569,8 @@ export default function CciDashboard() {
           </>
         )}
         eyebrow="CCI commercial intelligence"
-        title="SCAN commercial workspace"
+        meta={activePage === 'overview' ? <p>Live commercial signals across connected retail.</p> : null}
+        title={activePage === 'overview' ? 'Network Overview' : 'SCAN commercial workspace'}
       />
       {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" type="button" onClick={refresh}>Retry</button></div> : null}
     </>

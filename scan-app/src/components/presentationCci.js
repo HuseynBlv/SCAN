@@ -65,7 +65,7 @@ export function presentationCciNetwork(periodDays = 30) {
   const cciBaskets = stores.reduce((sum, store) => sum + store.recentCciBaskets, 0)
   const days = Math.min(periodDays, 30)
   return {
-    overview: { periodDays, storesReporting: stores.length, totalBaskets, cciBaskets, cciPenetrationPct: 29.9, priorCciPenetrationPct: 27.8, penetrationPointChange: 2.1, dataCoveragePct: 97.4, generatedAt: isoDate() },
+    overview: { presentation: true, periodDays, storesReporting: stores.length, reportingCoveragePct: 100, totalBaskets, cciBaskets, cciBasketChangePct: 8.3, cciPenetrationPct: 29.9, priorCciPenetrationPct: 27.8, penetrationPointChange: 2.1, dataCoveragePct: 97.4, generatedAt: isoDate() },
     stores,
     products,
     categories: [
@@ -75,15 +75,17 @@ export function presentationCciNetwork(periodDays = 30) {
       { category: 'Regular sparkling', recentBaskets: Math.round(1142 * factor), priorBaskets: Math.round(1195 * factor), basketChangePct: -4.4 },
     ],
     brief: [
-      { type: 'IMPORTANT', title: 'Zero velocity is outpacing availability', description: 'Coca-Cola Zero is up 23%, led by evening demand in Nizami and Gənclik.', actionType: 'PRODUCT', actionTarget: 'Coca-Cola Zero 330ml', actionLabel: 'Investigate product' },
-      { type: 'OPPORTUNITY', title: 'Weekend baskets have an attachment gap', description: '184 high-fit Coca-Cola baskets did not include Doritos despite 2.3× product affinity.', actionType: 'PRODUCT', actionTarget: 'Coca-Cola 500ml', actionLabel: 'Review basket evidence' },
-      { type: 'IMPORTANT', title: 'Two stores need attention', description: 'Rahat · 28 May and Bazarstore · Yasamal declined by more than 2.5 penetration points.', actionType: 'STORES', actionLabel: 'Review stores' },
+      { type: 'IMPORTANT', severity: 'High priority', signalCode: 'Zero velocity accelerating', title: 'Coca-Cola Zero 330ml', magnitude: '+22.9%', description: 'Driven primarily by evening demand in Nizami and Gənclik.', affectedLabel: '2 stores', productLabel: 'Coca-Cola Zero 330ml', recommendation: 'Review availability and distribution before weekend peak.', actionType: 'PRODUCT', actionTarget: 'Coca-Cola Zero 330ml', actionLabel: 'Investigate' },
+      { type: 'OPPORTUNITY', severity: 'Growth signal', signalCode: 'Basket opportunity', title: 'Coca-Cola + Doritos', magnitude: '2.3× affinity', description: '184 high-fit baskets did not contain both products.', affectedLabel: '184 baskets', productLabel: 'Coca-Cola + Doritos', recommendation: 'Test a weekend bundle or checkout placement.', scenarioEstimate: '+34 combined baskets', actionType: 'PRODUCT', actionTarget: 'Coca-Cola 500ml', actionLabel: 'Review opportunity' },
+      { type: 'IMPORTANT', severity: 'Needs attention', signalCode: 'Store risk', title: '2 stores lost more than 2.5 penetration points', magnitude: '−2.9 pp avg', description: 'Rahat · 28 May and Bazarstore · Yasamal are declining against the prior period.', affectedLabel: '2 stores', productLabel: 'Network execution', recommendation: 'Review store-level distribution and availability signals.', actionType: 'STORES', actionLabel: 'Review stores' },
     ],
     trend: Array.from({ length: days }, (_, index) => ({
       date: isoDate(days - index - 1).slice(0, 10),
       totalBaskets: Math.round(190 + index * 1.8 + [8, -4, 5, 12, -2, 18, 24][index % 7]),
       cciBaskets: Math.round(51 + index * .9 + [2, -1, 3, 4, 0, 6, 8][index % 7]),
       cciPenetrationPct: Number((27.2 + index * .09 + [0.2, -0.3, 0.1, 0.4][index % 4]).toFixed(1)),
+      previousCciPenetrationPct: Number((26.6 + index * .045 + [0.1, -0.2, 0.05, 0.2][index % 4]).toFixed(1)),
+      event: index === days - 9 ? 'Zero availability review' : index === days - 3 ? 'Weekend display live' : null,
     })),
   }
 }
