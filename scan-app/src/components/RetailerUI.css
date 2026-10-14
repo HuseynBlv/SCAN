@@ -1,0 +1,100 @@
+.retail-card {
+  min-width: 0;
+  border: 1px solid #e7e5e0;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 10px 35px rgba(24, 24, 22, .035);
+}
+
+.retail-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #f0efeb;
+  color: #666862;
+  font-size: .65rem;
+  font-weight: 680;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.retail-badge.is-red { background: #fce8e8; color: #b3131a; }
+.retail-badge.is-positive,
+.retail-badge.is-success { background: #e7f1ec; color: #276b50; }
+.retail-badge.is-warning { background: #f7eddc; color: #966513; }
+.retail-badge.is-dark { background: #222321; color: #fff; }
+
+.retail-metric-card { position: relative; display: flex; flex-direction: column; min-height: 184px; padding: 20px 21px 17px; overflow: hidden; }
+.retail-metric-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #6f7175; font-size: .72rem; font-weight: 620; }
+.retail-metric-card header i { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; background: #f5f4f1; color: #393a37; }
+.retail-metric-value { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.retail-metric-value > strong { color: #151515; font-size: clamp(1.8rem, 2.7vw, 2.45rem); font-weight: 650; line-height: 1; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+.retail-metric-card > small { position: relative; z-index: 1; margin-top: auto; color: #787a76; font-size: .66rem; }
+.retail-metric-card.is-dark { border-color: #191a18; background: #171816; color: #fff; box-shadow: none; }
+.retail-metric-card.is-dark header,
+.retail-metric-card.is-dark > small { color: #aaa9a4; }
+.retail-metric-card.is-dark header i { background: #2c2d2a; color: #fff; }
+.retail-metric-card.is-dark .retail-metric-value > strong { color: #fff; }
+.retail-mini-chart { width: calc(100% + 42px); height: 50px; margin: 10px -21px -3px; overflow: visible; }
+.retail-mini-chart polygon { fill: rgba(244, 0, 9, .075); }
+.retail-mini-chart polyline { fill: none; stroke: #f40009; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.retail-mini-chart.is-light polygon { fill: rgba(255,255,255,.06); }
+.retail-mini-chart.is-light polyline { stroke: #ff4d53; }
+
+.retail-section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.retail-section-header > div:first-child > span { color: #b3131a; font-size: .64rem; font-weight: 720; letter-spacing: .09em; text-transform: uppercase; }
+.retail-section-header h2 { margin: 5px 0 0; font-size: clamp(1.38rem, 2.2vw, 1.8rem); font-weight: 650; line-height: 1.1; letter-spacing: -.045em; }
+.retail-section-header p { margin: 7px 0 0; color: #6f7175; font-size: .75rem; line-height: 1.45; }
+
+.retail-benchmark { display: grid; gap: 9px; }
+.retail-benchmark > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
+.retail-benchmark span { color: #70716d; font-size: .68rem; }
+.retail-benchmark strong { font-size: .76rem; font-variant-numeric: tabular-nums; }
+.retail-benchmark-track { height: 6px; overflow: hidden; border-radius: 999px; background: #ecebe7; }
+.retail-benchmark-track i { display: block; height: 100%; border-radius: inherit; background: #262724; }
+.retail-benchmark-track i.is-positive { background: #3f7b5e; }
+.retail-benchmark-track i.is-warning { background: #bd811d; }
+
+.retail-insight-card,
+.retail-action-module { display: flex; flex-direction: column; padding: 22px; }
+.retail-insight-card header,
+.retail-action-module header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.retail-insight-card header > strong,
+.retail-action-module header > strong { font-size: 1.25rem; letter-spacing: -.04em; }
+.retail-insight-card h3,
+.retail-action-module h3 { margin: 22px 0 8px; font-size: 1.12rem; line-height: 1.22; letter-spacing: -.035em; }
+.retail-insight-card > p,
+.retail-action-module > p { margin: 0; color: #6f7175; font-size: .75rem; line-height: 1.55; }
+.retail-insight-card footer,
+.retail-action-module footer { margin-top: auto; padding-top: 20px; }
+.retail-action-module > small { margin-top: 7px; color: #979892; font-size: .63rem; }
+.retail-action-next { margin-top: 20px; padding: 15px; border-radius: 14px; background: #f6f5f2; }
+.retail-action-next span { color: #9c2a2f; font-size: .62rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.retail-action-next p { margin: 6px 0 0; color: #30312e; font-size: .72rem; line-height: 1.48; }
+
+.retail-activity-item { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 13px 0; border-bottom: 1px solid #eceae5; }
+.retail-activity-item:last-child { border-bottom: 0; }
+.retail-activity-item > i { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 11px; background: #f0efeb; color: #555650; }
+.retail-activity-item > i.is-red { background: #fce8e8; color: #c0161d; }
+.retail-activity-item > i.is-positive { background: #e7f1ec; color: #276b50; }
+.retail-activity-item > i.is-warning { background: #f7eddc; color: #966513; }
+.retail-activity-item div { display: grid; gap: 3px; }
+.retail-activity-item strong { font-size: .72rem; line-height: 1.25; }
+.retail-activity-item span,
+.retail-activity-item time { color: #7a7b76; font-size: .62rem; line-height: 1.35; }
+.retail-activity-item time { white-space: nowrap; }
+
+.retail-intelligence-card { padding: 24px; border-color: #242522; background: #171816; color: #fff; box-shadow: none; }
+.retail-intelligence-card > header { display: flex; align-items: center; gap: 9px; color: #c9c8c2; font-size: .67rem; font-weight: 670; }
+.retail-intelligence-card > header > strong { margin-left: auto; color: #ff696e; font-size: 1.1rem; }
+.retail-intelligence-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 11px; background: #f40009; color: #fff; }
+.retail-intelligence-card h2 { max-width: 520px; margin: 22px 0 9px; font-size: clamp(1.45rem, 2.5vw, 2.05rem); line-height: 1.08; letter-spacing: -.05em; }
+.retail-intelligence-card > p { max-width: 580px; margin: 0; color: #aaa9a4; font-size: .75rem; line-height: 1.55; }
+.retail-intelligence-card footer { margin-top: 22px; }
+
+@media (max-width: 680px) {
+  .retail-card { border-radius: 18px; }
+  .retail-metric-card { min-height: 158px; padding: 17px; }
+  .retail-section-header { align-items: flex-start; flex-direction: column; gap: 12px; }
+}
