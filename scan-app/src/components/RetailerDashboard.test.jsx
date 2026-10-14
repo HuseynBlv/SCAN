@@ -422,10 +422,37 @@ describe('RetailerDashboard', () => {
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Data' })[0])
-    expect(await screen.findByRole('heading', { name: 'Data connection' })).toBeInTheDocument()
-    expect(screen.getByText('54,321')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
     expect(screen.getAllByText('transactions.csv').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'Processing status' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Import POS data' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Recent Imports' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Open secure import/ })).toHaveAttribute('href', '/?portal=connection')
+  })
+
+  it('turns a presentation upload into a compact processing and completion workflow', async () => {
+    const user = userEvent.setup()
+    render(<RetailerDashboard />)
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    await screen.findByText('4 things deserve attention today.')
+    await user.click(screen.getAllByRole('button', { name: 'Data' })[0])
+
+    expect(await screen.findByRole('heading', { name: 'Data' })).toBeInTheDocument()
+    expect(screen.getByText('2,768')).toBeInTheDocument()
+    expect(screen.getAllByText('97.4%').length).toBeGreaterThan(0)
+    expect(screen.getByText('413')).toBeInTheDocument()
+    expect(screen.getByText('nargiz_13_oct.xlsx')).toBeInTheDocument()
+    expect(screen.getByText('Missing barcodes')).toBeInTheDocument()
+    expect(screen.getByText('CCI products')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Upload export/ }))
+    expect(screen.getByRole('heading', { name: 'Turning receipts into store intelligence' })).toBeInTheDocument()
+    expect(screen.getByText('Build baskets')).toBeInTheDocument()
+    expect(await screen.findByText('Import complete', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getAllByText('1,832').length).toBeGreaterThan(0)
+    expect(screen.getByText(/insights updated/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /View new action/ }))
+    expect(await screen.findByRole('heading', { name: 'Actions' })).toBeInTheDocument()
   })
 
   it('answers grounded Ask SCAN questions from connected store data', async () => {

@@ -28,6 +28,14 @@ describe('presentationRetailer', () => {
     expect(overview.home.detectedChanges).toHaveLength(3)
     expect(overview.home.activity).toHaveLength(4)
     expect(overview.home.salesMovement).toHaveLength(14)
+    expect(overview.dataWorkspace).toMatchObject({
+      receipts: 2768,
+      productRecognition: 97.4,
+      mappedProducts: 413,
+      health: 'Healthy',
+    })
+    expect(overview.dataWorkspace.recentImports).toHaveLength(3)
+    expect(overview.dataWorkspace.unmappedProducts).toHaveLength(3)
     expect(overview.sync.errors).toEqual([])
     expect(engagement.offers.available).toHaveLength(3)
     expect(engagement.offers.completed).toHaveLength(1)
