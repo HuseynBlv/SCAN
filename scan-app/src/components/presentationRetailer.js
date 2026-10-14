@@ -50,6 +50,8 @@ export function presentationOverview(period = 'LAST_30_DAYS') {
   refreshedAt.setHours(8, 36, 0, 0)
   const now = refreshedAt.toISOString()
   const periodStart = new Date(Date.now() - days * 86400000).toISOString()
+  const previousImport = new Date(refreshedAt.getTime() - 86400000).toISOString()
+  const olderImport = new Date(refreshedAt.getTime() - (2 * 86400000)).toISOString()
 
   const trend = dailySales(days)
   const homeMovement = trend.slice(-14).map((day, index) => ({
@@ -72,7 +74,7 @@ export function presentationOverview(period = 'LAST_30_DAYS') {
     cciBaskets: Math.round(1356 * scale),
     cciPenetrationPercentage: 49,
     currency: 'AZN',
-    mappedLinePercentage: 99.8,
+    mappedLinePercentage: 97.4,
     topProducts: PRODUCTS.map(([name, category, basketCount, quantity, revenue]) => ({
       name,
       category,
@@ -120,6 +122,33 @@ export function presentationOverview(period = 'LAST_30_DAYS') {
         { time: '23:35', title: 'Weekend opportunity updated', detail: 'Coca-Cola + Doritos' },
       ],
       salesMovement: homeMovement,
+    },
+    dataWorkspace: {
+      receipts: 2768,
+      productRecognition: 97.4,
+      mappedProducts: 413,
+      health: 'Healthy',
+      healthItems: [
+        { label: 'Duplicate receipts', value: 0, tone: 'positive' },
+        { label: 'Missing barcodes', value: 11, tone: 'warning' },
+        { label: 'Unknown products', value: 7, tone: 'warning' },
+        { label: 'Invalid rows', value: 2, tone: 'red' },
+      ],
+      recentImports: [
+        { date: now, receipts: 946, lines: 1832, mapped: 97.4, status: 'COMPLETED' },
+        { date: previousImport, receipts: 918, lines: 1764, mapped: 97.1, status: 'COMPLETED' },
+        { date: olderImport, receipts: 904, lines: 1718, mapped: 96.8, status: 'COMPLETED' },
+      ],
+      recognitionGroups: [
+        { label: 'CCI products', value: 100, tone: 'red' },
+        { label: 'Local products', value: 94, tone: 'dark' },
+        { label: 'Unknown', value: 6, tone: 'neutral' },
+      ],
+      unmappedProducts: [
+        { code: 'LOCAL-4831', name: 'Ayran 200ml' },
+        { code: 'LOCAL-2904', name: 'Fresh lavash' },
+        { code: 'UNKNOWN-771', name: 'Snack mix 80g' },
+      ],
     },
     insights: [
       { fact: 'Zero-sugar beverages grew 18% versus the previous period.', interpretation: 'Demand is shifting toward low-sugar choices.', recommendedAction: 'Keep cold availability high before the evening peak.' },

@@ -38,7 +38,6 @@ import {
   WorkspaceShell,
 } from './WorkspaceUI'
 import {
-  ActivityItem,
   Badge,
   BenchmarkIndicator,
   Card,
@@ -75,6 +74,15 @@ const OPPORTUNITY_TABS = [
   { id: 'basket', label: 'Basket Growth' },
   { id: 'cci', label: 'CCI Offers' },
   { id: 'completed', label: 'Completed' },
+]
+
+const DATA_IMPORT_STEPS = [
+  'Read file',
+  'Validate receipts',
+  'Match products',
+  'Build baskets',
+  'Calculate insights',
+  'Update actions',
 ]
 
 const OFFER_TYPE_META = {
@@ -755,32 +763,101 @@ function Insights({ data, loading, onPeriodChange, period }) {
   )
 }
 
-function Data({ data }) {
+function Data({ data, onNavigate, presentation }) {
   const healthy = data.sync.state === 'COMPLETED' && !data.sync.errors.length
+  const workspace = data.dataWorkspace || {}
+  const [selectedFile, setSelectedFile] = useState(presentation ? { name: 'nargiz_13_oct.xlsx' } : null)
+  const [importState, setImportState] = useState('idle')
+  const [activeStep, setActiveStep] = useState(-1)
+  const inputRef = useRef(null)
+  const receipts = workspace.receipts ?? data.totalBaskets
+  const recognition = workspace.productRecognition ?? data.mappedLinePercentage
+  const mappedProducts = workspace.mappedProducts
+  const health = workspace.health || (healthy ? 'Healthy' : 'Needs attention')
+  const healthItems = workspace.healthItems || [
+    { label: 'Duplicate receipts', value: 0, tone: 'positive' },
+    { label: 'Missing barcodes', value: data.sync.unresolvedProducts, tone: data.sync.unresolvedProducts ? 'warning' : 'positive' },
+    { label: 'Unknown products', value: data.sync.unresolvedProducts, tone: data.sync.unresolvedProducts ? 'warning' : 'positive' },
+    { label: 'Invalid rows', value: data.sync.errors.length, tone: data.sync.errors.length ? 'red' : 'positive' },
+  ]
+  const recentImports = workspace.recentImports || [{ date: data.sync.completedAt, receipts: data.sync.importedReceipts, lines: data.sync.importedLines, mapped: data.mappedLinePercentage, status: data.sync.state }]
+  const recognitionGroups = workspace.recognitionGroups || [
+    { label: 'Recognized products', value: data.mappedLinePercentage, tone: 'red' },
+    { label: 'Unrecognized', value: 100 - data.mappedLinePercentage, tone: 'neutral' },
+  ]
+
+  useEffect(() => {
+    if (importState !== 'processing') return undefined
+    if (activeStep >= DATA_IMPORT_STEPS.length - 1) {
+      const completed = window.setTimeout(() => setImportState('complete'), 360)
+      return () => window.clearTimeout(completed)
+    }
+    const nextStep = window.setTimeout(() => setActiveStep((current) => current + 1), 360)
+    return () => window.clearTimeout(nextStep)
+  }, [activeStep, importState])
+
+  function chooseFile(file) {
+    if (!file || !/\.(csv|xlsx?)$/i.test(file.name)) return
+    setSelectedFile(file)
+    setImportState('idle')
+    setActiveStep(-1)
+  }
+
+  function startImport() {
+    if (!selectedFile || !presentation) return
+    setImportState('processing')
+    setActiveStep(0)
+  }
+
   return (
     <div className="scan-page-stack retailer-data-page">
-      <PageIntro description="See exactly what SCAN received, processed, and can use." eyebrow="Data" title="Data connection" />
-      <div className="retailer-commerce-grid retailer-data-summary">
-        <MetricCard change={healthy ? 'Healthy' : 'Attention'} changeTone={healthy ? 'positive' : 'warning'} icon="sync" label="Connection" note={data.sync.filename || 'No source file'} value={healthy ? 'Active' : humanize(data.sync.state)} />
-        <MetricCard icon="basket" label="Receipts processed" note="Lifetime validated transactions" tone="dark" value={integer.format(data.lifetimeTransactionsProcessed)} />
-        <MetricCard change="Usable" changeTone="positive" icon="mapping" label="Product mapping" note="Imported lines recognized" value={`${decimal.format(data.mappedLinePercentage)}%`} />
+      <PageIntro description="The transaction data powering this store’s intelligence." eyebrow="Data operations" title="Data" />
+      <div className="retailer-data-kpis">
+        <Card as="article" className="retailer-data-kpi"><header><span>Receipts</span><i><ScanIcon name="basket" size={16} /></i></header><strong>{integer.format(receipts)}</strong><div className="retailer-data-ticks" aria-hidden="true">{[42, 58, 51, 74, 68, 86, 92].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div><small>Validated transactions</small></Card>
+        <Card as="article" className="retailer-data-kpi"><header><span>Product recognition</span><i><ScanIcon name="mapping" size={16} /></i></header><strong>{decimal.format(recognition)}%</strong><div className="retailer-data-meter" aria-hidden="true"><span style={{ width: `${recognition}%` }} /></div><small>Lines ready for analysis</small></Card>
+        <Card as="article" className="retailer-data-kpi"><header><span>Mapped products</span><i><ScanIcon name="products" size={16} /></i></header><strong>{mappedProducts == null ? '—' : integer.format(mappedProducts)}</strong><div className="retailer-data-dotline" aria-hidden="true"><span /><span /><span /><span /><span /></div><small>Recognized catalog items</small></Card>
+        <Card as="article" className="retailer-data-kpi is-health"><header><span>Data health</span><i><ScanIcon name="shield" size={16} /></i></header><strong>{health}</strong><div className="retailer-data-healthline"><span /><small>{healthy ? 'Ready for intelligence' : 'Review required'}</small></div></Card>
       </div>
-      <div className="retailer-commerce-grid retailer-data-detail-row">
-        <Card className="retailer-data-timeline">
-          <SectionHeader action={<Badge tone={healthy ? 'positive' : 'warning'}>{healthy ? 'Up to date' : 'Needs attention'}</Badge>} description="Latest checkout export" title="Processing status" />
-          <ol>
-            <ActivityItem detail={data.sync.filename || 'Checkout export'} icon="file" time={formatDateTime(data.sync.receivedAt)} title="File received" />
-            <ActivityItem detail={`${integer.format(data.sync.importedReceipts)} receipts · ${integer.format(data.sync.importedLines)} lines`} icon="check" time={formatDateTime(data.sync.completedAt)} title="Validation completed" tone={healthy ? 'positive' : 'warning'} />
-            <ActivityItem detail={`${decimal.format(data.mappedLinePercentage)}% mapped to products`} icon="mapping" time="Current" title="Data ready for intelligence" tone="red" />
-          </ol>
+
+      <div className="retailer-data-import-row">
+        <Card className={`retailer-data-import is-${importState}`}>
+          {importState === 'idle' ? <>
+            <SectionHeader action={<Badge tone="neutral">CSV · XLSX</Badge>} description={presentation ? 'Add a checkout export without leaving the workspace' : 'Transaction files are validated in the secure import workspace'} title="Import POS data" />
+            {presentation ? <>
+              <input accept=".csv,.xls,.xlsx" className="sr-only" onChange={(event) => chooseFile(event.target.files?.[0])} ref={inputRef} type="file" />
+              <button className="retailer-data-dropzone" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); chooseFile(event.dataTransfer.files?.[0]) }} type="button">
+                <i><ScanIcon name="upload" size={22} /></i><span><strong>Drop a POS export here</strong><small>CSV or XLSX · maximum 25 MB</small></span><b>Choose file</b>
+              </button>
+            </> : <a className="retailer-data-dropzone" href="/?portal=connection"><i><ScanIcon name="shield" size={22} /></i><span><strong>Open secure POS import</strong><small>Validate structure and totals before saving receipts</small></span><b>Continue</b></a>}
+            <div className="retailer-data-recent-file"><span><ScanIcon name="file" size={17} /><span><small>Recent file</small><strong>{selectedFile?.name || data.sync.filename || 'No file selected'}</strong></span></span><Badge tone={selectedFile ? 'positive' : 'neutral'}>{selectedFile ? 'Ready' : 'Waiting'}</Badge></div>
+            {presentation ? <button className="scan-button scan-button-dark retailer-data-upload-button" disabled={!selectedFile} onClick={startImport} type="button">Upload export <ScanIcon name="chevron" size={16} /></button> : <a className="scan-button scan-button-dark retailer-data-upload-button" href="/?portal=connection">Open secure import <ScanIcon name="chevron" size={16} /></a>}
+          </> : null}
+          {importState === 'processing' ? <div className="retailer-data-processing" aria-live="polite">
+            <header><div><span>Processing {selectedFile?.name}</span><h2>Turning receipts into store intelligence</h2></div><i aria-hidden="true" /></header>
+            <ol>{DATA_IMPORT_STEPS.map((step, index) => { const state = index < activeStep ? 'complete' : index === activeStep ? 'active' : 'pending'; return <li className={`is-${state}`} key={step}><span>{state === 'complete' ? <ScanIcon name="check" size={14} /> : state === 'active' ? <i /> : '○'}</span><strong>{step}</strong></li> })}</ol>
+          </div> : null}
+          {importState === 'complete' ? <div className="retailer-data-complete" aria-live="polite">
+            <header><i><ScanIcon name="check" size={20} /></i><div><span>Import complete</span><h2>{selectedFile?.name}</h2></div></header>
+            <dl><div><dd>946</dd><dt>Receipts</dt></div><div><dd>1,832</dd><dt>Product lines</dt></div><div><dd>97.4%</dd><dt>Mapped</dt></div></dl>
+            <div className="retailer-data-results"><span><b>3</b> insights updated</span><span><b>1</b> new action created</span></div>
+            <button className="scan-button scan-button-dark" onClick={() => onNavigate('actions')} type="button">View new action <ScanIcon name="chevron" size={16} /></button>
+          </div> : null}
         </Card>
-        <Card className="retailer-data-quality">
-          <SectionHeader description="The evidence behind recommendations" title="Coverage" />
-          <div className="retailer-data-health-score"><strong>{decimal.format(data.mappedLinePercentage)}%</strong><span>analysis-ready data</span></div>
-          <BenchmarkIndicator benchmark={data.mappedLinePercentage} label="Product mapping" tone="positive" value={`${decimal.format(data.mappedLinePercentage)}%`} />
-          <BenchmarkIndicator benchmark={Math.min(data.totalBaskets / 30, 100)} label="Transaction depth" value={integer.format(data.totalBaskets)} />
-          <p>SCAN uses only validated receipts and recognized products. Missing or unresolved records are excluded from recommendations.</p>
+        <Card className="retailer-data-health-card">
+          <SectionHeader action={<Badge tone={healthy ? 'positive' : 'warning'}>{health}</Badge>} description="Checks from the latest validated export" title="Data Health" />
+          <ul>{healthItems.map((item) => <li key={item.label}><span><i className={`is-${item.tone}`} />{item.label}</span><strong>{integer.format(item.value)}</strong></li>)}</ul>
+          <p><ScanIcon name="shield" size={16} />Only validated receipts and recognized products power recommendations.</p>
         </Card>
+      </div>
+
+      <Card className="retailer-data-imports-card">
+        <SectionHeader action={<button className="scan-text-link" type="button">View all</button>} description="Validated files added to this store" title="Recent Imports" />
+        <div className="retailer-data-table-wrap"><table><thead><tr><th>Date</th><th>Receipts</th><th>Lines</th><th>Mapped</th><th>Status</th></tr></thead><tbody>{recentImports.map((item, index) => <tr key={`${item.date}-${index}`}><td data-label="Date">{formatDateTime(item.date)}</td><td data-label="Receipts">{integer.format(item.receipts)}</td><td data-label="Lines">{integer.format(item.lines)}</td><td data-label="Mapped">{decimal.format(item.mapped)}%</td><td data-label="Status"><Badge tone={item.status === 'COMPLETED' ? 'positive' : 'warning'}>{humanize(item.status)}</Badge></td></tr>)}</tbody></table></div>
+      </Card>
+
+      <div className="retailer-data-recognition-row">
+        <Card className="retailer-data-recognition-card"><SectionHeader description="Recognition across imported product lines" title="Product Recognition" /><div>{recognitionGroups.map((item) => <div className="retailer-data-recognition-bar" key={item.label}><header><span>{item.label}</span><strong>{decimal.format(item.value)}%</strong></header><div><span className={`is-${item.tone}`} style={{ width: `${item.value}%` }} /></div></div>)}</div></Card>
+        <Card className="retailer-data-unmapped-card"><SectionHeader action={<Badge tone="warning">{workspace.unmappedProducts?.length || data.sync.unresolvedProducts}</Badge>} description="Source items that still need a catalog match" title="Unmapped products" />{workspace.unmappedProducts?.length ? <ul>{workspace.unmappedProducts.map((product) => <li key={product.code}><span><strong>{product.name}</strong><small>{product.code}</small></span><button aria-label={`Review ${product.name}`} type="button"><ScanIcon name="chevron" size={15} /></button></li>)}</ul> : <EmptyState compact title="Everything is mapped">No unresolved products in the latest export.</EmptyState>}</Card>
       </div>
     </div>
   )
@@ -835,10 +912,10 @@ function AskScan({ data, engagement }) {
   )
 }
 
-function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onPeriodChange, period, activatingKey, justActivatedKey }) {
+function Page({ activePage, data, engagement, engagementLoading, loading, onActivate, onNavigate, onPeriodChange, period, activatingKey, justActivatedKey, presentation }) {
   if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
   if (activePage === 'insights') return <Insights data={data} loading={loading} onPeriodChange={onPeriodChange} period={period} />
-  if (activePage === 'data') return <Data data={data} />
+  if (activePage === 'data') return <Data data={data} onNavigate={onNavigate} presentation={presentation} />
   if (engagementLoading || !engagement) return <LoadingState title="Loading your SCAN benefits…" description="Preparing offers, actions, and partner status." />
   if (activePage === 'opportunities') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
   if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} workspace={engagement.actionWorkspace} />
@@ -1012,6 +1089,7 @@ export default function RetailerDashboard() {
           onNavigate={navigate}
           onPeriodChange={changePeriod}
           period={period}
+          presentation={credentials.presentation}
         />
       </WorkspaceShell>
     </div>

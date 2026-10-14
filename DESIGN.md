@@ -201,6 +201,18 @@
 4. Basket Growth, CCI Offers, and Completed tabs separate opportunity mechanics. Completed items
    become compact outcome rows rather than retaining the full promotional-card treatment.
 
+### Retailer Data Operations
+
+1. Data opens with four compact trust indicators: receipt coverage, product recognition, mapped
+   catalog size, and an explicit health state.
+2. The import module stays inside the operating dashboard. Presentation uploads demonstrate the
+   compact processing sequence, while live accounts hand off to the authenticated import workflow
+   that performs real preview, reconciliation, and persistence.
+3. Health exceptions, recent imports, recognition coverage, and unresolved products remain visible
+   beside the import flow so an operator can understand both freshness and quality at a glance.
+4. Processing replaces only the import card and never blocks the rest of the workspace. Completion
+   reports the resulting receipts, lines, mapping coverage, updated insights, and created actions.
+
 Do not display a metric merely to fill a card. Each visible value must support a likely user
 decision or help establish data trust.
 
