@@ -390,6 +390,21 @@ function MyWork({
 
   const itemCount = needsAttention.length + inProgress.length + openTasks.length
 
+  if (embedded) {
+    return (
+      <section className="cci-overview-work-queue">
+        <header className="cci-section-heading"><div><span className="scan-eyebrow">Investigations &amp; action queue</span><h2>{itemCount ? `${itemCount} items in motion` : 'Everything is caught up'}</h2></div><button className="scan-button scan-button-light" onClick={() => onNavigate('investigations')} type="button">Open investigations <ScanIcon name="chevron" size={15} /></button></header>
+        {intelligenceError ? <div className="scan-inline-notice scan-inline-error" role="alert">{intelligenceError}</div> : null}
+        <div className="cci-overview-queue-grid">
+          {isFieldSales ? <section className="scan-panel"><header className="scan-panel-header"><div><h3>Field checks waiting on you</h3><p>Store validation assigned to the field team.</p></div><StatusBadge tone="warning">{openTasks.length}</StatusBadge></header><FieldChecksList onNavigate={onNavigate} openTasks={openTasks} /></section> : null}
+          <section className="scan-panel"><header className="scan-panel-header"><div><h3>Action queue</h3><p>Detected declines without an active investigation.</p></div><StatusBadge tone={needsAttention.length ? 'warning' : 'success'}>{needsAttention.length}</StatusBadge></header>{intelligenceLoading ? <p className="cci-work-loading">Scanning for changes…</p> : needsAttention.length ? <div className="cci-work-list">{needsAttention.slice(0, 3).map((mover) => <WorkListCard badgeLabel={`${mover.basketChangePct >= 0 ? '+' : ''}${decimal.format(mover.basketChangePct)}%`} badgeTone="warning" key={mover.productName} meta={mover.category || 'CCI product'} onOpen={() => handleInvestigate(mover.productName)} title={`${mover.productName} is ${mover.basketChangePct < 0 ? 'down' : 'up'} ${decimal.format(Math.abs(mover.basketChangePct))}%`} />)}</div> : <EmptyState compact title="No unassigned changes">Every material change is already being handled.</EmptyState>}</section>
+          <section className="scan-panel"><header className="scan-panel-header"><div><h3>Recent investigations</h3><p>Commercial questions currently being worked.</p></div><StatusBadge tone="neutral">{inProgress.length}</StatusBadge></header>{inProgress.length ? <div className="cci-work-list">{inProgress.slice(0, 4).map((item) => <WorkListCard badgeLabel={humanize(item.status)} badgeTone={statusTone(item.status)} key={item.id} meta={`${item.hypotheses.length} hypotheses · ${item.notes.length} notes`} onOpen={() => onOpenInvestigation(item.id)} title={item.title} />)}</div> : <EmptyState compact title="No active investigations">Start from a commercial signal when a change needs explanation.</EmptyState>}</section>
+        </div>
+        <WatchingSection onFollow={onFollow} onUnfollow={onUnfollow} productOptions={productOptions} watchlist={watchlist} watchlistChanges={watchlistChanges} />
+      </section>
+    )
+  }
+
   return (
     <div className={embedded ? 'scan-page-stack cci-my-work cci-my-work-embedded' : 'scan-page-stack cci-my-work'}>
       {embedded ? (
@@ -1183,19 +1198,24 @@ function NetworkKpiRow({ overview, stores = [], trend = [] }) {
   if (!overview) return null
   const reporting = stores.filter((store) => store.status !== 'NOT_REPORTING').length
   const coverage = overview.reportingCoveragePct ?? (stores.length ? (reporting / stores.length) * 100 : null)
+  const attention = stores.filter((store) => store.status === 'NEEDS_ATTENTION').length
+  const improving = stores.filter((store) => store.status === 'IMPROVING').length
+  const stable = stores.filter((store) => store.status === 'STABLE').length
   const penetrationValues = trend.map((point) => point.cciPenetrationPct)
   const basketValues = trend.map((point) => point.cciBaskets)
   const items = [
     { label: 'CCI Penetration', value: `${decimal.format(overview.cciPenetrationPct)}%`, note: changeNote(overview.penetrationPointChange, ' pp'), values: penetrationValues, tone: 'red' },
     { label: 'CCI Baskets', value: integer.format(overview.cciBaskets), note: overview.cciBasketChangePct === undefined ? `${integer.format(overview.totalBaskets)} total baskets` : `${overview.cciBasketChangePct >= 0 ? '+' : ''}${decimal.format(overview.cciBasketChangePct)}%`, values: basketValues, tone: 'dark' },
-    { label: 'Stores Reporting', value: integer.format(overview.storesReporting), note: coverage === null ? `Last ${overview.periodDays} days` : `${decimal.format(coverage)}% coverage`, values: stores.map((store) => store.recentBaskets), tone: 'green' },
-    { label: 'Product Mapping', value: `${decimal.format(overview.dataCoveragePct)}%`, note: overview.dataCoveragePct < 90 ? 'Review needed' : 'Analysis ready', values: [overview.dataCoveragePct], tone: 'amber' },
+    { label: 'Stores Reporting', value: `${integer.format(reporting)} / ${integer.format(stores.length)}`, note: coverage === null ? `Last ${overview.periodDays} days` : `${decimal.format(coverage)}% coverage`, storeStates: stores.map((store) => store.status) },
+    { label: 'Needs Attention', value: `${integer.format(attention)} stores`, note: `${improving} improving · ${stable} stable`, statusStates: { attention, improving, stable } },
   ]
   return (
     <section aria-label="Network KPIs" className="cci-network-kpis">
       {items.map((item) => (
         <KpiCard change={item.note} key={item.label} label={item.label} tone={item.note.startsWith('+') ? 'positive' : 'neutral'} value={item.value}>
-          <MiniBars tone={item.tone} values={item.values} />
+          {item.storeStates ? <div aria-label={`${reporting} reporting stores`} className="cci-store-dots">{item.storeStates.map((status, index) => <i className={`is-${status.toLowerCase().replaceAll('_', '-')}`} key={index} />)}</div> : null}
+          {item.statusStates ? <div aria-label={`${attention} need attention, ${improving} improving, ${stable} stable`} className="cci-status-segments"><i className="is-attention" style={{ flex: Math.max(1, attention) }} /><i className="is-improving" style={{ flex: Math.max(1, improving) }} /><i className="is-stable" style={{ flex: Math.max(1, stable) }} /></div> : null}
+          {item.values ? <MiniBars tone={item.tone} values={item.values} /> : null}
         </KpiCard>
       ))}
     </section>
@@ -1205,12 +1225,26 @@ function NetworkKpiRow({ overview, stores = [], trend = [] }) {
 function CommandBrief({ brief, loading, onAction }) {
   return (
     <section className="scan-panel cci-command-brief">
-      <header className="scan-panel-header"><div><h3>SCAN Commercial Brief</h3><p>{loading ? 'Recalculating commercial signals…' : `${brief.length} things deserve attention`}</p></div></header>
+      <header className="scan-panel-header"><div><h3>SCAN Brief</h3><p>{loading ? 'Recalculating commercial signals…' : `${brief.length} things deserve attention`}</p></div></header>
       {!loading && brief.length ? (
         <div className="cci-command-signal-list">
           {brief.slice(0, 3).map((item, index) => <SignalCard index={index} key={`${item.type}-${item.title}-${index}`} onOpen={onAction} signal={item} />)}
         </div>
       ) : loading ? null : <EmptyState compact title="No material changes">The network is operating within its recent baseline.</EmptyState>}
+    </section>
+  )
+}
+
+function DataHealthSummary({ overview, stores }) {
+  const missing = stores.filter((store) => store.status === 'NOT_REPORTING').length
+  const mapping = overview?.dataCoveragePct || 0
+  return (
+    <section className="scan-panel cci-overview-data-health">
+      <header className="scan-panel-header"><div><h3>Data Health</h3><p>Coverage behind the current commercial view.</p></div><StatusBadge tone={mapping >= 90 && missing === 0 ? 'success' : 'warning'}>{mapping >= 90 && missing === 0 ? 'Analysis ready' : 'Review needed'}</StatusBadge></header>
+      <div><span>Product mapping</span><strong>{decimal.format(mapping)}%</strong></div>
+      <div><span>Stores not reporting</span><strong>{missing}</strong></div>
+      <div><span>Last recalculated</span><strong>{formatRelativeTime(overview?.generatedAt)}</strong></div>
+      <div className="cci-mapping-progress"><i style={{ width: `${Math.min(100, mapping)}%` }} /></div>
     </section>
   )
 }
@@ -1235,11 +1269,33 @@ function NetworkActivity({ overview, brief, stores }) {
   )
 }
 
-const MOVER_TABS = [
-  { value: 'products', label: 'Products' },
-  { value: 'stores', label: 'Stores' },
-  { value: 'categories', label: 'Categories' },
-]
+function NetworkPulse({ stores, products, brief }) {
+  const attention = stores.filter((store) => store.status === 'NEEDS_ATTENTION')
+  const improving = stores.filter((store) => store.status === 'IMPROVING')
+  const accelerating = products.filter((product) => product.basketChangePct > 5)
+  const declining = products.filter((product) => product.basketChangePct < -5)
+  const positive = [...products].sort((a, b) => b.basketChangePct - a.basketChangePct)[0]
+  const negative = [...stores].sort((a, b) => a.penetrationPointChange - b.penetrationPointChange)[0]
+  const opportunity = brief.find((item) => item.type === 'OPPORTUNITY')
+  const stats = [
+    ['Stores needing attention', attention.length, 'warning'],
+    ['Improving strongly', improving.length, 'success'],
+    ['Accelerating products', accelerating.length, 'success'],
+    ['Declining products', declining.length, 'warning'],
+    ['High-confidence opportunities', opportunity ? 1 : 0, 'neutral'],
+  ]
+  return (
+    <section className="scan-panel cci-network-pulse">
+      <header className="scan-panel-header"><div><h3>Network Pulse</h3><p>What deserves a commercial response now.</p></div><StatusBadge tone={attention.length ? 'warning' : 'success'}>{attention.length ? 'Watch' : 'Healthy'}</StatusBadge></header>
+      <div className="cci-pulse-stats">{stats.map(([label, value, tone]) => <div key={label}><span>{label}</span><StatusBadge tone={tone}>{value}</StatusBadge></div>)}</div>
+      <div className="cci-pulse-highlights">
+        <div><small>Biggest positive move</small><strong>{positive?.productName || 'No material move'}</strong>{positive ? <b className="is-up">+{decimal.format(positive.basketChangePct)}%</b> : null}</div>
+        <div><small>Biggest negative move</small><strong>{negative?.externalStoreId || 'No declining store'}</strong>{negative ? <b className="is-down">{decimal.format(negative.penetrationPointChange)} pp</b> : null}</div>
+        <div><small>Top opportunity</small><strong>{opportunity?.title || 'No opportunity above threshold'}</strong>{opportunity?.magnitude ? <b>{opportunity.magnitude}</b> : null}</div>
+      </div>
+    </section>
+  )
+}
 
 function MoverRow({ label, meta, changePct, priorValue, recentValue }) {
   const up = changePct >= 0
@@ -1255,19 +1311,16 @@ function MoverRow({ label, meta, changePct, priorValue, recentValue }) {
   )
 }
 
-function BiggestMovers({ productMovers, storeMovers, categoryMovers, onOpenProduct }) {
-  const [tab, setTab] = useState('products')
-  const rows = tab === 'products'
-    ? productMovers.slice(0, 6).map((item) => ({ key: item.productName, label: item.productName, meta: item.category, changePct: item.basketChangePct, priorValue: item.priorBaskets, recentValue: item.recentBaskets, onOpen: () => onOpenProduct(item.productName) }))
-    : tab === 'stores'
-      ? storeMovers.slice(0, 6).map((item) => ({ key: storeKey(item), label: item.externalStoreId, meta: `${item.retailerCode} · store`, changePct: item.penetrationPointChange, priorValue: item.recentPenetrationPct - item.penetrationPointChange, recentValue: item.recentPenetrationPct, onOpen: null }))
-      : categoryMovers.slice(0, 6).map((item) => ({ key: item.category, label: item.category, meta: null, changePct: item.basketChangePct, priorValue: item.priorBaskets, recentValue: item.recentBaskets, onOpen: null }))
+function BiggestMovers({ productMovers, onOpenProduct, onNavigate }) {
+  const rows = [...productMovers]
+    .sort((a, b) => Math.abs(b.basketChangePct) - Math.abs(a.basketChangePct))
+    .slice(0, 5)
+    .map((item) => ({ key: item.productName, label: item.productName, meta: item.category, changePct: item.basketChangePct, priorValue: item.priorBaskets, recentValue: item.recentBaskets, onOpen: () => onOpenProduct(item.productName) }))
 
   return (
     <section className="scan-panel cci-biggest-movers">
       <header className="scan-panel-header">
-        <div><h3>Biggest movers</h3><p>Largest real changes vs. the previous period.</p></div>
-        <SegmentedControl label="Mover type" onChange={setTab} options={MOVER_TABS} value={tab} />
+        <div><h3>Top Product Movers</h3><p>Largest real basket changes vs. the previous period.</p></div>
       </header>
       {rows.length ? (
         <div className="cci-mover-list">
@@ -1278,6 +1331,18 @@ function BiggestMovers({ productMovers, storeMovers, categoryMovers, onOpenProdu
           ) : <div key={row.key}><MoverRow changePct={row.changePct} label={row.label} meta={row.meta} priorValue={row.priorValue} recentValue={row.recentValue} /></div>))}
         </div>
       ) : <EmptyState compact title="No significant movers">Nothing crossed the meaningful-change threshold this period.</EmptyState>}
+      <button className="scan-button scan-button-light cci-card-cta" onClick={() => onNavigate('products')} type="button">View all products <ScanIcon name="chevron" size={15} /></button>
+    </section>
+  )
+}
+
+function StorePerformanceSnapshot({ stores, onOpenStore, onNavigate }) {
+  const ranked = [...stores].sort((a, b) => b.recentPenetrationPct - a.recentPenetrationPct).slice(0, 5)
+  return (
+    <section className="scan-panel cci-store-snapshot">
+      <header className="scan-panel-header"><div><h3>Store Performance Snapshot</h3><p>Penetration, movement, and current commercial status.</p></div></header>
+      {ranked.length ? <div className="cci-store-ranking">{ranked.map((store, index) => <button key={storeKey(store)} onClick={() => onOpenStore(store)} type="button"><span className="cci-ranking-index">{String(index + 1).padStart(2, '0')}</span><span><strong>{store.externalStoreId}</strong><small>{storeStatusLabel(store.status)}</small></span><b>{decimal.format(store.recentPenetrationPct)}%</b><em className={store.penetrationPointChange >= 0 ? 'is-up' : 'is-down'}>{store.penetrationPointChange >= 0 ? '+' : ''}{decimal.format(store.penetrationPointChange)} pp</em></button>)}</div> : <EmptyState compact title="No stores reporting">Store rankings appear when connected data is available.</EmptyState>}
+      <button className="scan-button scan-button-light cci-card-cta" onClick={() => onNavigate('stores')} type="button">View all stores <ScanIcon name="chevron" size={15} /></button>
     </section>
   )
 }
@@ -1304,9 +1369,10 @@ function TrendChart({ trend, loading, error, overview }) {
     <TrendCard
       action={<SegmentedControl label="Trend metric" onChange={setMetric} options={TREND_METRICS} value={metric} />}
       className="cci-network-performance"
-      description="Current network movement with prior-period context and commercial events."
-      title="CCI Penetration"
+      description="Current movement with prior-period context and commercial events."
+      title="Network Performance"
     >
+      <div className="cci-chart-summary"><span>{metric === 'penetration' ? 'CCI Penetration' : 'CCI Baskets'}</span><strong>{metric === 'penetration' ? `${decimal.format(overview?.cciPenetrationPct || 0)}%` : integer.format(overview?.cciBaskets || 0)}</strong><small className={(metric === 'penetration' ? overview?.penetrationPointChange : overview?.cciBasketChangePct) >= 0 ? 'is-up' : 'is-down'}>{metric === 'penetration' ? changeNote(overview?.penetrationPointChange, ' pp') : changeNote(overview?.cciBasketChangePct, '%')}</small></div>
       {loading ? <p className="cci-work-loading">Loading trend…</p> : error ? (
         <div className="scan-inline-notice scan-inline-error" role="alert">{error}</div>
       ) : data.length ? (
@@ -1329,17 +1395,19 @@ function TrendChart({ trend, loading, error, overview }) {
   )
 }
 
-function OverviewOpportunity({ opportunity, onAction }) {
+function OverviewOpportunity({ opportunity, onAction, onAskAbout, onNavigate }) {
+  const strongestStores = opportunity?.strongestStores || []
   return (
     <section className="scan-panel cci-overview-opportunity">
-      <header><div><span className="scan-eyebrow">Top opportunity</span><h3>{opportunity?.title || 'No opportunity above threshold'}</h3></div><StatusBadge tone="success">Scenario</StatusBadge></header>
+      <header><div><span className="scan-eyebrow">Top Commercial Opportunity</span><h3>{opportunity?.title || 'No opportunity above threshold'}</h3></div><StatusBadge tone="success">Scenario</StatusBadge></header>
       {opportunity ? <>
         <div className="cci-opportunity-metrics">
           <div><strong>{opportunity.magnitude || 'Detected'}</strong><span>Product affinity</span></div>
           <div><strong>{opportunity.affectedLabel || 'Network-wide'}</strong><span>Missed high-fit baskets</span></div>
         </div>
-        <div className="cci-scenario-estimate"><span>Estimated opportunity</span><strong>{opportunity.scenarioEstimate || 'Build a test to estimate lift'}</strong><small>Scenario estimate · validate with a controlled activation</small></div>
-        <button className="scan-button scan-button-dark" onClick={() => onAction(opportunity)} type="button">Build test <ScanIcon name="chevron" size={16} /></button>
+        <div className="cci-opportunity-context"><div><span>Strongest stores</span><strong>{strongestStores.join(' · ') || 'Not isolated yet'}</strong></div><div><span>Strongest window</span><strong>{opportunity.strongestWindow || 'Window analysis pending'}</strong></div></div>
+        <div className="cci-scenario-estimate"><span>Recommendation</span><strong>{opportunity.recommendation}</strong><small>{opportunity.scenarioEstimate ? `${opportunity.scenarioEstimate} scenario estimate · validate with a controlled activation` : 'Validate with a controlled activation'}</small></div>
+        <div className="cci-opportunity-actions"><button className="scan-button scan-button-dark" onClick={() => onNavigate('opportunities')} type="button">Build test <ScanIcon name="chevron" size={16} /></button><button className="scan-button scan-button-light" onClick={() => onAction(opportunity)} type="button">Review evidence</button><button className="scan-button scan-button-light" onClick={() => onAskAbout(opportunity.actionTarget)} type="button"><ScanIcon name="ask" size={15} />Ask SCAN</button></div>
       </> : <p>SCAN will surface a buildable commercial test when the evidence clears the opportunity threshold.</p>}
     </section>
   )
@@ -1349,22 +1417,17 @@ function AttentionStores({ stores, onOpenStore, onNavigate }) {
   const attention = stores.filter((store) => store.status === 'NEEDS_ATTENTION').sort((a, b) => a.penetrationPointChange - b.penetrationPointChange).slice(0, 3)
   return (
     <section className="scan-panel cci-attention-stores">
-      <header className="scan-panel-header"><div><h3>Stores needing attention</h3><p>Largest penetration declines</p></div><StatusBadge tone="warning">{attention.length} flagged</StatusBadge></header>
-      {attention.length ? <div>{attention.map((store) => <button key={storeKey(store)} onClick={() => onOpenStore(store)} type="button"><span><strong>{store.externalStoreId}</strong><small>{store.retailerCode}</small></span><b>{decimal.format(store.penetrationPointChange)} pp</b><ScanIcon name="chevron" size={16} /></button>)}</div> : <EmptyState compact title="No stores need attention">All reporting stores are within their recent operating range.</EmptyState>}
-      <button className="scan-button scan-button-light" onClick={() => onNavigate('stores')} type="button">Review stores <ScanIcon name="chevron" size={15} /></button>
+      <header className="scan-panel-header"><div><h3>Needs Attention</h3><p>Store declines that need validation.</p></div><StatusBadge tone="warning">{attention.length} flagged</StatusBadge></header>
+      {attention.length ? <div>{attention.slice(0, 2).map((store) => <article key={storeKey(store)}><header><span><strong>{store.externalStoreId}</strong><small>{store.retailerCode}</small></span><b>{decimal.format(store.penetrationPointChange)} pp</b></header><p><span>Likely driver</span> Availability or distribution change needs validation.</p><button className="scan-button scan-button-light" onClick={() => onOpenStore(store)} type="button">Investigate <ScanIcon name="chevron" size={15} /></button></article>)}</div> : <EmptyState compact title="No stores need attention">All reporting stores are within their recent operating range.</EmptyState>}
+      <button className="scan-text-link" onClick={() => onNavigate('stores')} type="button">View all stores →</button>
     </section>
   )
 }
 
 function OverviewPage({
-  overview, stores, productMovers, categoryMovers, brief, trend, trendLoading, trendError, loading, error,
-  onNavigate, onBriefAction, onOpenStore, onOpenProduct, myWork,
+  overview, stores, productMovers, brief, trend, trendLoading, trendError, loading, error,
+  onNavigate, onBriefAction, onOpenStore, onOpenProduct, onAskAboutProduct, onPrepareBrief, myWork,
 }) {
-  const storeMovers = useMemo(
-    () => [...stores].sort((a, b) => Math.abs(b.penetrationPointChange) - Math.abs(a.penetrationPointChange)),
-    [stores]
-  )
-
   return (
     <div className="scan-page-stack cci-overview cci-command-center">
       <PageIntro description="Live commercial signals across connected retail." eyebrow="CCI commercial intelligence" title="Network Overview" />
@@ -1376,22 +1439,30 @@ function OverviewPage({
 
       <NetworkKpiRow overview={overview} stores={stores} trend={trend} />
 
-      <div className="cci-command-grid">
-        <CommandBrief brief={brief} loading={loading} onAction={onBriefAction} />
-        <NetworkActivity brief={brief} overview={overview} stores={stores} />
-      </div>
-
       <div className="cci-performance-grid">
         <TrendChart error={trendError} loading={trendLoading} overview={overview} trend={trend} />
-        <BiggestMovers categoryMovers={categoryMovers} onOpenProduct={onOpenProduct} productMovers={productMovers} storeMovers={storeMovers} />
+        <NetworkPulse brief={brief} products={productMovers} stores={stores} />
+      </div>
+
+      <div className="cci-ranked-performance-grid">
+        <BiggestMovers onNavigate={onNavigate} onOpenProduct={onOpenProduct} productMovers={productMovers} />
+        <StorePerformanceSnapshot onNavigate={onNavigate} onOpenStore={onOpenStore} stores={stores} />
       </div>
 
       <div className="cci-opportunity-grid">
-        <OverviewOpportunity onAction={onBriefAction} opportunity={brief.find((item) => item.type === 'OPPORTUNITY')} />
+        <OverviewOpportunity onAction={onBriefAction} onAskAbout={onAskAboutProduct} onNavigate={onNavigate} opportunity={brief.find((item) => item.type === 'OPPORTUNITY')} />
         <AttentionStores onNavigate={onNavigate} onOpenStore={onOpenStore} stores={stores} />
       </div>
 
+      <CommandBrief brief={brief} loading={loading} onAction={onBriefAction} />
+
       {myWork}
+
+      <div className="cci-overview-support-grid">
+        <NetworkActivity brief={brief} overview={overview} stores={stores} />
+        <DataHealthSummary overview={overview} stores={stores} />
+        <MeetingBriefPanel onPrepare={onPrepareBrief} />
+      </div>
     </div>
   )
 }
@@ -2140,7 +2211,6 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
   return (
     <OverviewPage
       brief={network.brief}
-      categoryMovers={network.categoryMovers}
       error={network.error}
       loading={network.loading}
       myWork={myWork}
@@ -2149,6 +2219,7 @@ function DashboardPage({ activePage, data, intelligence, credentials, actions, o
       onNavigate={onNavigate}
       onOpenProduct={actions.openProductDetail}
       onOpenStore={actions.openStoreDetail}
+      onPrepareBrief={actions.prepareBrief}
       overview={network.overview}
       productMovers={network.productMovers}
       stores={network.stores}
