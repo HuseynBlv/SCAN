@@ -2208,6 +2208,45 @@
 .retailer-action-intelligence-link { display: inline-flex; align-items: center; gap: 5px; color: #a91016 !important; }
 .retailer-product-intelligence-link { width: fit-content; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 0; border: 0; background: transparent; color: #aa1117; font-size: .56rem; font-weight: 680; }
 
+/* Operational motion: state changes only, never decorative ambient movement. */
+.retailer-motion-state.is-refreshing .scan-freshness-dot,
+.retailer-motion-state.is-updated .scan-freshness-dot { animation: retailer-data-arrived 720ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-motion-state.is-refreshing .scan-icon-button[aria-label='Refreshing…'] svg { animation: retailer-refresh-turn 700ms linear infinite; }
+.retailer-ops-kpis .retail-metric-card { animation: retailer-metric-arrive 320ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-ops-kpis .retail-metric-card:nth-child(2) { animation-delay: 45ms; }
+.retailer-ops-kpis .retail-metric-card:nth-child(3) { animation-delay: 90ms; }
+.retailer-ops-kpis .retail-metric-card:nth-child(4) { animation-delay: 135ms; }
+.retailer-ops-kpis .retail-mini-chart polyline { stroke-dasharray: 140; stroke-dashoffset: 140; animation: retailer-chart-draw 520ms 100ms cubic-bezier(.2,.8,.2,1) forwards; }
+.retailer-ops-kpis .retail-mini-chart polygon { animation: retailer-chart-fill 420ms 180ms ease-out both; }
+.retailer-insight-status { display: flex; align-items: center; gap: 6px; }
+.retailer-detected-changes.is-new { animation: retailer-insight-arrive 360ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-detected-changes.is-new .retail-badge.is-positive { animation: retailer-new-label 420ms 140ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-workflow-action { transition: border-color 220ms ease, background-color 220ms ease, transform 220ms cubic-bezier(.2,.8,.2,1); }
+.retailer-workflow-action.is-accepted { border-color: #cbded2; background: #fcfefd; }
+.retailer-workflow-action.is-completing { border-color: #9fc8ae; transform: translateY(-2px); }
+.retailer-workflow-action .scan-button { transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease; }
+.retailer-workflow-action .scan-button.is-accepted { border-color: #d3e4da; background: #e7f1ec; color: #276b50; }
+.retailer-action-confirmation { min-height: 38px; display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 0 12px; border-radius: 10px; background: #e7f1ec; color: #276b50; font-size: .65rem; font-weight: 680; animation: retailer-confirmation-arrive 240ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-featured-opportunity.is-activated,
+.retailer-supporting-opportunity:has(.retailer-activate-button.is-success) { animation: retailer-activated-state 360ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-activate-button { transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease; }
+.retailer-activate-button.is-success { border-color: #d3e4da; background: #e7f1ec; color: #276b50; }
+.retailer-data-processing li { transform: translateY(0); transition: color 200ms ease, background 200ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
+.retailer-data-processing li.is-active { transform: translateY(-2px); }
+.retailer-data-processing li.is-complete > span { animation: retailer-step-complete 220ms cubic-bezier(.2,.8,.2,1) both; }
+.retailer-data-complete { animation: retailer-confirmation-arrive 300ms cubic-bezier(.2,.8,.2,1) both; }
+
+@keyframes retailer-data-arrived { 0% { transform: scale(.75); opacity: .45; } 55% { transform: scale(1.35); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes retailer-refresh-turn { to { transform: rotate(360deg); } }
+@keyframes retailer-metric-arrive { from { transform: translateY(5px); opacity: .72; } }
+@keyframes retailer-chart-draw { to { stroke-dashoffset: 0; } }
+@keyframes retailer-chart-fill { from { opacity: 0; } }
+@keyframes retailer-insight-arrive { from { transform: translateY(8px); opacity: .55; } }
+@keyframes retailer-new-label { from { transform: translateX(5px); opacity: 0; } }
+@keyframes retailer-confirmation-arrive { from { transform: translateY(5px); opacity: 0; } }
+@keyframes retailer-activated-state { 45% { border-color: #9fc8ae; transform: translateY(-2px); } }
+@keyframes retailer-step-complete { 50% { transform: scale(1.08); } }
+
 @media (max-width: 640px) {
   .retailer-intelligence-trigger { width: 34px; justify-content: center; padding: 0; }
   .retailer-intelligence-trigger span { display: none; }
@@ -2220,5 +2259,22 @@
 
 @media (prefers-reduced-motion: reduce) {
   .retailer-intelligence-backdrop,
-  .retailer-intelligence-drawer { animation: none; }
+  .retailer-intelligence-drawer,
+  .retailer-motion-state.is-refreshing .scan-freshness-dot,
+  .retailer-motion-state.is-updated .scan-freshness-dot,
+  .retailer-motion-state.is-refreshing .scan-icon-button svg,
+  .retailer-ops-kpis .retail-metric-card,
+  .retailer-ops-kpis .retail-mini-chart polyline,
+  .retailer-ops-kpis .retail-mini-chart polygon,
+  .retailer-detected-changes.is-new,
+  .retailer-detected-changes.is-new .retail-badge.is-positive,
+  .retailer-action-confirmation,
+  .retailer-featured-opportunity.is-activated,
+  .retailer-supporting-opportunity:has(.retailer-activate-button.is-success),
+  .retailer-data-processing li.is-complete > span,
+  .retailer-data-complete { animation: none; }
+  .retailer-workflow-action,
+  .retailer-workflow-action .scan-button,
+  .retailer-activate-button,
+  .retailer-data-processing li { transition: none; }
 }

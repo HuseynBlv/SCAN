@@ -210,7 +210,7 @@ describe('RetailerDashboard', () => {
     expect(screen.getByText('Free display materials')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Activate Opportunity' }))
 
-    expect(screen.getByText('Opportunity activated')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Active' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Coca-Cola + Doritos' })).toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: /Completed 1/ }))
     expect(screen.getByText('Fanta Orange 500ml')).toBeInTheDocument()
@@ -260,7 +260,7 @@ describe('RetailerDashboard', () => {
     expect(activateRetailerOffer).toHaveBeenCalledWith(expect.objectContaining({ offerKey: 'CCI-COCA-COLA-ZERO-330ML' }))
     // The just-activated card stays visible with a checkmark rather than vanishing the instant
     // it is accepted, so the retailer sees the confirmation before it moves to the Active tab.
-    expect(await screen.findByText('Offer activated')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Active' })).toBeDisabled()
     expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
   })
 
@@ -360,13 +360,33 @@ describe('RetailerDashboard', () => {
     await user.click(screen.getAllByRole('button', { name: 'Why this?' })[0])
     expect(screen.getByText(/three consecutive trading days/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Add to order list' }))
-    expect(screen.getByRole('button', { name: 'Added' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Accepted' })).toBeDisabled()
     await user.click(screen.getByRole('tab', { name: /In progress 2/ }))
     expect(await screen.findByRole('heading', { name: 'Weekend checkout placement test' })).toBeInTheDocument()
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0)
     await user.click(screen.getByRole('tab', { name: /Completed 8/ }))
     expect(await screen.findByRole('heading', { name: 'Doritos checkout placement completed' })).toBeInTheDocument()
     expect(screen.getAllByText('Completed').length).toBeGreaterThan(0)
+  })
+
+  it('uses operational motion states for refresh and action completion', async () => {
+    const user = userEvent.setup()
+    render(<RetailerDashboard />)
+    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    await screen.findByText('4 things deserve attention today.')
+
+    await user.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(screen.getByRole('button', { name: 'Refreshing…' })).toBeDisabled()
+    expect(await screen.findByText('New', {}, { timeout: 1200 })).toBeInTheDocument()
+    expect(document.querySelector('.retailer-motion-state')).toHaveClass('is-updated')
+
+    await user.click(screen.getAllByRole('button', { name: 'Actions' })[0])
+    await user.click(screen.getByRole('button', { name: 'Add to order list' }))
+    expect(screen.getByRole('button', { name: 'Accepted' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Mark checked' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Action completed')
+    expect(await screen.findByRole('tab', { name: /Completed 9/, selected: true }, { timeout: 1200 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Coca-Cola Zero velocity is unusually high' })).toBeInTheDocument()
   })
 
   it('surfaces a failed checkout feed in Store Pulse', async () => {
