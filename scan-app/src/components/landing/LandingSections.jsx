@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CCI_AUTH_ROUTE, RETAILER_AUTH_ROUTE } from './LandingNavigation'
+import { RETAILER_AUTH_ROUTE } from './LandingNavigation'
 import { HeroDashboardVisual, PerspectivePreview, TransactionFlowVisual } from './LandingVisuals'
 
 function Arrow() {
@@ -15,7 +15,7 @@ export function HeroSection() {
         <p className="landing-hero-lead">SCAN turns retail transactions into actionable intelligence for retailers and FMCG teams.</p>
         <div className="landing-hero-actions">
           <a className="landing-button landing-button-red" href="#transaction-intelligence">See how it works <Arrow /></a>
-          <a className="landing-button landing-button-secondary" href={CCI_AUTH_ROUTE}>Sign in</a>
+          <a className="landing-button landing-button-secondary" href={RETAILER_AUTH_ROUTE}>Sign in</a>
         </div>
         <p className="landing-proof-line">Transaction-level clarity <span /> No customer or payment identifiers</p>
       </div>
@@ -144,7 +144,7 @@ export function FinalCTA() {
         <p>SCAN turns it into decisions.</p>
         <div>
           <a className="landing-button landing-button-red" href={RETAILER_AUTH_ROUTE}>Get started <Arrow /></a>
-          <a className="landing-button landing-button-dark-outline" href={CCI_AUTH_ROUTE}>Sign in</a>
+          <a className="landing-button landing-button-dark-outline" href={RETAILER_AUTH_ROUTE}>Sign in</a>
         </div>
       </div>
     </section>
@@ -157,7 +157,7 @@ export function LandingFooter() {
       <div className="landing-container">
         <a className="footer-wordmark" href="#top">SCAN<i><b /><b /><b /></i></a>
         <p>Retail intelligence powered by transaction data.</p>
-        <nav aria-label="Footer navigation"><a href="#transaction-intelligence">Intelligence</a><a href="#platform">Perspectives</a><a href="#how-it-works">How it works</a><a href={CCI_AUTH_ROUTE}>Sign in</a></nav>
+        <nav aria-label="Footer navigation"><a href="#transaction-intelligence">Intelligence</a><a href="#platform">Perspectives</a><a href="#how-it-works">How it works</a><a href={RETAILER_AUTH_ROUTE}>Sign in</a></nav>
         <small>© {new Date().getFullYear()} SCAN</small>
       </div>
     </footer>
