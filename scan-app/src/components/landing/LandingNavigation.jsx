@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ScanBrand from '../ScanBrand'
 
-export const CCI_AUTH_ROUTE = '/?portal=cci'
 export const RETAILER_AUTH_ROUTE = '/?portal=retailer'
 
 const navigation = [
@@ -35,7 +34,7 @@ export default function LandingNavigation() {
           {navigation.map((item) => <a href={item.href} key={item.href}>{item.label}</a>)}
         </div>
         <div className="landing-nav-actions">
-          <a className="landing-text-link" href={CCI_AUTH_ROUTE}>Sign in</a>
+          <a className="landing-text-link" href={RETAILER_AUTH_ROUTE}>Sign in</a>
           <a className="landing-button landing-button-red landing-button-compact" href={RETAILER_AUTH_ROUTE}>Get started</a>
         </div>
         <button
@@ -54,7 +53,7 @@ export default function LandingNavigation() {
         <div className="landing-container">
           {navigation.map((item) => <a href={item.href} key={item.href} onClick={() => setOpen(false)}>{item.label}</a>)}
           <div className="landing-mobile-actions">
-            <a className="landing-button landing-button-secondary" href={CCI_AUTH_ROUTE}>Sign in</a>
+            <a className="landing-button landing-button-secondary" href={RETAILER_AUTH_ROUTE}>Sign in</a>
             <a className="landing-button landing-button-red" href={RETAILER_AUTH_ROUTE}>Get started</a>
           </div>
         </div>

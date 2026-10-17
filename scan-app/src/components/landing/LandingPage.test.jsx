@@ -19,7 +19,7 @@ describe('LandingPage', () => {
     render(<LandingPage />)
 
     screen.getAllByRole('link', { name: 'Sign in' }).forEach((link) => {
-      expect(link).toHaveAttribute('href', '/?portal=cci')
+      expect(link).toHaveAttribute('href', '/?portal=retailer')
     })
     screen.getAllByRole('link', { name: 'Get started' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/?portal=retailer')
