@@ -101,6 +101,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Verify Render and Vercel use the same container definition
+        run: cmp Dockerfile Dockerfile.vercel
+
       - name: Build the same frontend and API image used on Render
         run: docker build --tag scan-demo:ci .
 
