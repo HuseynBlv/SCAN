@@ -10,7 +10,13 @@ RUN VITE_ENABLE_LEGACY_SCANNER=false VITE_SCAN_API_BASE_URL= npm run build
 FROM maven:3.9.11-eclipse-temurin-21 AS backend
 WORKDIR /build/scan-api
 COPY scan-api/pom.xml ./
-RUN mvn --batch-mode --no-transfer-progress dependency:go-offline
+# Maven Central occasionally returns transient 5xx responses. Preserve the dependency-only
+# cache layer while retrying a bounded number of times before failing the build.
+RUN for attempt in 1 2 3; do \
+      mvn --batch-mode --no-transfer-progress dependency:go-offline && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+      sleep "$((attempt * 5))"; \
+    done
 COPY scan-api/src/ ./src/
 COPY --from=frontend /build/scan-app/dist/ ./src/main/resources/static/
 # Unit/integration tests run in CI before the container smoke test.
