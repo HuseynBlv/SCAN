@@ -314,15 +314,20 @@ Free services can sleep, start slowly, or stop at quota limits. This is an occas
 demo, not a production availability commitment. The guide covers account setup, runtime
 secrets, imports, verification, limits, and manual deployment from `main`.
 
-A successful frontend-only Vercel build does not deploy Spring Boot or make API sign-in work.
-The Vite development proxy is not included in production builds. A separately hosted frontend
-still needs explicit API routing or implemented and tested CORS; `VITE_SCAN_API_BASE_URL`
-alone is not enough. Existing Vercel configuration is unchanged.
+The repository now also contains a parallel Vercel container configuration. Vercel builds the
+same dashboard-plus-Spring-Boot image in `Dockerfile.vercel`, while CI ensures it stays identical
+to Render's `Dockerfile`. The [Vercel migration runbook](docs/vercel-migration.md) keeps Render as
+the rollback path and documents the required environment, verification, and cutover gates.
 
-Never put passwords in `VITE_*` variables: those values are embedded in the browser bundle.
-The GitHub repository has an existing Vercel integration, so merging into its production
-branch can update the public frontend. Verify backend routing before presenting that URL
-as a working analytics demo.
+Do not treat the Vercel path as production-ready yet: Vercel's container runtime is beta and its
+4.5 MB request limit is lower than SCAN's 25 MB import limit. A frontend-only Vercel build still
+does not deploy Spring Boot or make API sign-in work; the project root must use the container
+configuration. Never put passwords in `VITE_*` variables because those values are embedded in the
+browser bundle.
+
+The GitHub repository has an existing Vercel integration, so merging into its production branch
+can update the public deployment. Configure the runtime secrets and verify backend routing before
+presenting that URL as a working analytics demo.
 
 Before putting real or non-public data in Neon, reset the default `neondb_owner` password in
 the Neon Console because its original connection string was shared outside a secret manager.
@@ -358,7 +363,9 @@ SCAN/
 ├── .github/                   # CI plus monthly dependency update configuration
 ├── DESIGN.md                  # Approved UI system, tokens, components, and guardrails
 ├── Dockerfile                 # Builds React into the Java 21 application
+├── Dockerfile.vercel          # Matching full-stack image for Vercel containers
 ├── render.yaml                # One Free web service; runtime secrets only
+├── vercel.json                # Frankfurt Fluid compute configuration
 ├── scripts/                   # Isolated deployment smoke test
 ├── docs/                      # Data contract, metrics, demo, and hosting runbook
 ├── scan-api/                  # Java / Spring Boot, JPA, PostgreSQL, Flyway
@@ -376,6 +383,7 @@ SCAN/
 - [Frontend setup and configuration](scan-app/README.md)
 - [Reproducible Kaggle demo](docs/kaggle-demo.md)
 - [Free Render + Neon demo deployment](docs/free-demo-deployment.md)
+- [Parallel Vercel migration and rollback](docs/vercel-migration.md)
 - [Retailer connector setup and demonstration](docs/retailer-connector.md)
 - [Pilot data contract and retailer questions](docs/pilot-data-contract.md)
 - [Analytics definitions and insight rules](docs/analytics-definitions.md)
