@@ -28,9 +28,11 @@ instance. Verify import completion after cold starts and under concurrent reques
 ## 1. Create a parallel Vercel project
 
 Import the same GitHub repository into a new Vercel project, or reconfigure the existing
-frontend-only Vercel project. Use the repository root as the project root. Do not set a Vite preset,
-custom build command, output directory, or `VITE_SCAN_API_BASE_URL`; the container packages both
-the frontend and Spring Boot API.
+frontend-only Vercel project. Use the repository root as the project root and select the
+**Container** application preset. Do not select Vite or Other, and do not set a custom build
+command, output directory, or `VITE_SCAN_API_BASE_URL`; the container packages both the frontend
+and Spring Boot API. `vercel.json` deliberately does not set `framework`: setting it to `null`
+forces the Other preset and can produce a successful deployment with no routed application.
 
 Start with Preview deployments. Keep the production domain on Render until all checks below pass.
 The repository's Render services have automatic deployment disabled, so adding the Vercel files
@@ -118,3 +120,11 @@ Only after the compatibility gate and preview checks pass:
 Retire a Render service only after the observation window and after backups and rollback ownership
 are confirmed. Removing Render is a separate, explicit operation; this repository change does not
 perform it.
+
+## Troubleshooting
+
+If every path, including `/health`, returns Vercel's platform-level `404 NOT_FOUND` while the
+deployment is marked Ready, confirm that the project uses the **Container** preset and that the
+Root Directory field is empty. The build log must say that Vercel is building
+`Dockerfile.vercel`; a fast successful build with no container-image step is an empty Other-preset
+deployment. Save the corrected settings and redeploy without the existing build cache.
