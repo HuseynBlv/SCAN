@@ -539,7 +539,7 @@
   .scan-evidence-meter { grid-column: 1 / -1; }
   .scan-subsection-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
   .scan-workspace-retailer .scan-mobile-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 50; justify-content: stretch; gap: 0; margin: 0; padding: 7px 6px max(7px, env(safe-area-inset-bottom)); overflow: hidden; border-top: 1px solid var(--scan-border); background: rgba(255,255,255,.97); box-shadow: 0 -8px 28px rgba(20,20,20,.08); backdrop-filter: blur(14px); }
-  .scan-workspace-retailer .scan-mobile-nav button { min-width: 0; min-height: 52px; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 3px; padding: 3px 2px; border: 0; background: transparent; font-size: clamp(.5rem, 2.3vw, .62rem); letter-spacing: -.015em; }
+  .scan-workspace-retailer .scan-mobile-nav button { min-width: 0; min-height: 52px; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 3px; padding: 3px 0; border: 0; background: transparent; font-size: clamp(.48rem, 2.15vw, .62rem); letter-spacing: -.015em; }
   .scan-workspace-retailer .scan-mobile-nav button span { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scan-workspace-retailer .scan-mobile-nav button.is-active { color: var(--scan-red-dark); background: transparent; }
   .cci-discovery-hero h2 { font-size: clamp(2.55rem, 14vw, 4rem); }
