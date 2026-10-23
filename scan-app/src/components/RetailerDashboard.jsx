@@ -11,11 +11,12 @@ import {
 } from 'recharts'
 import { ScanApiError } from '../services/scanApi'
 import {
-  activateRetailerOffer,
   fetchRetailerActions,
   fetchRetailerOffers,
+  fetchRetailerOpportunities,
   fetchRetailerOverview,
   fetchRetailerPartnerStatus,
+  startRetailerOpportunityTrial,
 } from '../services/retailerApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
@@ -25,6 +26,7 @@ import {
   PRESENTATION_PASSWORD,
   PRESENTATION_USERNAME,
   presentationEngagement,
+  presentationOpportunities,
   presentationOverview,
 } from './presentationRetailer'
 import { usePretextLayout } from './usePretextLayout'
@@ -68,13 +70,6 @@ const PERIODS = [
   { value: 'ALL_TIME', label: 'All time' },
 ]
 
-const OPPORTUNITY_TABS = [
-  { id: 'recommended', label: 'Recommended' },
-  { id: 'basket', label: 'Basket Growth' },
-  { id: 'cci', label: 'CCI Offers' },
-  { id: 'completed', label: 'Completed' },
-]
-
 const DATA_IMPORT_STEPS = [
   'Read file',
   'Validate receipts',
@@ -83,13 +78,6 @@ const DATA_IMPORT_STEPS = [
   'Calculate insights',
   'Update actions',
 ]
-
-const OFFER_TYPE_META = {
-  VOLUME_DISCOUNT: { label: 'Volume offer', accent: 'discount', icon: 'sales' },
-  BONUS_PRODUCT: { label: 'Bonus product', accent: 'bonus', icon: 'products' },
-  WEEKEND_ACTIVATION: { label: 'Weekend campaign', accent: 'weekend', icon: 'time-store' },
-  BASKET_GROWTH: { label: 'Personalized pricing', accent: 'basket', icon: 'basket' },
-}
 
 const ACTION_TYPE_META = {
   STOCK_RISK: { label: 'Stock risk', tone: 'warning' },
@@ -295,26 +283,6 @@ function AttentionBanner({ items, onNavigate }) {
   )
 }
 
-function ActivateButton({ offer, onActivate, activating, justActivated, label }) {
-  if (justActivated) {
-    return (
-      <button className="scan-button retailer-activate-button is-success" disabled type="button">
-        <ScanIcon name="check" size={16} /> Active
-      </button>
-    )
-  }
-  return (
-    <button
-      className="scan-button scan-button-primary retailer-activate-button"
-      disabled={activating}
-      onClick={() => onActivate(offer.offerKey)}
-      type="button"
-    >
-      {activating ? 'Activating…' : label}
-    </button>
-  )
-}
-
 function percentageChange(current, comparison) {
   if (!comparison) return null
   return ((current - comparison) / comparison) * 100
@@ -471,91 +439,58 @@ function Home({ data, engagement, motionState, motionTick, onNavigate, onOpenInt
   )
 }
 
-function SupportingOpportunityCard({ offer, onActivate, activating, justActivated }) {
-  const [expanded, setExpanded] = useState(false)
-  const tone = offer.status === 'ACTIVE' ? 'success' : offer.status === 'COMPLETED' ? 'neutral' : 'red'
-  const typeMeta = OFFER_TYPE_META[offer.offerType] || { label: humanize(offer.offerType), accent: 'discount', icon: 'recommendations' }
-  return (
-    <Card as="article" className={`retailer-supporting-opportunity is-${typeMeta.accent} ${expanded ? 'is-expanded' : ''}`}>
-      <header>
-        <div className={`retailer-offer-type-chip is-${typeMeta.accent}`}>
-          <ScanIcon name={typeMeta.icon} size={14} />
-          {typeMeta.label}
-        </div>
-        <StatusBadge tone={tone}>{humanize(offer.status)}</StatusBadge>
-      </header>
-      <div className="retailer-supporting-product">
-        <div className={`retailer-product-mark is-${typeMeta.accent}`} aria-hidden="true"><span>{offer.productName.slice(0, 1)}</span></div>
-        <div><h2>{offer.productName}</h2>{offer.category ? <small>{offer.category}</small> : null}</div>
-      </div>
-      <div className="retailer-supporting-metric"><strong>{offer.metricValue}</strong><span>{offer.metricLabel}</span></div>
-      <p>{offer.reason}</p>
-      <dl><div><dt>Partner benefit</dt><dd>{offer.partnerCondition}</dd></div><div><dt>Estimated value</dt><dd>{offer.benefitSummary}</dd></div></dl>
-      <small className="retailer-opportunity-condition">{offer.normalCondition} · Valid until {formatDay(offer.expiresAt)}</small>
-      {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
-      <footer>
-        {justActivated ? <ActivateButton activating={false} justActivated label="Activate" offer={offer} onActivate={onActivate} /> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Active</Badge>}
-        <button className="scan-text-link" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
-      </footer>
-    </Card>
-  )
-}
+const OPPORTUNITY_TYPE_LABELS = { CROSS_SELL: 'Cross-sell', BEVERAGE_ATTACHMENT: 'Beverage attachment', PRODUCT_TREND: 'Product performance', TIME_PATTERN: 'Time pattern' }
 
-function FeaturedOpportunity({ offer, onActivate, activating, justActivated }) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <Card className={`retailer-featured-opportunity ${justActivated ? 'is-activated' : ''}`}>
-      <div className="retailer-featured-copy">
-        <header><Badge tone="red">Basket Growth Opportunity</Badge>{offer.status === 'ACTIVE' ? <Badge tone="success">Activated</Badge> : null}</header>
-        <h2>{offer.productName}</h2>
-        <p>{offer.reason}</p>
-        <dl className="retailer-featured-metrics">
-          <div><dd>{offer.affinityValue || offer.metricValue}</dd><dt>Product affinity</dt></div>
-          <div><dd>{offer.jointPurchaseRate || '38%'}</dd><dt>Current joint purchase rate</dt></div>
-          <div><dd>{integer.format(offer.fitBaskets || 0)}</dd><dt>High-fit missed baskets</dt></div>
-        </dl>
-        <div className="retailer-featured-recommendation"><span>Recommendation</span><strong>{offer.recommendation || 'Test weekend checkout placement.'}</strong></div>
-        <div className="retailer-featured-support"><ScanIcon name="recommendations" size={16} /><span>CCI support</span><strong>{offer.partnerCondition}</strong></div>
-        {expanded ? <ul className="retailer-offer-why">{offer.whyReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
-        <footer>
-          {justActivated ? <ActivateButton activating={false} justActivated label="Activate Opportunity" offer={offer} onActivate={onActivate} /> : offer.status === 'AVAILABLE' ? <ActivateButton activating={activating} justActivated={false} label="Activate Opportunity" offer={offer} onActivate={onActivate} /> : <Badge tone="success">Active</Badge>}
-          <button className="scan-button scan-button-light" onClick={() => setExpanded((value) => !value)} type="button">{expanded ? 'Hide reason' : 'Why this?'}</button>
-        </footer>
-      </div>
-      <div className="retailer-basket-relationship" aria-label="Coca-Cola and Doritos basket relationship">
-        <span className="retailer-basket-node is-coke"><i>C</i><b>Coca-Cola</b></span>
-        <div><strong>{offer.affinityValue || '2.3×'}</strong><small>more likely together</small></div>
-        <span className="retailer-basket-node is-doritos"><i>D</i><b>Doritos</b></span>
-        <small>Detected across this store's basket behavior</small>
-      </div>
-    </Card>
-  )
-}
-
-function Offers({ offers, onActivate, activatingKey, justActivatedKey }) {
-  const [tab, setTab] = useState('recommended')
-  const current = [...offers.available, ...offers.active]
-  const basketOffers = current.filter((offer) => offer.affinityValue || ['WEEKEND_ACTIVATION', 'BASKET_GROWTH'].includes(offer.offerType))
-  const cciOffers = current.filter((offer) => !basketOffers.includes(offer))
-  const featured = ['recommended', 'basket'].includes(tab) ? basketOffers[0] : null
-  const supporting = tab === 'recommended' ? current.filter((offer) => offer !== featured) : tab === 'basket' ? basketOffers.filter((offer) => offer !== featured) : tab === 'cci' ? cciOffers : []
-  const counts = { recommended: current.length, basket: basketOffers.length, cci: cciOffers.length, completed: offers.completed.length }
-  return (
-    <div className="scan-page-stack retailer-opportunities-workspace">
-      <PageIntro description="Growth opportunities detected from this store’s basket behavior." eyebrow="Growth workspace" title="Opportunities" />
-      <div className="retailer-offer-tabs" role="tablist">
-        {OPPORTUNITY_TABS.map((item) => (
-          <button aria-selected={tab === item.id} className={tab === item.id ? 'is-active' : ''} key={item.id} onClick={() => setTab(item.id)} role="tab" type="button">
-            {item.label} <span>{counts[item.id]}</span>
-          </button>
-        ))}
-      </div>
-      {featured ? <FeaturedOpportunity activating={activatingKey === featured.offerKey} justActivated={justActivatedKey === featured.offerKey} offer={featured} onActivate={onActivate} /> : null}
-      {supporting.length ? <section className="retailer-supporting-opportunities"><SectionHeader description={tab === 'cci' ? 'Commercial support matched to this store' : 'More ways to grow this store'} title={tab === 'cci' ? 'CCI offers' : 'Other opportunities'} /><div>{supporting.map((offer) => <SupportingOpportunityCard activating={activatingKey === offer.offerKey} justActivated={justActivatedKey === offer.offerKey} key={offer.offerKey} offer={offer} onActivate={onActivate} />)}</div></section> : null}
-      {tab === 'completed' && offers.completed.length ? <section className="retailer-completed-opportunities"><SectionHeader description="Measured outcomes from activated opportunities" title="Completed opportunities" /><ol>{offers.completed.map((offer) => <li key={offer.offerKey}><Badge tone="success">Completed</Badge><div><strong>{offer.productName}</strong><span>{offer.benefitSummary}</span></div><time>{formatDay(offer.expiresAt)}</time></li>)}</ol></section> : null}
-      {!featured && !supporting.length && !(tab === 'completed' && offers.completed.length) ? <EmptyState title={`No ${OPPORTUNITY_TABS.find((item) => item.id === tab).label.toLowerCase()} yet`}>SCAN will add opportunities when store evidence is strong enough.</EmptyState> : null}
+function OpportunityVisual({ opportunity }) {
+  const metrics = opportunity.metrics
+  if (opportunity.type === 'CROSS_SELL') {
+    const max = Math.max(metrics.productABaskets, metrics.productBBaskets, 1)
+    return <div className="retailer-opportunity-bars" role="img" aria-label={`${opportunity.subjects[0]} in ${metrics.productABaskets} baskets, ${opportunity.subjects[1]} in ${metrics.productBBaskets}, together in ${metrics.jointBaskets}`}>
+      {[['Product A', metrics.productABaskets], ['Product B', metrics.productBBaskets], ['Together', metrics.jointBaskets]].map(([label, value]) => <div key={label}><span>{label}</span><i><b style={{ width: `${Math.max(4, value / max * 100)}%` }} /></i><strong>{integer.format(value)}</strong></div>)}
     </div>
-  )
+  }
+  if (opportunity.type === 'PRODUCT_TREND') return <div className="retailer-opportunity-compare" role="img" aria-label={`Prior ${metrics.priorBasketPercentage} percent, current ${metrics.currentBasketPercentage} percent`}><div><i style={{ height: `${Math.max(8, metrics.priorBasketPercentage)}%` }} /><span>Prior 14 days</span><strong>{metrics.priorBasketPercentage}%</strong></div><div><i className="is-current" style={{ height: `${Math.max(8, metrics.currentBasketPercentage)}%` }} /><span>Recent 14 days</span><strong>{metrics.currentBasketPercentage}%</strong></div></div>
+  const value = opportunity.type === 'BEVERAGE_ATTACHMENT' ? metrics.attachmentPercentage : metrics.peakSharePercentage
+  const comparison = opportunity.type === 'BEVERAGE_ATTACHMENT' ? metrics.storeBeveragePercentage : 100 - value
+  return <div className="retailer-opportunity-share" role="img" aria-label={`${opportunity.primaryMetricLabel}: ${value} percent`}><div><i style={{ width: `${value}%` }} /></div><strong>{value}%</strong><span>{opportunity.type === 'BEVERAGE_ATTACHMENT' ? `Store beverage rate: ${comparison}%` : `${comparison}% in other dayparts`}</span></div>
+}
+
+function TrialPanel({ opportunity }) {
+  const trial = opportunity.trial
+  if (!trial) return null
+  return <section className="retailer-trial-panel"><header><div><span>Measurement plan</span><h3>{humanize(trial.status)} trial</h3></div><Badge tone={trial.status === 'COMPLETED' ? 'success' : 'warning'}>{humanize(trial.status)}</Badge></header><dl><div><dt>Baseline</dt><dd>{trial.baselineValue}%</dd><small>{trial.baselineFrom} – {trial.baselineTo}</small></div><div><dt>Trial period</dt><dd>{trial.currentValue == null ? 'Pending' : `${trial.currentValue}%`}</dd><small>{trial.startDate} – {trial.endDate}</small></div></dl><p>{trial.measurementNote}</p></section>
+}
+
+function OpportunityDetails({ opportunity, onStartTrial, starting }) {
+  const [whyOpen, setWhyOpen] = useState(false)
+  const [planning, setPlanning] = useState(false)
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10))
+  const [duration, setDuration] = useState(opportunity.recommendedAction.durationDays)
+  return <Card className="retailer-opportunity-detail">
+    <header className="retailer-opportunity-detail-header"><div><div><Badge tone={opportunity.priority === 'HIGH' ? 'red' : 'neutral'}>{humanize(opportunity.priority)} priority</Badge><StatusBadge tone={opportunity.status === 'ACTIVE' ? 'warning' : opportunity.status === 'COMPLETED' ? 'success' : 'neutral'}>{humanize(opportunity.status)}</StatusBadge></div><span>{OPPORTUNITY_TYPE_LABELS[opportunity.type]} · {opportunity.storeId}</span><h2>{opportunity.title}</h2><p>{opportunity.description}</p></div><div><strong>{opportunity.primaryMetricValue}</strong><span>{opportunity.primaryMetricLabel}</span></div></header>
+    <OpportunityVisual opportunity={opportunity} />
+    <section className="retailer-opportunity-evidence"><h3>Observed pattern</h3><p>{opportunity.evidence.observation}</p><div><span>{integer.format(opportunity.evidence.receiptCount)} receipts</span><span>{opportunity.evidence.dateFrom} – {opportunity.evidence.dateTo}</span><span>{opportunity.evidence.dataCompletenessPercentage}% mapped</span></div></section>
+    <section className="retailer-opportunity-recommendation"><span>Recommended action</span><h3>{opportunity.recommendedAction.title}</h3><p>{opportunity.recommendedAction.description}</p></section>
+    <TrialPanel opportunity={opportunity} />
+    {whyOpen ? <section className="retailer-why-panel" aria-label="Why this opportunity"><article><span>What SCAN observed</span><p>{opportunity.evidence.observation}</p></article><article><span>Why it matters</span><p>{opportunity.evidence.whyItMatters}</p></article><article><span>What SCAN recommends</span><p>{opportunity.recommendedAction.description}</p></article><article><span>How reliable is this?</span><p>{integer.format(opportunity.evidence.supportingBasketCount)} supporting baskets from {integer.format(opportunity.evidence.receiptCount)} receipts; {opportunity.evidence.dataCompletenessPercentage}% product mapping coverage.</p>{opportunity.evidence.limitations ? <small>{opportunity.evidence.limitations}</small> : null}</article></section> : null}
+    {planning && !opportunity.trial ? <form className="retailer-trial-form" onSubmit={(event) => { event.preventDefault(); onStartTrial(opportunity.id, startDate, Number(duration)) }}><label>Start date<input min={new Date().toISOString().slice(0, 10)} onChange={(event) => setStartDate(event.target.value)} required type="date" value={startDate} /></label><label>Duration<select onChange={(event) => setDuration(event.target.value)} value={duration}><option value="7">7 days</option><option value="14">14 days</option><option value="28">28 days</option></select></label><button className="scan-button scan-button-primary" disabled={starting} type="submit">{starting ? 'Starting trial…' : 'Confirm trial'}</button></form> : null}
+    <footer><button className="scan-button scan-button-light" onClick={() => setWhyOpen((value) => !value)} type="button">{whyOpen ? 'Hide explanation' : 'Why this?'}</button>{!opportunity.trial && ['CROSS_SELL', 'BEVERAGE_ATTACHMENT'].includes(opportunity.type) ? <button className="scan-button scan-button-primary" onClick={() => setPlanning((value) => !value)} type="button">{opportunity.recommendedAction.title}</button> : null}</footer>
+  </Card>
+}
+
+function Offers({ analysis, loading, notice, onStartTrial, startingId }) {
+  const [selectedId, setSelectedId] = useState(null)
+  const opportunities = analysis?.opportunities || []
+  const selected = opportunities.find((item) => item.id === selectedId) || opportunities[0]
+  if (loading && !analysis) return <LoadingState title="Analyzing basket evidence…" description="Reconstructing receipts and validating opportunity thresholds." />
+  const summary = analysis?.summary
+  return <div className="scan-page-stack retailer-opportunities-workspace">
+    <PageIntro description="Data-backed recommendations to grow your store." eyebrow="Growth intelligence" title="Growth Opportunities" />
+    {notice ? <div className="scan-inline-notice retailer-analysis-notice" role="status"><ScanIcon name="check" size={16} /><span>{notice}</span></div> : null}
+    {summary?.datasetKind !== 'OPERATIONAL' ? <div className="scan-inline-notice retailer-dataset-notice"><strong>{humanize(summary.datasetKind)} dataset</strong><span>These insights are isolated from operational retailer data.</span></div> : null}
+    <section className="retailer-opportunity-summary" aria-label="Opportunity analysis summary"><div><span>Last analysis</span><strong>{formatDateTime(summary?.analyzedAt)}</strong></div><div><span>Available</span><strong>{summary?.availableCount || 0}</strong></div><div><span>Active trials</span><strong>{summary?.activeTrialCount || 0}</strong></div><div><span>Completed</span><strong>{summary?.completedTrialCount || 0}</strong></div><div><span>Data coverage</span><strong>{summary?.coverageStatus === 'READY' ? `${summary.mappingCoveragePercentage}%` : humanize(summary?.coverageStatus)}</strong><small>{integer.format(summary?.receiptCount || 0)} receipts</small></div></section>
+    {!opportunities.length ? <EmptyState title={summary?.coverageStatus === 'INSUFFICIENT_DATA' ? 'More basket data is needed' : 'No opportunity clears the evidence threshold'}>{summary?.coverageStatus === 'INSUFFICIENT_DATA' ? `SCAN needs at least 30 complete baskets; ${integer.format(summary?.receiptCount || 0)} are currently available.` : 'SCAN will show a recommendation when a relationship is sufficiently supported and actionable.'}</EmptyState> : <div className="retailer-opportunity-master-detail"><section className="retailer-opportunity-list" aria-label="Detected opportunities">{opportunities.map((opportunity) => <button aria-pressed={selected?.id === opportunity.id} className={selected?.id === opportunity.id ? 'is-selected' : ''} key={opportunity.id} onClick={() => setSelectedId(opportunity.id)} type="button"><div><span>{OPPORTUNITY_TYPE_LABELS[opportunity.type]}</span><StatusBadge tone={opportunity.status === 'ACTIVE' ? 'warning' : opportunity.status === 'COMPLETED' ? 'success' : 'neutral'}>{humanize(opportunity.status)}</StatusBadge></div><strong>{opportunity.title}</strong><p>{opportunity.description}</p><footer><b>{opportunity.primaryMetricValue}</b><span>{opportunity.primaryMetricLabel}</span><i className={`is-${opportunity.priority.toLowerCase()}`}>{humanize(opportunity.priority)}</i></footer></button>)}</section>{selected ? <OpportunityDetails key={selected.id} onStartTrial={onStartTrial} opportunity={selected} starting={startingId === selected.id} /> : null}</div>}
+  </div>
 }
 
 function ActionFeedCard({ action, motionPhase, onAccept, onComplete, onDismiss, onOpenIntelligence }) {
@@ -881,25 +816,24 @@ function Data({ data, onNavigate, presentation }) {
   )
 }
 
-function Page({ activePage, data, engagement, engagementLoading, loading, motionState, motionTick, onActivate, onNavigate, onOpenIntelligence, onPeriodChange, period, activatingKey, justActivatedKey, presentation }) {
+function Page({ activePage, analysisNotice, data, engagement, engagementLoading, loading, motionState, motionTick, onNavigate, onOpenIntelligence, onPeriodChange, opportunities, opportunitiesLoading, onStartTrial, period, presentation, startingTrialId }) {
   if (loading && data.period !== period) return <LoadingState title="Updating this view…" description="SCAN is reading the selected sales period." />
   if (activePage === 'insights') return <Insights data={data} loading={loading} onOpenIntelligence={onOpenIntelligence} onPeriodChange={onPeriodChange} period={period} />
   if (activePage === 'data') return <Data data={data} onNavigate={onNavigate} presentation={presentation} />
   if (engagementLoading || !engagement) return <LoadingState title="Loading your SCAN benefits…" description="Preparing offers, actions, and partner status." />
-  if (activePage === 'opportunities') return <Offers activatingKey={activatingKey} justActivatedKey={justActivatedKey} offers={engagement.offers} onActivate={onActivate} />
+  if (activePage === 'opportunities') return <Offers analysis={opportunities} loading={opportunitiesLoading} notice={analysisNotice} onStartTrial={onStartTrial} startingId={startingTrialId} />
   if (activePage === 'actions') return <Actions actions={engagement.actions} data={data} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} workspace={engagement.actionWorkspace} />
   if (activePage === 'partner') return <Partner partnerStatus={engagement.partnerStatus} />
   return <Home data={data} engagement={engagement} motionState={motionState} motionTick={motionTick} onNavigate={onNavigate} onOpenIntelligence={onOpenIntelligence} />
 }
 
-function intelligenceContextForPage(activePage, data, engagement) {
+function intelligenceContextForPage(activePage, data, engagement, opportunities) {
   if (activePage === 'actions' && engagement?.actions?.length) {
     const action = engagement.actions.find((item) => (item.status || 'OPEN') === 'OPEN') || engagement.actions[0]
     return { type: 'action', label: action.displayTitle || action.title }
   }
-  if (activePage === 'opportunities' && engagement?.offers?.available?.length) {
-    const offer = engagement.offers.available.find((item) => item.affinityValue) || engagement.offers.available[0]
-    return { type: 'opportunity', label: offer.productName }
+  if (activePage === 'opportunities' && opportunities?.opportunities?.length) {
+    return { type: 'opportunity', label: opportunities.opportunities[0].title }
   }
   if (activePage === 'insights' && data.topProducts?.length) return { type: 'product', label: data.topProducts[0].name }
   return null
@@ -914,8 +848,10 @@ export default function RetailerDashboard() {
   const [engagement, setEngagement] = useState(null)
   const [engagementLoading, setEngagementLoading] = useState(false)
   const [engagementError, setEngagementError] = useState('')
-  const [activatingKey, setActivatingKey] = useState(null)
-  const [justActivatedKey, setJustActivatedKey] = useState(null)
+  const [opportunities, setOpportunities] = useState(null)
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false)
+  const [startingTrialId, setStartingTrialId] = useState(null)
+  const [analysisNotice, setAnalysisNotice] = useState('')
   const [activePage, setActivePage] = useState('home')
   const [intelligenceOpen, setIntelligenceOpen] = useState(false)
   const [intelligenceContext, setIntelligenceContext] = useState(null)
@@ -926,6 +862,7 @@ export default function RetailerDashboard() {
   const intelligenceReturnFocus = useRef(null)
   const refreshRequested = useRef(false)
   const refreshTimer = useRef(null)
+  const opportunitySnapshot = useRef(null)
 
   const finishRefreshMotion = useCallback(() => {
     if (!refreshRequested.current) return
@@ -977,57 +914,46 @@ export default function RetailerDashboard() {
     return () => controller.abort()
   }, [credentials, refreshKey])
 
-  async function activateOffer(offerKey) {
-    setActivatingKey(offerKey)
+  useEffect(() => {
+    if (!credentials || credentials.presentation) return undefined
+    const controller = new AbortController()
+    fetchRetailerOpportunities({ ...credentials, signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted) return
+        const next = new Map(result.opportunities.map((item) => [item.id, JSON.stringify(item.metrics)]))
+        if (opportunitySnapshot.current) {
+          const added = [...next.keys()].filter((id) => !opportunitySnapshot.current.has(id)).length
+          const changed = [...next.entries()].filter(([id, metrics]) => opportunitySnapshot.current.has(id) && opportunitySnapshot.current.get(id) !== metrics).length
+          setAnalysisNotice(added ? `Analysis updated. ${added} new ${added === 1 ? 'opportunity' : 'opportunities'} detected.` : changed ? `Analysis updated. ${changed} ${changed === 1 ? 'opportunity changed' : 'opportunities changed'}.` : '')
+        }
+        opportunitySnapshot.current = next
+        setOpportunities(result)
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted && requestError?.name !== 'AbortError') setEngagementError(requestError?.message || 'Unable to analyze growth opportunities.')
+      })
+      .finally(() => { if (!controller.signal.aborted) setOpportunitiesLoading(false) })
+    return () => controller.abort()
+  }, [credentials, refreshKey])
+
+  async function startTrial(opportunityId, startDate, durationDays) {
+    setStartingTrialId(opportunityId)
     setEngagementError('')
     if (credentials.presentation) {
-      const selected = engagement.offers.available.find((offer) => offer.offerKey === offerKey)
-      if (selected) {
-        setEngagement((current) => ({
-          ...current,
-          offers: {
-            ...current.offers,
-            available: current.offers.available.filter((offer) => offer.offerKey !== offerKey),
-            active: [{ ...selected, status: 'ACTIVE' }, ...current.offers.active],
-          },
-          partnerStatus: {
-            ...current.partnerStatus,
-            benefits: {
-              ...current.partnerStatus.benefits,
-              thisMonth: current.partnerStatus.benefits.thisMonth + (selected.estimatedBenefitAzn || 0),
-              lifetime: current.partnerStatus.benefits.lifetime + (selected.estimatedBenefitAzn || 0),
-            },
-            benefitHistory: [{ activatedAt: new Date().toISOString(), title: selected.title, benefitSummary: selected.benefitSummary, estimatedBenefitAzn: selected.estimatedBenefitAzn }, ...current.partnerStatus.benefitHistory],
-          },
-        }))
-        setJustActivatedKey(offerKey)
-      }
-      setActivatingKey(null)
+      const end = new Date(`${startDate}T00:00:00Z`); end.setUTCDate(end.getUTCDate() + durationDays - 1)
+      const baselineEnd = new Date(`${startDate}T00:00:00Z`); baselineEnd.setUTCDate(baselineEnd.getUTCDate() - 1)
+      const baselineStart = new Date(baselineEnd); baselineStart.setUTCDate(baselineStart.getUTCDate() - durationDays + 1)
+      setOpportunities((current) => ({ ...current, summary: { ...current.summary, availableCount: current.summary.availableCount - 1, activeTrialCount: current.summary.activeTrialCount + 1 }, opportunities: current.opportunities.map((item) => item.id === opportunityId ? { ...item, status: 'ACTIVE', trial: { id: `demo-${item.id}`, status: 'ACTIVE', startDate, endDate: end.toISOString().slice(0, 10), baselineFrom: baselineStart.toISOString().slice(0, 10), baselineTo: baselineEnd.toISOString().slice(0, 10), metric: 'PRESENTATION_RATE', baselineValue: item.metrics.supportPercentage || item.metrics.attachmentPercentage, currentValue: null, currentNumerator: null, currentDenominator: null, measurementNote: 'Presentation-mode trial. It resets when this browser session reloads.' } } : item) }))
+      setStartingTrialId(null)
       return
     }
     try {
-      await activateRetailerOffer({ ...credentials, offerKey })
-      // Show the success checkmark in place before the offer moves to the Active tab, rather
-      // than refetching immediately and having the card disappear out from under the click.
-      setJustActivatedKey(offerKey)
-      setActivatingKey(null)
-      setTimeout(async () => {
-        try {
-          const [refreshedOffers, refreshedActions, refreshedPartnerStatus] = await Promise.all([
-            fetchRetailerOffers(credentials),
-            fetchRetailerActions(credentials),
-            fetchRetailerPartnerStatus(credentials),
-          ])
-          setEngagement({ offers: refreshedOffers, actions: refreshedActions, partnerStatus: refreshedPartnerStatus })
-        } catch (refreshError) {
-          setEngagementError(refreshError?.message || 'Unable to refresh SCAN offers and benefits.')
-        } finally {
-          setJustActivatedKey((current) => (current === offerKey ? null : current))
-        }
-      }, 2200)
+      const activated = await startRetailerOpportunityTrial({ ...credentials, opportunityId, startDate, durationDays })
+      setOpportunities((current) => ({ ...current, summary: { ...current.summary, availableCount: Math.max(0, current.summary.availableCount - 1), activeTrialCount: current.summary.activeTrialCount + 1 }, opportunities: current.opportunities.map((item) => item.id === opportunityId ? activated : item) }))
     } catch (activationError) {
-      setEngagementError(activationError?.message || 'This offer could not be activated.')
-      setActivatingKey(null)
+      setEngagementError(activationError?.message || 'This trial could not be started.')
+    } finally {
+      setStartingTrialId(null)
     }
   }
 
@@ -1036,14 +962,14 @@ export default function RetailerDashboard() {
     refreshRequested.current = true
     setMotionState('refreshing')
     if (credentials.presentation) {
-      setLoading(true); setEngagementLoading(true)
+      setLoading(true); setEngagementLoading(true); setOpportunitiesLoading(true)
       window.clearTimeout(refreshTimer.current)
       refreshTimer.current = window.setTimeout(() => {
-        setData(presentationOverview(period)); setEngagement(presentationEngagement()); setLoading(false); setEngagementLoading(false); finishRefreshMotion()
+        setData(presentationOverview(period)); setEngagement(presentationEngagement()); setOpportunities(presentationOpportunities()); setLoading(false); setEngagementLoading(false); setOpportunitiesLoading(false); finishRefreshMotion()
       }, 420)
       return
     }
-    setLoading(true); setEngagementLoading(true); setRefreshKey((value) => value + 1)
+    setLoading(true); setEngagementLoading(true); setOpportunitiesLoading(true); setRefreshKey((value) => value + 1)
   }
   function changePeriod(nextPeriod) {
     setError(''); setPeriod(nextPeriod)
@@ -1065,7 +991,7 @@ export default function RetailerDashboard() {
   }, [])
   function signOut() {
     setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('LAST_30_DAYS'); setActivePage('home')
-    setEngagement(null); setEngagementLoading(false); setEngagementError(''); setActivatingKey(null); setJustActivatedKey(null)
+    setEngagement(null); setEngagementLoading(false); setEngagementError(''); setOpportunities(null); setOpportunitiesLoading(false); setStartingTrialId(null); setAnalysisNotice(''); opportunitySnapshot.current = null
     setIntelligenceOpen(false); setIntelligenceContext(null)
   }
 
@@ -1073,7 +999,7 @@ export default function RetailerDashboard() {
     return <Login error={error} loading={loading} onSubmit={(next) => {
       const presentation = isPresentationCredentials(next)
       setCredentials({ ...next, presentation }); setData(presentation ? presentationOverview(period) : null); setError(''); setLoading(!presentation)
-      setEngagement(presentation ? presentationEngagement() : null); setEngagementLoading(!presentation); setRefreshKey((value) => value + 1)
+      setEngagement(presentation ? presentationEngagement() : null); setEngagementLoading(!presentation); setOpportunities(presentation ? presentationOpportunities() : null); setOpportunitiesLoading(!presentation); setRefreshKey((value) => value + 1)
     }} />
   }
   if (!data) return <LoadingState title="Reading your latest sales…" description="Preparing your shop summary." />
@@ -1083,7 +1009,7 @@ export default function RetailerDashboard() {
       <DataFreshness formatter={formatTime} generatedAt={data.generatedAt} />
       {credentials.presentation ? <span className="retailer-presentation-badge"><i aria-hidden="true" />Presentation data</span> : null}
       {data.retailerCode === 'KAGGLE' ? <details className="cci-dataset-menu"><summary>Demo data</summary><div><strong>Dataset details</strong><p>Kaggle Supermarket Dataset 2019. This is not current retailer performance.</p></div></details> : null}
-      <button aria-controls="retailer-intelligence-drawer" aria-expanded={intelligenceOpen} aria-label="Ask SCAN" className="retailer-intelligence-trigger" onClick={(event) => openIntelligence(intelligenceContextForPage(activePage, data, engagement), event.currentTarget)} type="button"><ScanIcon name="ask" size={16} /><span>Ask SCAN</span></button>
+      <button aria-controls="retailer-intelligence-drawer" aria-expanded={intelligenceOpen} aria-label="Ask SCAN" className="retailer-intelligence-trigger" onClick={(event) => openIntelligence(intelligenceContextForPage(activePage, data, engagement, opportunities), event.currentTarget)} type="button"><ScanIcon name="ask" size={16} /><span>Ask SCAN</span></button>
       <button aria-label={loading ? 'Refreshing…' : 'Refresh'} className="scan-icon-button" disabled={loading || engagementLoading} onClick={refresh} type="button"><ScanIcon name="refresh" size={18} /></button>
     </>
   )
@@ -1094,21 +1020,23 @@ export default function RetailerDashboard() {
         {error ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{error}</span><button className="scan-button scan-button-light" onClick={refresh} type="button">Retry</button></div> : null}
         {engagementError ? <div className="scan-inline-notice scan-inline-error" role="alert"><span>{engagementError}</span></div> : null}
         <Page
-          activatingKey={activatingKey}
+          analysisNotice={analysisNotice}
           activePage={activePage}
           data={data}
           engagement={engagement}
           engagementLoading={engagementLoading}
-          justActivatedKey={justActivatedKey}
           loading={loading}
           motionState={motionState}
           motionTick={motionTick}
-          onActivate={activateOffer}
           onNavigate={navigate}
           onOpenIntelligence={openIntelligence}
           onPeriodChange={changePeriod}
+          onStartTrial={startTrial}
+          opportunities={opportunities}
+          opportunitiesLoading={opportunitiesLoading}
           period={period}
           presentation={credentials.presentation}
+          startingTrialId={startingTrialId}
         />
       </WorkspaceShell>
       {intelligenceOpen ? <RetailerIntelligenceDrawer context={intelligenceContext} data={data} onClose={closeIntelligence} onNavigate={navigate} open /> : null}

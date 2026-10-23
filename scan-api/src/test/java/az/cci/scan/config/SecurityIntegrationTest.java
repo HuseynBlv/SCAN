@@ -867,11 +867,23 @@ class SecurityIntegrationTest {
             .andExpect(jsonPath("$.topProducts[0].name").value("Local Product"))
             .andExpect(jsonPath("$.sync.state").value("COMPLETED"))
             .andExpect(jsonPath("$.sync.importedReceipts").value(1));
+
+        mockMvc.perform(get("/api/v1/retailer/opportunities")
+                .param("retailerCode", "PRIVATE")
+                .with(httpBasic("test-retailer", "test-retailer-password")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.summary.receiptCount").value(1))
+            .andExpect(jsonPath("$.summary.coverageStatus").value("INSUFFICIENT_DATA"))
+            .andExpect(jsonPath("$.opportunities.length()").value(0));
     }
 
     @Test
     void cciCannotReadRetailerPrivateDashboardAndRetailerCannotReadCciEndpoint() throws Exception {
         mockMvc.perform(get("/api/v1/retailer/overview")
+                .with(httpBasic("test-cci", "test-cci-password")))
+            .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/retailer/opportunities")
                 .with(httpBasic("test-cci", "test-cci-password")))
             .andExpect(status().isForbidden());
 

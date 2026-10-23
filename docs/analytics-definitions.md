@@ -86,3 +86,53 @@ Insights always contain Fact → Interpretation → Recommended Action.
 - A daypart action requires at least 35% of validated baskets in one daypart.
 - Mapping below 90% produces a mapping-quality warning.
 - Promotion effectiveness is not calculated because Phase 0 has no promotion identifier.
+
+## Retailer growth opportunities
+
+The retailer Opportunities workspace analyzes the latest 30 days relative to the most recent
+persisted receipt, so a complete historical export remains reproducible. Analysis is performed
+per store; products are counted at most once per receipt.
+
+### Product association
+
+For products A and B:
+
+```text
+support(A,B) = baskets containing A and B / all analyzed baskets
+confidence(A→B) = baskets containing A and B / baskets containing A
+lift(A,B) = support(A,B) / (support(A) × support(B))
+```
+
+A cross-sell candidate requires at least 30 store baskets, at least five baskets containing the
+pair, at least 2% support, and lift of at least 1.30. The engine limits pair enumeration to the 40
+most frequently observed products per store to keep analysis bounded on larger imports. A
+relationship recommends a test; it does not predict uplift.
+
+### Beverage attachment
+
+Attachment is the share of baskets containing a supported non-beverage category that also contain
+a product in a recognized beverage category. Category opportunities require at least 85% mapped
+transaction-line coverage, 20 category baskets, and at least five beverage baskets in the store.
+The category attachment rate must be no more than the larger of 10% or 65% of the store-wide
+beverage basket rate. A low rate is labeled as a placement hypothesis, never lost revenue.
+
+### Product change
+
+Product performance compares basket penetration in two equivalent 14-day windows. Both windows
+must contain at least 20 baskets; the product must occur in at least eight baskets in one window
+and three in the other. SCAN surfaces a change only when the relative penetration change is at
+least 30%. This comparison accounts for different receipt counts but not seasonality, price,
+availability, or local events.
+
+### Time pattern
+
+A time opportunity requires at least 20 baskets that contain both a beverage and a snack. The
+leading daypart must contain at least 45% of those baskets. It describes when observed execution
+matters most and does not forecast incremental demand.
+
+### Trial measurement
+
+Placement and attachment trials preserve an equally long pre-trial baseline when they are created.
+During-trial rates are recomputed from newly available receipts. Before/after differences are
+observational and are never described as causal proof. Active trial snapshots remain available if
+the underlying opportunity later falls below a detection threshold.

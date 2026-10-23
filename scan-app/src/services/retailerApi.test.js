@@ -3,8 +3,10 @@ import {
   activateRetailerOffer,
   fetchRetailerActions,
   fetchRetailerOffers,
+  fetchRetailerOpportunities,
   fetchRetailerOverview,
   fetchRetailerPartnerStatus,
+  startRetailerOpportunityTrial,
 } from './retailerApi'
 
 function validOffer(overrides = {}) {
@@ -63,6 +65,18 @@ function validOverview(overrides = {}) {
     },
     lifetimeTransactionsProcessed: 1,
     ...overrides,
+  }
+}
+
+function validOpportunity(overrides = {}) {
+  return {
+    id: 'opp-1', storeId: 'STORE-1', type: 'CROSS_SELL', title: 'Cola + Chips', description: 'Observed pair.',
+    subjects: ['Cola', 'Chips'], priority: 'HIGH', status: 'DETECTED',
+    metrics: { supportPercentage: 10, confidencePercentage: 50, lift: 2, productABaskets: 20, productBBaskets: 15, jointBaskets: 10 },
+    primaryMetricLabel: 'Lift', primaryMetricValue: '2.0×',
+    evidence: { receiptCount: 100, supportingBasketCount: 10, dateFrom: '2026-08-01', dateTo: '2026-08-30', dataCompletenessPercentage: 98, observation: 'Together in 10 baskets.', whyItMatters: 'Twice the independent expectation.', limitations: null },
+    recommendedAction: { title: 'Start placement trial', description: 'Test adjacent placement.', durationDays: 7 },
+    trial: null, detectedAt: '2026-08-30T10:00:00Z', updatedAt: '2026-08-30T10:00:00Z', ...overrides,
   }
 }
 
@@ -256,5 +270,28 @@ describe('fetchRetailerPartnerStatus', () => {
     expect(result.level).toBe('GOLD')
     expect(result.benefits.thisMonth).toBe(84.5)
     expect(result.benefitHistory).toHaveLength(1)
+  })
+})
+
+describe('retailer opportunity API', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('loads reproducible evidence and starts a dated trial', async () => {
+    const body = { summary: { analyzedAt: '2026-08-30T10:00:00Z', latestImportAt: '2026-08-30T09:59:00Z', datasetKind: 'OPERATIONAL', coverageStatus: 'READY', receiptCount: 100, mappingCoveragePercentage: 98, availableCount: 1, activeTrialCount: 0, completedTrialCount: 0 }, opportunities: [validOpportunity()] }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: vi.fn().mockResolvedValue(body) })
+      .mockResolvedValueOnce({ ok: true, status: 201, json: vi.fn().mockResolvedValue(validOpportunity({ status: 'ACTIVE', trial: { id: 'trial-1', status: 'ACTIVE', startDate: '2026-10-24', endDate: '2026-10-30', baselineFrom: '2026-10-17', baselineTo: '2026-10-23', metric: 'JOINT_BASKET_RATE', baselineValue: 10, currentValue: null, currentNumerator: null, currentDenominator: null, measurementNote: 'Starts tomorrow.' } })) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const analysis = await fetchRetailerOpportunities({ username: 'retailer', password: 'secret' })
+    expect(analysis.opportunities[0].metrics.lift).toBe(2)
+    const trial = await startRetailerOpportunityTrial({ opportunityId: 'opp-1', startDate: '2026-10-24', durationDays: 7, username: 'retailer', password: 'secret' })
+    expect(trial.status).toBe('ACTIVE')
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/retailer/opportunities/opp-1/trials', expect.objectContaining({ method: 'POST', body: JSON.stringify({ startDate: '2026-10-24', durationDays: 7 }) }))
+  })
+
+  it('rejects invented or malformed opportunity metrics', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ summary: { analyzedAt: '2026-08-30T10:00:00Z', latestImportAt: null, datasetKind: 'OPERATIONAL', coverageStatus: 'READY', receiptCount: 100, mappingCoveragePercentage: 98, availableCount: 1, activeTrialCount: 0, completedTrialCount: 0 }, opportunities: [validOpportunity({ metrics: { lift: -2 } })] }) }))
+    await expect(fetchRetailerOpportunities({ username: 'retailer', password: 'secret' })).rejects.toEqual(expect.objectContaining({ message: expect.stringContaining('metrics.lift') }))
   })
 })

@@ -235,3 +235,20 @@ export function presentationEngagement() {
     },
   }
 }
+
+export function presentationOpportunities() {
+  const analyzedAt = new Date().toISOString()
+  const evidence = (supportingBasketCount, observation, whyItMatters, limitations = null) => ({
+    receiptCount: 2768, supportingBasketCount, dateFrom: new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10),
+    dateTo: analyzedAt.slice(0, 10), dataCompletenessPercentage: 97.4, observation, whyItMatters, limitations,
+  })
+  const base = { storeId: 'NIZAMI-01', priority: 'MEDIUM', status: 'DETECTED', trial: null, detectedAt: analyzedAt, updatedAt: analyzedAt }
+  return {
+    summary: { analyzedAt, latestImportAt: analyzedAt, datasetKind: 'PRESENTATION', coverageStatus: 'READY', receiptCount: 2768, mappingCoveragePercentage: 97.4, availableCount: 3, activeTrialCount: 0, completedTrialCount: 1 },
+    opportunities: [
+      { ...base, id: 'presentation-pair', type: 'CROSS_SELL', title: 'Coca-Cola Zero 330ml + Doritos Nacho 90g', description: 'A recurring product relationship is strong enough to test in-store.', subjects: ['Coca-Cola Zero 330ml', 'Doritos Nacho 90g'], primaryMetricLabel: 'Lift', primaryMetricValue: '2.3×', metrics: { supportPercentage: 10.3, confidencePercentage: 55.5, lift: 2.3, productABaskets: 512, productBBaskets: 175, jointBaskets: 284 }, evidence: evidence(284, 'These products appeared together in 284 of 2,768 synthetic presentation baskets.', 'A lift of 2.3 means the pair occurred 2.3 times as often as expected if purchases were independent.'), recommendedAction: { title: 'Start placement trial', description: 'Test placing the products closer together while SCAN compares the trial window with an equally long baseline.', durationDays: 7 } },
+      { ...base, id: 'presentation-attachment', type: 'BEVERAGE_ATTACHMENT', title: 'Sandwiches beverage attachment', description: 'Beverages appear less often in these baskets than in the store overall.', subjects: ['Sandwiches'], primaryMetricLabel: 'Beverage attachment', primaryMetricValue: '18.4%', metrics: { attachmentPercentage: 18.4, storeBeveragePercentage: 49, categoryBaskets: 304, attachedBaskets: 56 }, evidence: evidence(56, '56 of 304 sandwich baskets included a beverage.', 'The observed attachment rate is 18.4% versus 49.0% across all synthetic store baskets.', 'This is a placement hypothesis, not evidence of lost sales.'), recommendedAction: { title: 'Start attachment trial', description: 'Test a simple beverage prompt or adjacent placement for seven days.', durationDays: 7 } },
+      { ...base, id: 'presentation-time', type: 'TIME_PATTERN', title: 'Evening beverage-and-snack window', description: 'Beverage-and-snack baskets are concentrated in one observed daypart.', subjects: ['Beverages', 'Snacks'], primaryMetricLabel: 'Peak-window share', primaryMetricValue: '47.0%', metrics: { peakSharePercentage: 47, supportingBaskets: 216, pairedBaskets: 459 }, evidence: evidence(216, '216 of 459 beverage-and-snack baskets occurred during evening.', 'This concentration identifies when execution matters most; it does not predict incremental sales.'), recommendedAction: { title: 'Plan peak-window check', description: 'Check availability and display execution before the observed peak window.', durationDays: 7 } },
+    ],
+  }
+}
