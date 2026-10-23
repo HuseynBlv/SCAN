@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import ScanBrand from './ScanBrand'
+import { INITIAL_LOADING_DURATION_MS } from './loadingConfig'
 import './LoadingScreen.css'
 
 const nodes = [
@@ -64,4 +66,17 @@ export default function LoadingScreen({
       )}
     </main>
   )
+}
+
+export function TimedLoadingScreen({
+  duration = INITIAL_LOADING_DURATION_MS,
+  onComplete,
+  ...loadingScreenProps
+}) {
+  useEffect(() => {
+    const timerId = window.setTimeout(onComplete, Math.max(0, duration))
+    return () => window.clearTimeout(timerId)
+  }, [duration, onComplete])
+
+  return <LoadingScreen {...loadingScreenProps} />
 }

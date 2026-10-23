@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RetailerDashboard from './RetailerDashboard'
@@ -192,10 +192,10 @@ describe('RetailerDashboard', () => {
   })
 
   it('opens a presentation-ready account without calling the API', async () => {
-    const user = userEvent.setup()
     render(<RetailerDashboard />)
 
-    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    expect(screen.getByRole('status')).toHaveTextContent('Loading presentation intelligence')
 
     expect(await screen.findByText('4 things deserve attention today.')).toBeInTheDocument()
     expect(screen.getAllByText('Nərgiz Market · Nizami')).toHaveLength(2)
