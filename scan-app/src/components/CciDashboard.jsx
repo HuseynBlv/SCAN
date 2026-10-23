@@ -44,6 +44,8 @@ import {
 } from '../services/intelligenceApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
+import { TimedLoadingScreen } from './LoadingScreen'
+import { PRESENTATION_LOADING_DURATION_MS } from './loadingConfig'
 import {
   CCI_PRESENTATION_PASSWORD,
   CCI_PRESENTATION_USERNAME,
@@ -2165,10 +2167,12 @@ export default function CciDashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [presentationLoading, setPresentationLoading] = useState(false)
   const [activePage, setActivePage] = useState('overview')
   const [globalSearch, setGlobalSearch] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const layoutRef = useRef(null)
+  const finishPresentationLoading = useCallback(() => setPresentationLoading(false), [])
 
   const [periodDays, setPeriodDays] = useState(DEFAULT_NETWORK_PERIOD_DAYS)
   const [networkOverview, setNetworkOverview] = useState(null)
@@ -2450,6 +2454,7 @@ export default function CciDashboard() {
       setCredentials({ ...accountCredentials, retailerCode: 'NARGIZ', presentation: true })
       setData(presentationCciData())
       setLoading(false)
+      setPresentationLoading(true)
       setRefreshKey((value) => value + 1)
       return
     }
@@ -2464,7 +2469,7 @@ export default function CciDashboard() {
     }
   }
   function signOut() {
-    setCredentials(null); setData(null); setError(''); setLoading(false)
+    setCredentials(null); setData(null); setError(''); setLoading(false); setPresentationLoading(false)
     setActivePage('overview'); setInvestigations([]); setFieldTasks([]); setMovers([])
     setWatchlist([]); setWatchlistChanges([]); setActivations([]); setCommercialRole('COMMERCIAL')
     setSelectedInvestigationId(null); setSelectedActivationId(null); setCopilotContext(null)
@@ -2592,6 +2597,7 @@ export default function CciDashboard() {
   }
 
   if (!credentials || (!data && error)) return <Login error={error} loading={loading} onSubmit={signIn} />
+  if (presentationLoading) return <TimedLoadingScreen duration={PRESENTATION_LOADING_DURATION_MS} message="Loading presentation intelligence" onComplete={finishPresentationLoading} />
   if (!data) return <LoadingState title="Reading retailer evidence…" description="Preparing basket and product analysis." />
 
   const header = (
