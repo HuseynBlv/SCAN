@@ -485,6 +485,18 @@
   .scan-mobile-nav { display: flex; gap: 7px; margin: 0 -22px; padding: 14px 22px 10px; overflow-x: auto; }
   .scan-mobile-nav button { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 0 12px; border: 1px solid var(--scan-border); border-radius: 6px; background: #fff; color: var(--scan-muted); font-size: .74rem; }
   .scan-mobile-nav button.is-active { border-color: var(--scan-ink); background: var(--scan-ink); color: #fff; }
+  .scan-workspace-cci .scan-mobile-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin-top: 0;
+    border-bottom: 1px solid var(--scan-border);
+    background: rgba(247,247,245,.96);
+    box-shadow: 0 10px 24px rgba(23,24,27,.045);
+    scrollbar-width: none;
+    backdrop-filter: blur(12px);
+  }
+  .scan-workspace-cci .scan-mobile-nav::-webkit-scrollbar { display: none; }
   .scan-view { margin-top: 24px; }
   .scan-topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
   .cci-dna-map { gap: 20px; padding-right: 0; }
@@ -526,8 +538,9 @@
   .scan-evidence { grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .scan-evidence-meter { grid-column: 1 / -1; }
   .scan-subsection-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .scan-workspace-retailer .scan-mobile-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 10; justify-content: space-around; gap: 0; margin: 0; padding: 7px 8px max(7px, env(safe-area-inset-bottom)); border-top: 1px solid var(--scan-border); background: rgba(255,255,255,.97); box-shadow: 0 -8px 28px rgba(20,20,20,.06); }
-  .scan-workspace-retailer .scan-mobile-nav button { min-width: 68px; min-height: 52px; flex-direction: column; justify-content: center; gap: 3px; padding: 3px 6px; border: 0; background: transparent; font-size: .65rem; }
+  .scan-workspace-retailer .scan-mobile-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 50; justify-content: stretch; gap: 0; margin: 0; padding: 7px 6px max(7px, env(safe-area-inset-bottom)); overflow: hidden; border-top: 1px solid var(--scan-border); background: rgba(255,255,255,.97); box-shadow: 0 -8px 28px rgba(20,20,20,.08); backdrop-filter: blur(14px); }
+  .scan-workspace-retailer .scan-mobile-nav button { min-width: 0; min-height: 52px; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 3px; padding: 3px 2px; border: 0; background: transparent; font-size: clamp(.5rem, 2.3vw, .62rem); letter-spacing: -.015em; }
+  .scan-workspace-retailer .scan-mobile-nav button span { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scan-workspace-retailer .scan-mobile-nav button.is-active { color: var(--scan-red-dark); background: transparent; }
   .cci-discovery-hero h2 { font-size: clamp(2.55rem, 14vw, 4rem); }
   .cci-ask-launcher form { min-height: 56px; padding-left: 14px; }

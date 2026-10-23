@@ -121,7 +121,9 @@
 .app-reveal { min-height: 100vh; animation: scan-app-reveal 280ms var(--scan-enter) both; }
 
 @keyframes scan-loader-enter { from { opacity: 0; } }
-@keyframes scan-app-reveal { from { opacity: 0; transform: translateY(3px); } }
+/* Keep the reveal opacity-only: a retained transform creates a containing block and
+   makes fixed mobile navigation anchor to the document instead of the viewport. */
+@keyframes scan-app-reveal { from { opacity: 0; } }
 @keyframes scan-network-line { from { opacity: .34; } to { opacity: .78; } }
 @keyframes scan-network-node { from { opacity: .34; } to { opacity: .88; } }
 @keyframes scan-loader-progress { from { transform: translateX(-110%); } to { transform: translateX(365%); } }
