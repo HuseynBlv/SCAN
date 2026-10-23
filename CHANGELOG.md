@@ -2,6 +2,28 @@
 
 All notable changes to SCAN are documented in this file.
 
+## [0.4.0.0] - 2026-10-23
+
+### Added
+
+- Discover cross-selling, beverage-attachment, product-performance, and daypart opportunities
+  directly from reconstructed POS baskets with reproducible support, confidence, lift, coverage,
+  and equivalent-period calculations.
+- Review opportunity evidence in a responsive master-detail workspace, including data sufficiency,
+  mapping coverage, plain-language reasoning, limitations, and metric-specific visualizations.
+- Start persistent placement and attachment trials with dated baseline windows, tenant-scoped access,
+  and observational trial-period measurement.
+
+### Changed
+
+- Recalculate retailer opportunities from the latest deduplicated transaction records whenever the
+  workspace refreshes, while keeping stable identities and preserving active trials across ranking
+  changes.
+- Clearly label demonstration analysis and show honest empty states when operational data or product
+  mapping quality is insufficient for a supported recommendation.
+- Document the opportunity formulas, evidence thresholds, ranking rules, and non-causal measurement
+  language used by the growth-intelligence engine.
+
 ## [0.3.0.0] - 2026-10-09
 
 ### Added
