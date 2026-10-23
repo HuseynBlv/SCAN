@@ -363,6 +363,13 @@
 }
 
 @media (max-width: 720px) {
+  .scan-workspace-cci button,
+  .scan-workspace-cci input,
+  .scan-workspace-cci select,
+  .scan-workspace-cci summary { min-height: 44px; }
+  .scan-workspace-cci .cci-global-toolbar .scan-button,
+  .scan-workspace-cci .cci-user-menu select,
+  .scan-workspace-cci .cci-meeting-controls select { min-height: 44px; }
   .cci-global-toolbar-actions .scan-data-freshness,.cci-global-toolbar-actions .cci-presentation-badge { order: -1; }
   .cci-global-toolbar-actions .scan-segmented { width: 100%; }
   .cci-global-toolbar-actions .scan-segmented button { flex: 1; }
@@ -374,6 +381,12 @@
   .cci-brand { padding-top: 60px; }
   .cci-login-copy { padding-top: 30px; }
   .portal-switch-links { gap: 14px; }
+  .scan-workspace-cci .cci-watch-form { align-items: stretch; flex-direction: column; }
+  .scan-workspace-cci .cci-watch-form input { width: 100%; max-width: none; min-height: 44px; }
+  .scan-workspace-cci .cci-watch-form .scan-button { width: 100%; }
+  .scan-workspace-cci .cci-meeting-controls { width: 100%; display: grid; grid-template-columns: 1fr; }
+  .scan-workspace-cci .cci-meeting-controls select,
+  .scan-workspace-cci .cci-meeting-controls .scan-button { width: 100%; }
 }
 
 /* -------------------------------------------------------------- */
@@ -710,6 +723,7 @@
 }
 
 @media (max-width: 720px) {
+  .scan-workspace-cci .cci-user-menu select#cci-role-select { min-height: 44px; }
   .cci-overview-controls { align-items: flex-start; flex-direction: column; }
   .cci-overview-controls .scan-segmented { width: 100%; }
   .cci-overview-controls .scan-segmented button { flex: 1; }
