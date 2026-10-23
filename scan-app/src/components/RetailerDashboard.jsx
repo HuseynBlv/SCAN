@@ -20,6 +20,8 @@ import {
 } from '../services/retailerApi'
 import ScanBrand from './ScanBrand'
 import ScanIcon from './ScanIcon'
+import { TimedLoadingScreen } from './LoadingScreen'
+import { PRESENTATION_LOADING_DURATION_MS } from './loadingConfig'
 import RetailerIntelligenceDrawer from './RetailerIntelligenceDrawer'
 import {
   isPresentationCredentials,
@@ -845,6 +847,7 @@ export default function RetailerDashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [presentationLoading, setPresentationLoading] = useState(false)
   const [engagement, setEngagement] = useState(null)
   const [engagementLoading, setEngagementLoading] = useState(false)
   const [engagementError, setEngagementError] = useState('')
@@ -872,6 +875,7 @@ export default function RetailerDashboard() {
     window.clearTimeout(refreshTimer.current)
     refreshTimer.current = window.setTimeout(() => setMotionState('idle'), 2200)
   }, [])
+  const finishPresentationLoading = useCallback(() => setPresentationLoading(false), [])
 
   useEffect(() => () => window.clearTimeout(refreshTimer.current), [])
 
@@ -990,18 +994,22 @@ export default function RetailerDashboard() {
     window.requestAnimationFrame(() => intelligenceReturnFocus.current?.focus?.())
   }, [])
   function signOut() {
-    setCredentials(null); setData(null); setError(''); setLoading(false); setPeriod('LAST_30_DAYS'); setActivePage('home')
+    setCredentials(null); setData(null); setError(''); setLoading(false); setPresentationLoading(false); setPeriod('LAST_30_DAYS'); setActivePage('home')
     setEngagement(null); setEngagementLoading(false); setEngagementError(''); setOpportunities(null); setOpportunitiesLoading(false); setStartingTrialId(null); setAnalysisNotice(''); opportunitySnapshot.current = null
     setIntelligenceOpen(false); setIntelligenceContext(null)
   }
 
-  if (!credentials || (!data && error)) {
-    return <Login error={error} loading={loading} onSubmit={(next) => {
-      const presentation = isPresentationCredentials(next)
-      setCredentials({ ...next, presentation }); setData(presentation ? presentationOverview(period) : null); setError(''); setLoading(!presentation)
-      setEngagement(presentation ? presentationEngagement() : null); setEngagementLoading(!presentation); setOpportunities(presentation ? presentationOpportunities() : null); setOpportunitiesLoading(!presentation); setRefreshKey((value) => value + 1)
-    }} />
+  function signIn(next) {
+    const presentation = isPresentationCredentials(next)
+    setCredentials({ ...next, presentation }); setData(presentation ? presentationOverview(period) : null); setError(''); setLoading(!presentation)
+    setEngagement(presentation ? presentationEngagement() : null); setEngagementLoading(!presentation); setOpportunities(presentation ? presentationOpportunities() : null); setOpportunitiesLoading(!presentation); setRefreshKey((value) => value + 1)
+    setPresentationLoading(presentation)
   }
+
+  if (!credentials || (!data && error)) {
+    return <Login error={error} loading={loading} onSubmit={signIn} />
+  }
+  if (presentationLoading) return <TimedLoadingScreen duration={PRESENTATION_LOADING_DURATION_MS} message="Loading presentation intelligence" onComplete={finishPresentationLoading} />
   if (!data) return <LoadingState title="Reading your latest sales…" description="Preparing your shop summary." />
 
   const headerActions = (

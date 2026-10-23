@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import LoadingScreen from './LoadingScreen'
+import LoadingScreen, { TimedLoadingScreen } from './LoadingScreen'
 
 describe('LoadingScreen', () => {
   it('renders the branded intelligence network as an initial busy state', () => {
@@ -21,5 +21,19 @@ describe('LoadingScreen', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('SCAN could not load this page')
     fireEvent.click(screen.getByRole('button', { name: 'Retry loading SCAN' }))
     expect(onRetry).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the loader visible for the requested minimum duration', () => {
+    vi.useFakeTimers()
+    const onComplete = vi.fn()
+
+    render(<TimedLoadingScreen duration={1200} message="Loading presentation intelligence" onComplete={onComplete} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Loading presentation intelligence')
+
+    act(() => vi.advanceTimersByTime(1199))
+    expect(onComplete).not.toHaveBeenCalled()
+    act(() => vi.advanceTimersByTime(1))
+    expect(onComplete).toHaveBeenCalledOnce()
+    vi.useRealTimers()
   })
 })

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CciDashboard from './CciDashboard'
@@ -205,7 +205,8 @@ describe('CciDashboard', () => {
     const user = userEvent.setup()
     render(<CciDashboard />)
 
-    await user.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Open presentation account/ }))
+    expect(screen.getByRole('status')).toHaveTextContent('Loading presentation intelligence')
 
     expect(await screen.findByRole('heading', { name: 'Network Overview' })).toBeInTheDocument()
     expect(screen.getByText('Presentation data')).toBeInTheDocument()
