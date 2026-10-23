@@ -4,17 +4,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RetailerDashboard from './RetailerDashboard'
 import { ScanApiError } from '../services/scanApi'
 import {
-  activateRetailerOffer,
   fetchRetailerActions,
   fetchRetailerOffers,
+  fetchRetailerOpportunities,
   fetchRetailerOverview,
   fetchRetailerPartnerStatus,
+  startRetailerOpportunityTrial,
 } from '../services/retailerApi'
 
 vi.mock('../services/retailerApi', () => ({
   fetchRetailerOverview: vi.fn(),
   fetchRetailerOffers: vi.fn(),
-  activateRetailerOffer: vi.fn(),
+  fetchRetailerOpportunities: vi.fn(),
+  startRetailerOpportunityTrial: vi.fn(),
   fetchRetailerActions: vi.fn(),
   fetchRetailerPartnerStatus: vi.fn(),
 }))
@@ -103,6 +105,23 @@ function offers(overrides = {}) {
   return { generatedAt: '2026-08-29T10:00:00Z', available: [offer()], active: [], completed: [], ...overrides }
 }
 
+function opportunity(overrides = {}) {
+  return {
+    id: 'opp-pair', storeId: 'STORE-01', type: 'CROSS_SELL', title: 'Coca-Cola 500ml + Chips',
+    description: 'A recurring product relationship is strong enough to test in-store.',
+    subjects: ['Coca-Cola 500ml', 'Chips'], priority: 'HIGH', status: 'DETECTED',
+    metrics: { supportPercentage: 12, confidencePercentage: 50, lift: 2.1, productABaskets: 120, productBBaskets: 90, jointBaskets: 60 },
+    primaryMetricLabel: 'Lift', primaryMetricValue: '2.1×',
+    evidence: { receiptCount: 10000, supportingBasketCount: 60, dateFrom: '2026-08-01', dateTo: '2026-08-29', dataCompletenessPercentage: 100, observation: 'These products appeared together in 60 of 10,000 analyzed baskets.', whyItMatters: 'A lift of 2.1 means the pair occurred 2.1 times as often as expected if purchases were independent.', limitations: null },
+    recommendedAction: { title: 'Start placement trial', description: 'Test placing the products closer together while SCAN compares against a baseline.', durationDays: 7 },
+    trial: null, detectedAt: '2026-08-29T10:00:00Z', updatedAt: '2026-08-29T10:00:00Z', ...overrides,
+  }
+}
+
+function opportunityAnalysis(overrides = {}) {
+  return { summary: { analyzedAt: '2026-08-29T10:00:00Z', latestImportAt: '2026-08-29T10:00:00Z', datasetKind: 'DEMONSTRATION', coverageStatus: 'READY', receiptCount: 10000, mappingCoveragePercentage: 100, availableCount: 1, activeTrialCount: 0, completedTrialCount: 0 }, opportunities: [opportunity()], ...overrides }
+}
+
 function action(overrides = {}) {
   return {
     id: 'stock-risk-coca-cola-500ml',
@@ -154,12 +173,14 @@ describe('RetailerDashboard', () => {
   beforeEach(() => {
     fetchRetailerOverview.mockReset()
     fetchRetailerOffers.mockReset()
-    activateRetailerOffer.mockReset()
+    fetchRetailerOpportunities.mockReset()
+    startRetailerOpportunityTrial.mockReset()
     fetchRetailerActions.mockReset()
     fetchRetailerPartnerStatus.mockReset()
     fetchRetailerOffers.mockResolvedValue(offers())
     fetchRetailerActions.mockResolvedValue([action()])
     fetchRetailerPartnerStatus.mockResolvedValue(partnerStatus())
+    fetchRetailerOpportunities.mockResolvedValue(opportunityAnalysis())
   })
 
   it('links the sign-in screen to every other portal', () => {
@@ -189,7 +210,7 @@ describe('RetailerDashboard', () => {
     expect(fetchRetailerOffers).not.toHaveBeenCalled()
   })
 
-  it('accepts the presentation credentials and supports offer activation', async () => {
+  it('accepts the presentation credentials and starts a measured placement trial', async () => {
     const user = userEvent.setup()
     render(<RetailerDashboard />)
 
@@ -201,21 +222,14 @@ describe('RetailerDashboard', () => {
     await screen.findByText('4 things deserve attention today.')
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
-    expect(await screen.findByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Recommended 3/ })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Basket Growth 1/ })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Completed 1/ })).toBeInTheDocument()
-    expect(screen.getByText('38%')).toBeInTheDocument()
-    expect(screen.getByText('184')).toBeInTheDocument()
-    expect(screen.getByText('Free display materials')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Activate Opportunity' }))
-
-    expect(screen.getByRole('button', { name: 'Active' })).toBeDisabled()
-    expect(screen.getByRole('heading', { name: 'Coca-Cola + Doritos' })).toBeInTheDocument()
-    await user.click(screen.getByRole('tab', { name: /Completed 1/ }))
-    expect(screen.getByText('Fanta Orange 500ml')).toBeInTheDocument()
-    expect(screen.getByText('Measured value: ₼38.40')).toBeInTheDocument()
-    expect(activateRetailerOffer).not.toHaveBeenCalled()
+    expect(await screen.findByRole('heading', { name: 'Growth Opportunities' })).toBeInTheDocument()
+    expect(screen.getByText('Presentation dataset')).toBeInTheDocument()
+    expect(screen.getAllByText('2.3×').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: 'Start placement trial' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm trial' }))
+    expect(await screen.findByRole('heading', { name: 'Active trial' })).toBeInTheDocument()
+    expect(screen.getByText(/Presentation-mode trial/)).toBeInTheDocument()
+    expect(startRetailerOpportunityTrial).not.toHaveBeenCalled()
   })
 
   it('leads with the current store operating state in a compact modular grid', async () => {
@@ -239,61 +253,57 @@ describe('RetailerDashboard', () => {
     expect(screen.getByRole('heading', { name: 'Top products' })).toBeInTheDocument()
   })
 
-  it('activates an offer with a loading state then a success checkmark, in place', async () => {
+  it('starts a persistent opportunity trial and shows its baseline', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
     let resolveActivation
-    activateRetailerOffer.mockReturnValue(new Promise((resolve) => { resolveActivation = resolve }))
+    startRetailerOpportunityTrial.mockReturnValue(new Promise((resolve) => { resolveActivation = resolve }))
     render(<RetailerDashboard />)
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
-    expect(await screen.findByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
-    expect(screen.getByText(/Order 3 cases/)).toBeInTheDocument()
-    expect(screen.getByText('Volume offer')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Activate' }))
-    expect(screen.getByRole('button', { name: 'Activating…' })).toBeDisabled()
-
-    await act(async () => resolveActivation(offer({ status: 'ACTIVE' })))
-
-    expect(activateRetailerOffer).toHaveBeenCalledWith(expect.objectContaining({ offerKey: 'CCI-COCA-COLA-ZERO-330ML' }))
-    // The just-activated card stays visible with a checkmark rather than vanishing the instant
-    // it is accepted, so the retailer sees the confirmation before it moves to the Active tab.
-    expect(await screen.findByRole('button', { name: 'Active' })).toBeDisabled()
-    expect(screen.getByText('Coca-Cola Zero 330ml')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Growth Opportunities' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Start placement trial' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm trial' }))
+    expect(screen.getByRole('button', { name: 'Starting trial…' })).toBeDisabled()
+    const active = opportunity({ status: 'ACTIVE', trial: { id: 'trial-1', status: 'ACTIVE', startDate: '2026-10-23', endDate: '2026-10-29', baselineFrom: '2026-10-16', baselineTo: '2026-10-22', metric: 'JOINT_BASKET_RATE', baselineValue: 12, currentValue: null, currentNumerator: null, currentDenominator: null, measurementNote: 'Measurement starts on the selected date.' } })
+    await act(async () => resolveActivation(active))
+    expect(startRetailerOpportunityTrial).toHaveBeenCalledWith(expect.objectContaining({ opportunityId: 'opp-pair', durationDays: 7 }))
+    expect(await screen.findByRole('heading', { name: 'Active trial' })).toBeInTheDocument()
+    expect(screen.getByText('12%')).toBeInTheDocument()
   })
 
-  it('surfaces why an offer could not be activated', async () => {
+  it('surfaces why an opportunity trial could not be started', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
-    activateRetailerOffer.mockRejectedValue(new ScanApiError('This offer is no longer available. Refresh to see current offers.', 400))
+    startRetailerOpportunityTrial.mockRejectedValue(new ScanApiError('This opportunity is no longer available. Refresh the analysis.', 400))
     render(<RetailerDashboard />)
     await signIn(user)
 
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
-    await user.click(await screen.findByRole('button', { name: 'Activate' }))
-
-    expect(await screen.findByText('This offer is no longer available. Refresh to see current offers.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Activate' })).toBeEnabled()
+    await user.click(await screen.findByRole('button', { name: 'Start placement trial' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm trial' }))
+    expect(await screen.findByText('This opportunity is no longer available. Refresh the analysis.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm trial' })).toBeEnabled()
   })
 
-  it('shows why a retailer is seeing an offer only when asked', async () => {
+  it('shows reproducible opportunity evidence only when asked', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
     render(<RetailerDashboard />)
     await signIn(user)
     await user.click(screen.getAllByRole('button', { name: 'Opportunities' })[0])
 
-    expect(screen.queryByText(/It was purchased in 80 separate baskets/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/A lift of 2.1 means/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Why this?' }))
-    expect(screen.getByText(/It was purchased in 80 separate baskets/)).toBeInTheDocument()
+    expect(screen.getByText(/A lift of 2.1 means/)).toBeInTheDocument()
   })
 
   it('leaves offers, actions, and benefits empty for a retailer with no CCI sales yet', async () => {
     const user = userEvent.setup()
     fetchRetailerOverview.mockResolvedValue(overview)
     fetchRetailerOffers.mockResolvedValue(offers({ available: [] }))
+    fetchRetailerOpportunities.mockResolvedValue(opportunityAnalysis({ summary: { ...opportunityAnalysis().summary, availableCount: 0 }, opportunities: [] }))
     fetchRetailerActions.mockResolvedValue([])
     fetchRetailerPartnerStatus.mockResolvedValue(partnerStatus({
       level: 'SILVER', progressPercentage: 25, nextLevel: 'GOLD', daysUntilNextLevel: null,

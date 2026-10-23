@@ -268,7 +268,7 @@ function normalizePartnerStatus(data) {
   }
 }
 
-async function authorizedRequest(path, { method = 'GET', username, password, signal } = {}) {
+async function authorizedRequest(path, { method = 'GET', username, password, signal, body } = {}) {
   let response
   try {
     response = await fetch(apiUrl(path), {
@@ -277,7 +277,9 @@ async function authorizedRequest(path, { method = 'GET', username, password, sig
       headers: {
         Accept: 'application/json',
         Authorization: basicAuthorization(username, password),
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
+      body: body ? JSON.stringify(body) : undefined,
     })
   } catch (error) {
     if (error?.name === 'AbortError' || error instanceof ScanApiError) throw error
@@ -285,6 +287,81 @@ async function authorizedRequest(path, { method = 'GET', username, password, sig
   }
   if (!response.ok) throw new ScanApiError(await errorMessage(response), response.status)
   return response.json()
+}
+
+const OPPORTUNITY_TYPES = new Set(['CROSS_SELL', 'BEVERAGE_ATTACHMENT', 'PRODUCT_TREND', 'TIME_PATTERN'])
+const OPPORTUNITY_PRIORITIES = new Set(['HIGH', 'MEDIUM', 'LOW'])
+const OPPORTUNITY_STATUSES = new Set(['DETECTED', 'ACTIVE', 'COMPLETED'])
+
+function normalizeTrial(value, field) {
+  if (value == null) return null
+  return {
+    id: string(value.id, `${field}.id`), status: string(value.status, `${field}.status`),
+    startDate: string(value.startDate, `${field}.startDate`), endDate: string(value.endDate, `${field}.endDate`),
+    baselineFrom: string(value.baselineFrom, `${field}.baselineFrom`), baselineTo: string(value.baselineTo, `${field}.baselineTo`),
+    metric: string(value.metric, `${field}.metric`), baselineValue: number(value.baselineValue, `${field}.baselineValue`),
+    currentValue: nullableNumber(value.currentValue, `${field}.currentValue`),
+    currentNumerator: value.currentNumerator == null ? null : count(value.currentNumerator, `${field}.currentNumerator`),
+    currentDenominator: value.currentDenominator == null ? null : count(value.currentDenominator, `${field}.currentDenominator`),
+    measurementNote: string(value.measurementNote, `${field}.measurementNote`),
+  }
+}
+
+function normalizeOpportunity(item, field) {
+  if (!item.metrics || typeof item.metrics !== 'object' || Array.isArray(item.metrics)) invalid(`${field}.metrics`)
+  Object.entries(item.metrics).forEach(([key, value]) => number(value, `${field}.metrics.${key}`))
+  return {
+    id: string(item.id, `${field}.id`), storeId: string(item.storeId, `${field}.storeId`),
+    type: enumValue(item.type, OPPORTUNITY_TYPES, `${field}.type`), title: string(item.title, `${field}.title`),
+    description: string(item.description, `${field}.description`), subjects: stringArray(item.subjects, `${field}.subjects`),
+    priority: enumValue(item.priority, OPPORTUNITY_PRIORITIES, `${field}.priority`),
+    status: enumValue(item.status, OPPORTUNITY_STATUSES, `${field}.status`), metrics: item.metrics,
+    primaryMetricLabel: string(item.primaryMetricLabel, `${field}.primaryMetricLabel`),
+    primaryMetricValue: string(item.primaryMetricValue, `${field}.primaryMetricValue`),
+    evidence: {
+      receiptCount: count(item.evidence.receiptCount, `${field}.evidence.receiptCount`),
+      supportingBasketCount: count(item.evidence.supportingBasketCount, `${field}.evidence.supportingBasketCount`),
+      dateFrom: string(item.evidence.dateFrom, `${field}.evidence.dateFrom`), dateTo: string(item.evidence.dateTo, `${field}.evidence.dateTo`),
+      dataCompletenessPercentage: percentage(item.evidence.dataCompletenessPercentage, `${field}.evidence.dataCompletenessPercentage`),
+      observation: string(item.evidence.observation, `${field}.evidence.observation`),
+      whyItMatters: string(item.evidence.whyItMatters, `${field}.evidence.whyItMatters`),
+      limitations: nullableString(item.evidence.limitations, `${field}.evidence.limitations`),
+    },
+    recommendedAction: {
+      title: string(item.recommendedAction.title, `${field}.recommendedAction.title`),
+      description: string(item.recommendedAction.description, `${field}.recommendedAction.description`),
+      durationDays: count(item.recommendedAction.durationDays, `${field}.recommendedAction.durationDays`),
+    },
+    trial: normalizeTrial(item.trial, `${field}.trial`),
+    detectedAt: timestamp(item.detectedAt, `${field}.detectedAt`), updatedAt: timestamp(item.updatedAt, `${field}.updatedAt`),
+  }
+}
+
+function normalizeOpportunitiesResponse(data) {
+  if (!data?.summary || !Array.isArray(data.opportunities)) invalid('opportunities')
+  const summary = data.summary
+  return {
+    summary: {
+      analyzedAt: timestamp(summary.analyzedAt, 'summary.analyzedAt'),
+      latestImportAt: timestamp(summary.latestImportAt, 'summary.latestImportAt', true),
+      datasetKind: string(summary.datasetKind, 'summary.datasetKind'), coverageStatus: string(summary.coverageStatus, 'summary.coverageStatus'),
+      receiptCount: count(summary.receiptCount, 'summary.receiptCount'),
+      mappingCoveragePercentage: percentage(summary.mappingCoveragePercentage, 'summary.mappingCoveragePercentage'),
+      availableCount: count(summary.availableCount, 'summary.availableCount'), activeTrialCount: count(summary.activeTrialCount, 'summary.activeTrialCount'),
+      completedTrialCount: count(summary.completedTrialCount, 'summary.completedTrialCount'),
+    },
+    opportunities: array(data.opportunities, 'opportunities', normalizeOpportunity),
+  }
+}
+
+export async function fetchRetailerOpportunities({ username, password, signal }) {
+  return normalizeOpportunitiesResponse(await authorizedRequest('/api/v1/retailer/opportunities', { username, password, signal }))
+}
+
+export async function startRetailerOpportunityTrial({ opportunityId, startDate, durationDays, username, password, signal }) {
+  return normalizeOpportunity(await authorizedRequest(`/api/v1/retailer/opportunities/${encodeURIComponent(opportunityId)}/trials`, {
+    method: 'POST', username, password, signal, body: { startDate, durationDays },
+  }), 'opportunity')
 }
 
 export async function fetchRetailerOffers({ username, password, signal }) {
