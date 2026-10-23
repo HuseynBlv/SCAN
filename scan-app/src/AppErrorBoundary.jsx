@@ -1,4 +1,5 @@
 import { Component } from "react";
+import LoadingScreen from './components/LoadingScreen.jsx'
 
 export default class AppErrorBoundary extends Component {
   constructor(props) {
@@ -13,14 +14,11 @@ export default class AppErrorBoundary extends Component {
   render() {
     if (this.state.failed) {
       return (
-        <main className="app-failure" role="alert">
-          <div className="app-failure-mark">S</div>
-          <h1>SCAN could not load this page.</h1>
-          <p>The application files may have changed during a deployment. Reload to try again.</p>
-          <button type="button" onClick={() => window.location.reload()}>
-            Reload SCAN
-          </button>
-        </main>
+        <LoadingScreen
+          error
+          message="The application files may have changed during a deployment. Retry to load the latest version."
+          onRetry={() => window.location.reload()}
+        />
       );
     }
 

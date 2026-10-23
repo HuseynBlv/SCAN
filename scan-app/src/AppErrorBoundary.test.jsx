@@ -16,8 +16,8 @@ describe('AppErrorBoundary', () => {
       </AppErrorBoundary>,
     )
 
-    expect(screen.getByRole('alert')).toHaveTextContent('SCAN could not load this page.')
-    expect(screen.getByRole('button', { name: 'Reload SCAN' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('SCAN could not load this page')
+    expect(screen.getByRole('button', { name: 'Retry loading SCAN' })).toBeInTheDocument()
     consoleError.mockRestore()
   })
 })

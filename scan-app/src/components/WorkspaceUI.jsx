@@ -15,12 +15,16 @@ export function EmptyState({ title, children, compact = false }) {
 
 export function LoadingState({ title, description }) {
   return (
-    <main className="scan-loading-state" aria-live="polite">
-      <ScanBrand subtitle="Sales & Consumption Analytics Network" />
-      <div className="scan-loading-lines" aria-hidden="true"><i /><i /><i /></div>
-      <h1>{title}</h1>
-      <p>{description}</p>
-    </main>
+    <section aria-busy="true" aria-live="polite" className="scan-loading-state">
+      <header><span>Updating intelligence</span><h1>{title}</h1><p>{description}</p></header>
+      <div aria-hidden="true" className="scan-content-skeleton">
+        <div className="scan-skeleton-summary"><i /><i /><i /><i /></div>
+        <div className="scan-skeleton-layout">
+          <div className="scan-skeleton-list"><i /><i /><i /></div>
+          <div className="scan-skeleton-detail"><i /><i /><i /><i /></div>
+        </div>
+      </div>
+    </section>
   )
 }
 
