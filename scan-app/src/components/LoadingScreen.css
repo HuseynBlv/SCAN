@@ -1,0 +1,144 @@
+.scan-intelligence-loader {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: clamp(24px, 6vw, 72px);
+  overflow: hidden;
+  color: var(--scan-ink);
+  background: #f6f6f3;
+  animation: scan-loader-enter 360ms var(--scan-enter) both;
+}
+
+.scan-intelligence-stage {
+  position: relative;
+  width: min(78vw, 620px);
+  height: clamp(220px, 34vw, 310px);
+  display: grid;
+  place-items: center;
+}
+
+.scan-intelligence-network {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: translate(-50%, -50%);
+}
+
+.scan-network-lines path {
+  fill: none;
+  stroke: #d6d7d4;
+  stroke-width: 1;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  animation: scan-network-line 4.8s ease-in-out var(--network-delay) infinite alternate;
+}
+
+.scan-network-nodes circle {
+  fill: #c5c7c4;
+  stroke: #f6f6f3;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  animation: scan-network-node 3.4s ease-in-out var(--network-delay) infinite alternate;
+}
+
+.scan-network-pulses circle {
+  fill: var(--scan-red);
+  filter: drop-shadow(0 0 4px rgba(230, 28, 36, .26));
+}
+
+.scan-loader-brand {
+  position: relative;
+  z-index: 1;
+  padding: 22px 26px 20px;
+  background: rgba(246, 246, 243, .88);
+  box-shadow: 0 0 36px 28px rgba(246, 246, 243, .88);
+  backdrop-filter: blur(2px);
+}
+
+.scan-loader-brand .cci-brand { padding: 0; text-align: center; }
+.scan-loader-brand .scan-wordmark { display: inline-flex; align-items: flex-end; gap: 8px; color: var(--scan-ink); }
+.scan-loader-brand .scan-wordmark-text { font-size: clamp(1.7rem, 4vw, 2.25rem); font-weight: 720; letter-spacing: .28em; line-height: 1; }
+.scan-loader-brand .scan-wordmark-bars { height: 28px; display: flex; align-items: flex-end; gap: 3px; }
+.scan-loader-brand .scan-wordmark-bars i { width: 4px; display: block; background: var(--scan-red); }
+.scan-loader-brand .scan-wordmark-bars i:nth-child(1) { height: 10px; }
+.scan-loader-brand .scan-wordmark-bars i:nth-child(2) { height: 18px; }
+.scan-loader-brand .scan-wordmark-bars i:nth-child(3) { height: 27px; }
+.scan-loader-brand .cci-brand-subtitle { max-width: 300px; margin-top: 11px; color: var(--scan-muted); font-size: .61rem; font-weight: 560; letter-spacing: .12em; line-height: 1.45; text-transform: uppercase; }
+
+.scan-loader-copy {
+  min-height: 50px;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  margin-top: -18px;
+  text-align: center;
+}
+
+.scan-loader-copy strong { font-size: .78rem; font-weight: 680; letter-spacing: .01em; }
+.scan-loader-copy span { color: var(--scan-muted); font-size: .72rem; }
+
+.scan-loader-progress {
+  width: min(180px, 46vw);
+  height: 2px;
+  margin-top: 22px;
+  overflow: hidden;
+  background: #dedfdb;
+}
+
+.scan-loader-progress i {
+  width: 38%;
+  height: 100%;
+  display: block;
+  background: var(--scan-red);
+  animation: scan-loader-progress 1.8s var(--scan-enter) infinite;
+}
+
+.scan-intelligence-loader.is-error .scan-intelligence-stage { opacity: .64; }
+.scan-intelligence-loader.is-error .scan-network-lines path,
+.scan-intelligence-loader.is-error .scan-network-nodes circle { animation: none; }
+.scan-intelligence-loader.is-error .scan-loader-copy { margin-top: -12px; }
+.scan-intelligence-loader.is-error .scan-loader-copy strong { font-size: 1rem; }
+.scan-intelligence-loader.is-error .scan-loader-copy span { max-width: 440px; line-height: 1.5; }
+
+.scan-loader-retry {
+  min-height: 42px;
+  margin-top: 21px;
+  padding: 0 17px;
+  border: 1px solid var(--scan-ink);
+  border-radius: 7px;
+  background: var(--scan-ink);
+  color: #fff;
+  font-size: .73rem;
+  font-weight: 650;
+}
+
+.scan-loader-retry:hover { background: #30312e; }
+
+.app-reveal { min-height: 100vh; animation: scan-app-reveal 280ms var(--scan-enter) both; }
+
+@keyframes scan-loader-enter { from { opacity: 0; } }
+@keyframes scan-app-reveal { from { opacity: 0; transform: translateY(3px); } }
+@keyframes scan-network-line { from { opacity: .34; } to { opacity: .78; } }
+@keyframes scan-network-node { from { opacity: .34; } to { opacity: .88; } }
+@keyframes scan-loader-progress { from { transform: translateX(-110%); } to { transform: translateX(365%); } }
+
+@media (max-width: 600px) {
+  .scan-intelligence-stage { width: min(104vw, 520px); height: 240px; }
+  .scan-loader-brand { padding-inline: 18px; box-shadow: 0 0 28px 20px rgba(246, 246, 243, .9); }
+  .scan-loader-brand .scan-wordmark-text { font-size: 1.7rem; }
+  .scan-loader-brand .cci-brand-subtitle { max-width: 240px; font-size: .55rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-intelligence-loader,
+  .app-reveal,
+  .scan-network-lines path,
+  .scan-network-nodes circle,
+  .scan-loader-progress i { animation: none; }
+  .scan-network-pulses { display: none; }
+  .scan-loader-progress i { width: 42%; margin-inline: auto; }
+}
