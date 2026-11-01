@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -20,7 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <commons-csv.version>1.14.1</commons-csv.version>
-        <poi.version>5.5.1</poi.version>
+        <poi.version>6.0.0</poi.version>
     </properties>
 
     <dependencies>
@@ -98,7 +98,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.13</version>
+                <version>0.8.16</version>
                 <executions>
                     <execution>
                         <goals>
